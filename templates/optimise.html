@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block title %}Optimise — Retirement Planner{% endblock %}
+{% block content %}
+
+<h2 class="mb-3"><i class="bi bi-lightning"></i> Optimiser Results</h2>
+<p class="text-muted">Four key questions answered using your current settings.</p>
+
+<div class="row g-4">
+
+<!-- Q1: Best Drawdown Order -->
+<div class="col-lg-6">
+    <div class="card h-100">
+        <div class="card-header bg-primary text-white"><i class="bi bi-sort-down"></i> Q1: Best Drawdown Order</div>
+        <div class="card-body">
+            <p class="text-muted">Which withdrawal sequence maximises remaining capital <strong>while meeting your income target every year</strong>?</p>
+            {% set q1 = results.best_drawdown %}
+            {% if q1.ranked %}
+            <table class="table table-sm table-striped">
+                <thead>
+                    <tr><th>#</th><th>Strategy</th><th>Sustainable?</th><th>Remaining Capital</th><th>Tax Paid</th></tr>
+                </thead>
+                <tbody>
+                    {% for s in q1.ranked %}
+                    <tr class="{% if loop.first %}table-success{% elif not s.sustainable %}table-light text-muted{% endif %}">
+                        <td>{{ loop.index }}</td>
+                        <td>{{ s.strategy_name }}</td>
+                        <td>
+                            {% if s.sustainable %}
+                                <span class="text-success"><i class="bi bi-check-circle-fill"></i> Yes</span>
+                            {% else %}
+                                <span class="text-danger"><i class="bi bi-x-circle-fill"></i> No (age {{ s.first_shortfall_age }})</span>
+                            {% endif %}
+                        </td>
+                        <td>&pound;{{ "{:,.0f}".format(s.remaining_capital) }}</td>
+                        <td>&pound;{{ "{:,.0f}".format(s.total_tax) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% if q1.best %}
+            <div class="alert alert-success mb-3">
+                <strong><i class="bi bi-trophy"></i> Best:</strong> {{ q1.best.strategy_name }}<br>
+                Remaining: &pound;{{ "{:,.0f}".format(q1.best.remaining_capital) }}
+                {% if not q1.best.sustainable %}
+                <br><span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Note: No strategy is fully sustainable at this income level.</span>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- Q1 Narrative -->
+            {% if q1.narrative %}
+            <div class="card bg-light border-0 mb-0">
+                <div class="card-body py-2 px-3">
+                    <p class="mb-1"><i class="bi bi-chat-left-text text-primary"></i> {{ q1.narrative.summary }}</p>
+                    <div class="mt-1">
+                        <a class="small text-muted" data-bs-toggle="collapse" href="#q1-advisor" role="button" aria-expanded="false">
+                            <i class="bi bi-mortarboard"></i> Advisor detail &#9662;
+                        </a>
+                        <div class="collapse mt-2" id="q1-advisor">
+                            <div class="small text-muted mb-0">{{ q1.narrative.advisor|safe }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% else %}
+            <p class="text-muted">No drawable sources configured.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Q2: Maximum Sustainable Income -->
+<div class="col-lg-6">
+    <div class="card h-100">
+        <div class="card-header bg-success text-white"><i class="bi bi-cash-stack"></i> Q2: Maximum Sustainable Income</div>
+        <div class="card-body">
+            <p class="text-muted">What is the highest annual income that remains sustainable to age {{ config.personal.end_age }}?</p>
+            {% set q2 = results.max_income %}
+            <div class="row text-center">
+                <div class="col-6">
+                    <h6 class="text-muted">Current Target</h6>
+                    <h3>&pound;{{ "{:,.0f}".format(q2.current_income) }}</h3>
+                </div>
+                <div class="col-6">
+                    <h6 class="text-muted">Maximum Sustainable</h6>
+                    <h3 class="text-success">&pound;{{ "{:,.0f}".format(q2.max_income) }}</h3>
+                </div>
+            </div>
+            <div class="text-center mt-3 mb-3">
+                <span class="badge bg-success fs-6">Buffer: &pound;{{ "{:,.0f}".format(q2.headroom_amount) }} (+{{ "{:.1f}".format(q2.headroom_pct) }}%)</span>
+            </div>
+
+            <!-- Q2 Narrative -->
+            {% if q2.narrative %}
+            <div class="card bg-light border-0 mb-0">
+                <div class="card-body py-2 px-3">
+                    <p class="mb-1"><i class="bi bi-chat-left-text text-success"></i> {{ q2.narrative.summary }}</p>
+                    <div class="mt-1">
+                        <a class="small text-muted" data-bs-toggle="collapse" href="#q2-advisor" role="button" aria-expanded="false">
+                            <i class="bi bi-mortarboard"></i> Advisor detail &#9662;
+                        </a>
+                        <div class="collapse mt-2" id="q2-advisor">
+                            <div class="small text-muted mb-0">{{ q2.narrative.advisor|safe }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Q3: Longevity Headroom -->
+<div class="col-lg-6">
+    <div class="card h-100">
+        <div class="card-header bg-info text-white"><i class="bi bi-hourglass-split"></i> Q3: Longevity Headroom</div>
+        <div class="card-body">
+            <p class="text-muted">How long can your target income last?</p>
+            {% set q3 = results.max_age %}
+            <div class="row text-center">
+                <div class="col-6">
+                    <h6 class="text-muted">Current Plan End</h6>
+                    <h3>Age {{ q3.current_end_age }}</h3>
+                </div>
+                <div class="col-6">
+                    <h6 class="text-muted">Maximum Age</h6>
+                    <h3 class="text-info">Age {{ q3.max_age }}</h3>
+                </div>
+            </div>
+            <div class="text-center mt-3 mb-3">
+                <span class="badge bg-info fs-6">+{{ q3.extra_years }} extra years of headroom</span>
+            </div>
+
+            <!-- Q3 Narrative -->
+            {% if q3.narrative %}
+            <div class="card bg-light border-0 mb-0">
+                <div class="card-body py-2 px-3">
+                    <p class="mb-1"><i class="bi bi-chat-left-text text-info"></i> {{ q3.narrative.summary }}</p>
+                    <div class="mt-1">
+                        <a class="small text-muted" data-bs-toggle="collapse" href="#q3-advisor" role="button" aria-expanded="false">
+                            <i class="bi bi-mortarboard"></i> Advisor detail &#9662;
+                        </a>
+                        <div class="collapse mt-2" id="q3-advisor">
+                            <div class="small text-muted mb-0">{{ q3.narrative.advisor|safe }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Q4: Tax-Efficient Strategy -->
+<div class="col-lg-6">
+    <div class="card h-100">
+        <div class="card-header bg-warning text-dark"><i class="bi bi-receipt-cutoff"></i> Q4: Tax-Efficient Drawdown</div>
+        <div class="card-body">
+            <p class="text-muted">Which withdrawal order minimises lifetime tax?</p>
+            {% set q4 = results.tax_efficient %}
+            <table class="table table-sm table-striped">
+                <thead>
+                    <tr><th>#</th><th>Strategy</th><th>Total Tax</th><th>Saving</th></tr>
+                </thead>
+                <tbody>
+                    {% for s in q4.ranked[:5] %}
+                    <tr class="{% if loop.first %}table-success{% endif %}">
+                        <td>{{ loop.index }}</td>
+                        <td>{{ s.name }}</td>
+                        <td>&pound;{{ "{:,.0f}".format(s.total_tax) }}</td>
+                        <td>{% if s.tax_saving_vs_current > 0 %}<span class="text-success">&pound;{{ "{:,.0f}".format(s.tax_saving_vs_current) }}</span>{% else %}&mdash;{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% if q4.ranked %}
+            <div class="alert alert-warning mb-3">
+                <strong><i class="bi bi-trophy"></i> Most tax-efficient:</strong> {{ q4.ranked[0].name }}<br>
+                Total tax: &pound;{{ "{:,.0f}".format(q4.ranked[0].total_tax) }}
+                {% if q4.ranked[0].tax_saving_vs_current > 0 %}
+                &mdash; saves &pound;{{ "{:,.0f}".format(q4.ranked[0].tax_saving_vs_current) }}
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- Q4 Narrative -->
+            {% if q4.narrative %}
+            <div class="card bg-light border-0 mb-0">
+                <div class="card-body py-2 px-3">
+                    <p class="mb-1"><i class="bi bi-chat-left-text text-warning"></i> {{ q4.narrative.summary }}</p>
+                    <div class="mt-1">
+                        <a class="small text-muted" data-bs-toggle="collapse" href="#q4-advisor" role="button" aria-expanded="false">
+                            <i class="bi bi-mortarboard"></i> Advisor detail &#9662;
+                        </a>
+                        <div class="collapse mt-2" id="q4-advisor">
+                            <div class="small text-muted mb-0">{{ q4.narrative.advisor|safe }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+</div>
+{% endblock %}

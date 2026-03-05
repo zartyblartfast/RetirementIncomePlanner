@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Compare Scenarios — Retirement Planner{% endblock %}
+{% block content %}
+
+<h2 class="mb-3"><i class="bi bi-bar-chart-line"></i> Scenario Comparison</h2>
+
+<!-- Save Current Scenario -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="post" class="row g-3 align-items-end">
+            <div class="col-md-8">
+                <label class="form-label">Save current settings as a named scenario</label>
+                <input type="text" class="form-control" name="scenario_name" placeholder="e.g. Conservative £28k" required>
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-primary w-100"><i class="bi bi-save"></i> Save Scenario</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if scenarios | length >= 2 %}
+<!-- Comparison Table -->
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-table"></i> Side-by-Side Summary</div>
+    <div class="card-body table-responsive">
+        <table class="table table-bordered text-center">
+            <thead class="table-dark">
+                <tr>
+                    <th>Metric</th>
+                    {% for sc in scenarios %}
+                    <th>{{ sc.name }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Target Income</strong></td>
+                    {% for sc in scenarios %}
+                    <td>&pound;{{ "{:,.0f}".format(sc.config.target_income.net_annual) }}</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td><strong>Sustainable?</strong></td>
+                    {% for sc in scenarios %}
+                    <td class="{% if sc.result.summary.sustainable %}text-success{% else %}text-danger{% endif %}">
+                        {% if sc.result.summary.sustainable %}<i class="bi bi-check-circle"></i> Yes{% else %}<i class="bi bi-x-circle"></i> No (age {{ sc.result.summary.first_shortfall_age }}){% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td><strong>Remaining Capital</strong></td>
+                    {% for sc in scenarios %}
+                    <td>&pound;{{ "{:,.0f}".format(sc.result.summary.remaining_capital) }}</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td><strong>Total IoM Tax</strong></td>
+                    {% for sc in scenarios %}
+                    <td>&pound;{{ "{:,.0f}".format(sc.result.summary.total_tax_paid) }}</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td><strong>UK Tax Saving</strong></td>
+                    {% for sc in scenarios %}
+                    <td class="text-success">&pound;{{ "{:,.0f}".format(sc.result.summary.uk_tax_saving) }}</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td><strong>End Age</strong></td>
+                    {% for sc in scenarios %}
+                    <td>{{ sc.result.summary.end_age }}</td>
+                    {% endfor %}
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Capital Trajectory Comparison Chart -->
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-graph-up"></i> Capital Trajectory Comparison</div>
+    <div class="card-body">
+        <canvas id="compareChart" height="100"></canvas>
+    </div>
+</div>
+{% elif scenarios | length == 1 %}
+<div class="alert alert-info"><i class="bi bi-info-circle"></i> Save at least <strong>two</strong> scenarios to see a comparison.</div>
+{% endif %}
+
+<!-- Saved Scenarios -->
+{% if scenarios %}
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-collection"></i> Saved Scenarios</div>
+    <div class="card-body">
+        <div class="row g-3">
+            {% for sc in scenarios %}
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5>{{ sc.name }}</h5>
+                        <p class="mb-1">Target: &pound;{{ "{:,.0f}".format(sc.config.target_income.net_annual) }}</p>
+                        <p class="mb-1 {% if sc.result.summary.sustainable %}text-success{% else %}text-danger{% endif %}">
+                            {% if sc.result.summary.sustainable %}Sustainable{% else %}Shortfall at {{ sc.result.summary.first_shortfall_age }}{% endif %}
+                        </p>
+                        <p class="mb-0">Capital: &pound;{{ "{:,.0f}".format(sc.result.summary.remaining_capital) }}</p>
+                    </div>
+                    <div class="card-footer text-end">
+                        <a href="{{ url_for('delete_scenario', name=sc.name) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete {{ sc.name }}?');"><i class="bi bi-trash"></i> Delete</a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-secondary"><i class="bi bi-info-circle"></i> No scenarios saved yet. Adjust settings on the Dashboard or Settings page, then save a scenario here.</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{% if scenarios | length >= 2 %}
+<script>
+const scenarios = {{ scenarios | tojson }};
+const colours = ['#0d6efd', '#dc3545', '#198754', '#fd7e14', '#6f42c1', '#20c997'];
+
+// Find longest age range
+let allAges = [];
+scenarios.forEach(sc => {
+    sc.result.years.forEach(y => {
+        if (!allAges.includes(y.age)) allAges.push(y.age);
+    });
+});
+allAges.sort((a, b) => a - b);
+
+const datasets = scenarios.map((sc, i) => ({
+    label: sc.name,
+    data: allAges.map(age => {
+        const yr = sc.result.years.find(y => y.age === age);
+        return yr ? yr.total_capital : null;
+    }),
+    borderColor: colours[i % colours.length],
+    backgroundColor: colours[i % colours.length] + '33',
+    tension: 0.3,
+    fill: false,
+}));
+
+new Chart(document.getElementById('compareChart'), {
+    type: 'line',
+    data: { labels: allAges, datasets: datasets },
+    options: {
+        responsive: true,
+        plugins: { title: { display: true, text: 'Total Capital by Age — Scenario Comparison' } },
+        scales: {
+            y: { ticks: { callback: v => '\u00a3' + v.toLocaleString() } }
+        }
+    }
+});
+</script>
+{% endif %}
+{% endblock %}

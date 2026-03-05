@@ -1,0 +1,16 @@
+[Unit]
+Description=Retirement Income Planner (Gunicorn)
+After=network.target
+
+[Service]
+User=root
+Group=root
+WorkingDirectory=/opt/pensionplanner
+Environment="PATH=/opt/pensionplanner/venv/bin"
+Environment="FLASK_SECRET_KEY=rp-v1.1-prod-7f3a9c2e1d"
+ExecStart=/opt/pensionplanner/venv/bin/gunicorn --workers 2 --bind 127.0.0.1:8001 app:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

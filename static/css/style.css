@@ -1,0 +1,143 @@
+/* ============================================================
+   Retirement Income Planner V1.1 — Stylesheet
+   ============================================================ */
+
+:root {
+    --rp-primary: #0d6efd;
+    --rp-success: #198754;
+    --rp-warning: #ffc107;
+    --rp-danger: #dc3545;
+    --rp-dark: #212529;
+    --rp-muted: #6c757d;
+    --rp-light-bg: #f8f9fa;
+}
+
+body {
+    font-size: 0.9rem;
+    background-color: var(--rp-light-bg);
+}
+
+/* Navbar */
+.navbar-brand .badge {
+    font-size: 0.6rem;
+    vertical-align: middle;
+}
+
+/* Cards */
+.card {
+    border-radius: 0.5rem;
+}
+.card-header {
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+/* Accordion compact */
+.accordion-button {
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 0.5rem 0.75rem;
+}
+.accordion-body {
+    padding: 0.5rem 0.75rem;
+}
+.form-label-sm {
+    font-size: 0.78rem;
+    font-weight: 500;
+    margin-bottom: 0.15rem;
+    color: var(--rp-muted);
+}
+.form-control-sm {
+    font-size: 0.82rem;
+}
+
+/* Results table */
+.results-table {
+    font-size: 0.78rem;
+}
+.results-table th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+.results-table td {
+    white-space: nowrap;
+}
+.table-responsive {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+/* Summary cards */
+.card-subtitle {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Loading overlay */
+#loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.85);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.spinner-container {
+    text-align: center;
+}
+
+/* Optimiser question buttons */
+.btn-outline-primary.active {
+    background-color: var(--rp-primary);
+    color: white;
+}
+.btn-outline-primary small {
+    font-size: 0.75rem;
+}
+
+/* Chart containers */
+canvas {
+    max-height: 350px;
+}
+
+/* Alerts */
+.alert-heading {
+    font-size: 0.9rem;
+}
+
+/* Badge tweaks */
+.badge {
+    font-weight: 500;
+}
+
+/* Responsive tweaks */
+@media (max-width: 991.98px) {
+    .results-table {
+        font-size: 0.72rem;
+    }
+    .card-body h2 {
+        font-size: 1.3rem;
+    }
+    .card-body h3 {
+        font-size: 1.1rem;
+    }
+}
+
+/* Print styles */
+@media print {
+    .navbar, .card-footer, #loading-overlay, .btn {
+        display: none !important;
+    }
+    .table-responsive {
+        max-height: none;
+        overflow: visible;
+    }
+}

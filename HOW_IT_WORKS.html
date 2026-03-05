@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Retirement Income Planner — How It Works</title>
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #333; line-height: 1.6; }
+  h1 { color: #1a5276; border-bottom: 3px solid #1a5276; padding-bottom: 10px; }
+  h2 { color: #2c3e50; margin-top: 30px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+  h3 { color: #34495e; }
+  table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+  th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; }
+  th { background-color: #f0f4f8; font-weight: 600; }
+  tr:nth-child(even) { background-color: #f9f9f9; }
+  hr { border: none; border-top: 1px solid #ddd; margin: 25px 0; }
+  strong { color: #2c3e50; }
+  em { color: #666; }
+  ul, ol { padding-left: 25px; }
+  li { margin-bottom: 4px; }
+  @media print { body { margin: 0; } }
+</style>
+</head>
+<body>
+<h1>Retirement Income Planner — How It Works</h1>
+<p><strong>A summary of the methodology and calculations used by the application</strong></p>
+<hr />
+<h2>What the Tool Does</h2>
+<p>This is a <strong>deterministic, year-by-year retirement income projection</strong> tool. Given a set of income sources, assets, a target net income, and assumptions about growth and inflation, it calculates whether the plan is sustainable from retirement to a chosen end age.</p>
+<p>All figures are in <strong>nominal (cash) terms</strong> — inflation is applied explicitly each year rather than using real returns.</p>
+<hr />
+<h2>Inputs</h2>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Key Parameters</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Personal</strong></td>
+<td>Retirement age, planning horizon (end age)</td>
+</tr>
+<tr>
+<td><strong>Target Income</strong></td>
+<td>Desired annual net income (after tax), CPI inflation rate</td>
+</tr>
+<tr>
+<td><strong>UK State Pension</strong></td>
+<td>Gross annual amount, annual indexation rate (e.g. 3.5% for triple lock)</td>
+</tr>
+<tr>
+<td><strong>DB Pension (BP)</strong></td>
+<td>Gross annual amount, annual indexation rate (e.g. 3% CPI-linked)</td>
+</tr>
+<tr>
+<td><strong>DC Pension Pots</strong></td>
+<td>Starting balance, assumed growth rate, annual fund fees, tax-free portion (default 25%)</td>
+</tr>
+<tr>
+<td><strong>ISA</strong></td>
+<td>Starting balance, assumed growth rate</td>
+</tr>
+<tr>
+<td><strong>Withdrawal Priority</strong></td>
+<td>The order in which DC pots and ISA are drawn down</td>
+</tr>
+<tr>
+<td><strong>Tax Regime</strong></td>
+<td>Isle of Man: personal allowance, tax bands and rates, optional tax cap</td>
+</tr>
+</tbody>
+</table>
+<p>All parameters are user-adjustable via the web interface.</p>
+<hr />
+<h2>Year-by-Year Projection — Step by Step</h2>
+<p>For each year from retirement age to end age, the engine performs the following steps <strong>in order</strong>:</p>
+<h3>1. Inflate the Target Income</h3>
+<p>The target net income is increased by the CPI rate each year, compounding from the base year.</p>
+<h3>2. Index Guaranteed Pensions</h3>
+<p>Both the State Pension and BP pension are increased by their respective indexation rates, compounding annually.</p>
+<h3>3. Grow Investment Pots</h3>
+<p>Each DC pension pot grows by its assumed rate <strong>minus annual fees</strong> (applied to the opening balance for that year). The ISA grows by its assumed rate with no fees.</p>
+<h3>4. Calculate Guaranteed Net Income</h3>
+<p>The gross State Pension and BP pension are summed, and Isle of Man income tax is applied to determine the net guaranteed income.</p>
+<h3>5. Determine the Shortfall</h3>
+<p>If guaranteed net income is less than the inflation-adjusted target, the difference is the <strong>shortfall</strong> — the amount that must be drawn from DC pots or the ISA.</p>
+<h3>6. Withdraw from Pots in Priority Order</h3>
+<p>The shortfall is filled by withdrawing from sources in the user-defined priority order:</p>
+<ul>
+<li><strong>DC Pot withdrawals</strong> — 25% of each withdrawal is tax-free; the remaining 75% is added to taxable income. The engine uses a <strong>gross-up solver</strong> (iterative calculation) to determine the exact gross withdrawal needed to produce the required net amount after the incremental tax is accounted for.</li>
+<li><strong>ISA withdrawals</strong> — entirely tax-free, no impact on taxable income.</li>
+</ul>
+<p>If a pot is exhausted, the engine moves to the next source in the priority list.</p>
+<h3>7. Calculate Final Tax for the Year</h3>
+<p>Once all withdrawals are determined, the total taxable income (guaranteed pensions + taxable portion of DC withdrawals) is run through the Isle of Man tax calculator. A parallel UK tax calculation is also performed for comparison purposes.</p>
+<h3>8. Record Results and Warnings</h3>
+<p>The engine records the net income achieved, all balances, tax paid, and flags any warnings (e.g. pot exhaustion, high withdrawal rates, or income shortfalls).</p>
+<hr />
+<h2>Tax Calculations</h2>
+<h3>Isle of Man (Primary)</h3>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Personal Allowance</td>
+<td>£14,500</td>
+</tr>
+<tr>
+<td>Lower Rate</td>
+<td>10% on first £6,500 above allowance</td>
+</tr>
+<tr>
+<td>Higher Rate</td>
+<td>20% on all income above £21,000</td>
+</tr>
+<tr>
+<td>Tax Cap</td>
+<td>Optional — limits total tax to a set maximum (default £200,000)</td>
+</tr>
+</tbody>
+</table>
+<h3>UK (Comparison Only)</h3>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Personal Allowance</td>
+<td>£12,570</td>
+</tr>
+<tr>
+<td>Basic Rate</td>
+<td>20% on £12,571 – £50,270</td>
+</tr>
+<tr>
+<td>Higher Rate</td>
+<td>40% on £50,271 – £125,140</td>
+</tr>
+<tr>
+<td>Additional Rate</td>
+<td>45% above £125,140</td>
+</tr>
+</tbody>
+</table>
+<p>The dashboard displays the <strong>lifetime tax saving</strong> of the IoM regime versus UK rates.</p>
+<hr />
+<h2>DC Pension Tax-Free Allowance</h2>
+<p>Each DC withdrawal is treated as <strong>25% tax-free and 75% taxable</strong>, consistent with the standard pension commencement lump sum rules. This ratio is applied to every withdrawal, not as a one-off lump sum.</p>
+<hr />
+<h2>Optimiser — Four Key Questions</h2>
+<p>The optimiser runs multiple projections with varied parameters to answer:</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Question</th>
+<th>Method</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Q1</strong></td>
+<td>What is the best drawdown order to maximise remaining capital?</td>
+<td>Tests all possible orderings of DC pots and ISA; ranks by capital remaining at end age</td>
+</tr>
+<tr>
+<td><strong>Q2</strong></td>
+<td>What is the maximum sustainable annual income?</td>
+<td>Binary search — incrementally raises the target income until the plan fails, finding the ceiling</td>
+</tr>
+<tr>
+<td><strong>Q3</strong></td>
+<td>What is the maximum age the plan can sustain?</td>
+<td>Incrementally extends the end age year by year until the plan fails</td>
+</tr>
+<tr>
+<td><strong>Q4</strong></td>
+<td>Which drawdown order minimises lifetime tax?</td>
+<td>Tests all orderings; ranks by total tax paid over the full projection</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>Scenario Comparison</h2>
+<p>Users can save multiple scenarios (e.g. different target incomes, growth rates, or end ages) and compare them side by side. The comparison shows summary metrics and overlaid capital trajectory charts.</p>
+<hr />
+<h2>Key Assumptions and Limitations</h2>
+<ul>
+<li><strong>Deterministic model</strong> — uses fixed annual rates for growth, inflation, and indexation. It does not model market volatility or sequence-of-returns risk.</li>
+<li><strong>No Monte Carlo simulation</strong> — the tool shows a single projected outcome per scenario, not a probability distribution.</li>
+<li><strong>Flat growth rates</strong> — investment growth is applied uniformly each year (no modelling of market cycles).</li>
+<li><strong>Simplified tax</strong> — does not model National Insurance, capital gains tax, or personal allowance tapering.</li>
+<li><strong>Annual time steps</strong> — all calculations are per tax year, not monthly.</li>
+<li><strong>No annuity modelling</strong> — DC pots are drawn down via flexi-access; annuity purchase is not modelled.</li>
+</ul>
+<p>The recommended approach is to build in a <strong>margin of safety</strong> by targeting a net income below the calculated maximum sustainable figure.</p>
+<hr />
+<p><em>Document generated: March 2026 — Retirement Income Planner V1.1</em></p>
+</body>
+</html>

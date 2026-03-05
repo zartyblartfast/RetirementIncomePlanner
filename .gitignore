@@ -1,0 +1,24 @@
+# Agent Zero project metadata
+.a0proj/
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Output files
+output/
+
+# Scenarios (may contain personal financial data)
+scenarios/
+
+# Session/config overrides
+config_live.json
+
+# Backups
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db

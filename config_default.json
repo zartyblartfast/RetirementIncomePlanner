@@ -1,0 +1,95 @@
+{
+  "personal": {
+    "date_of_birth": "1958-07",
+    "retirement_date": "2027-04",
+    "retirement_age": 68,
+    "end_age": 90,
+    "currency": "GBP"
+  },
+  "target_income": {
+    "net_annual": 30000,
+    "cpi_rate": 0.03
+  },
+  "guaranteed_income": [
+    {
+      "name": "UK State Pension",
+      "gross_annual": 13680,
+      "indexation_rate": 0.035,
+      "start_age": 68,
+      "end_age": null,
+      "taxable": true
+    },
+    {
+      "name": "BP Pension (DB)",
+      "gross_annual": 10052.28,
+      "indexation_rate": 0.03,
+      "start_age": 68,
+      "end_age": null,
+      "taxable": true
+    }
+  ],
+  "dc_pots": [
+    {
+      "name": "Consolidated DC Pot",
+      "starting_balance": 180000,
+      "growth_rate": 0.04,
+      "annual_fees": 0.005,
+      "tax_free_portion": 0.25,
+      "allocation": {
+        "mode": "template",
+        "template_id": "balanced_60_40",
+        "custom_weights": {},
+        "manual_override": true
+      }
+    },
+    {
+      "name": "Employer DC Pot",
+      "starting_balance": 95000,
+      "growth_rate": 0.04,
+      "annual_fees": 0.005,
+      "tax_free_portion": 0.25,
+      "allocation": {
+        "mode": "template",
+        "template_id": "balanced_60_40",
+        "custom_weights": {},
+        "manual_override": true
+      }
+    }
+  ],
+  "tax_free_accounts": [
+    {
+      "name": "ISA",
+      "starting_balance": 20000,
+      "growth_rate": 0.035,
+      "allocation": {
+        "mode": "template",
+        "template_id": "cautious_40_60",
+        "custom_weights": {},
+        "manual_override": true
+      }
+    }
+  ],
+  "withdrawal_priority": [
+    "Employer DC Pot",
+    "Consolidated DC Pot",
+    "ISA"
+  ],
+  "tax": {
+    "regime": "Isle of Man",
+    "personal_allowance": 14500,
+    "bands": [
+      {
+        "name": "Lower rate",
+        "width": 6500,
+        "rate": 0.1
+      },
+      {
+        "name": "Higher rate",
+        "width": null,
+        "rate": 0.2
+      }
+    ],
+    "tax_cap_enabled": false,
+    "tax_cap_amount": 200000
+  }
+}

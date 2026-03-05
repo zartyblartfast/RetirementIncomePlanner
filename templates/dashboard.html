@@ -1,0 +1,346 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Retirement Planner{% endblock %}
+{% block content %}
+
+{% set s = result.summary %}
+{% set years = result.years %}
+
+<!-- Quick Controls -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="post" class="row g-3 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label">Target Net Income (&pound;)</label>
+                <input type="number" class="form-control" name="target_income" value="{{ config.target_income.net_annual }}" step="500">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">CPI Rate</label>
+                <input type="number" class="form-control" name="cpi_rate" value="{{ config.target_income.cpi_rate }}" step="0.005">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Plan End Age</label>
+                <input type="number" class="form-control" name="end_age" value="{{ config.personal.end_age }}">
+            </div>
+            <div class="col-md-2">
+                <div class="form-check mt-4">
+                    <input class="form-check-input" type="checkbox" name="tax_cap_enabled" id="taxCap" {% if config.tax.tax_cap_enabled %}checked{% endif %}>
+                    <label class="form-check-label" for="taxCap">Tax Cap</label>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100"><i class="bi bi-arrow-clockwise"></i> Update</button>
+            </div>
+            <div class="col-md-2">
+                <a href="{{ url_for('settings') }}" class="btn btn-outline-secondary w-100"><i class="bi bi-gear"></i> Full Settings</a>
+            </div>
+            <!-- Hidden withdrawal priority -->
+            <input type="hidden" name="withdrawal_priority" value="{{ config.withdrawal_priority | join(', ') }}">
+        </form>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card text-center {% if s.sustainable %}border-success{% else %}border-danger{% endif %}">
+            <div class="card-body">
+                <h6 class="card-subtitle text-muted">Plan Status</h6>
+                <h3 class="{% if s.sustainable %}text-success{% else %}text-danger{% endif %}">
+                    {% if s.sustainable %}<i class="bi bi-check-circle"></i> Sustainable{% else %}<i class="bi bi-x-circle"></i> Shortfall at {{ s.first_shortfall_age }}{% endif %}
+                </h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h6 class="card-subtitle text-muted">Remaining Capital at {{ s.end_age }}</h6>
+                <h3>&pound;{{ "{:,.0f}".format(s.remaining_capital) }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h6 class="card-subtitle text-muted">Total IoM Tax</h6>
+                <h3>&pound;{{ "{:,.0f}".format(s.total_tax_paid) }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h6 class="card-subtitle text-muted">Avg Effective Tax Rate</h6>
+                <h3>{{ s.avg_effective_tax_rate }}%</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tax Comparison Card -->
+<div class="card mb-4 border-primary" style="border-width: 2px;">
+    <div class="card-body">
+        <div class="row text-center">
+            <div class="col-md-4">
+                <h6 class="text-muted">Lifetime IoM Tax</h6>
+                <h4>&pound;{{ "{:,.0f}".format(s.total_tax_paid) }}</h4>
+            </div>
+            <div class="col-md-4">
+                <h6 class="text-muted">Lifetime UK Tax (comparison)</h6>
+                <h4>&pound;{{ "{:,.0f}".format(s.total_uk_tax_paid) }}</h4>
+            </div>
+            <div class="col-md-4">
+                <h6 class="text-muted"><i class="bi bi-piggy-bank"></i> IoM Tax Saving</h6>
+                <h3 class="text-success fw-bold">&pound;{{ "{:,.0f}".format(s.uk_tax_saving) }}</h3>
+                <small class="text-muted">&pound;{{ "{:,.0f}".format((s.uk_tax_saving / s.num_years) | round(0)) }}/year average</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Warnings -->
+{% if result.warnings %}
+<div class="alert alert-warning">
+    <strong><i class="bi bi-exclamation-triangle"></i> Warnings:</strong>
+    <ul class="mb-0 mt-1">
+        {% for w in result.warnings %}
+        <li>{{ w }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<!-- Capital Trajectory Chart -->
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-graph-up"></i> Capital Trajectory</div>
+    <div class="card-body">
+        <canvas id="capitalChart" height="100"></canvas>
+    </div>
+</div>
+
+<!-- Income Breakdown Chart -->
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-bar-chart-stacked"></i> Income Breakdown</div>
+    <div class="card-body">
+        <canvas id="incomeChart" height="100"></canvas>
+    </div>
+</div>
+
+<!-- Year-by-Year Table -->
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-table"></i> Year-by-Year Projection</div>
+    <div class="card-body table-responsive">
+        <table class="table table-sm table-striped table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th>Age</th>
+                    <th>Tax Year</th>
+                    <th>Target Net</th>
+                    {% for g in config.guaranteed_income %}<th>{{ g.name }}</th>{% endfor %}
+                    {% for p in config.dc_pots %}<th>{{ p.name }} W/D</th>{% endfor %}
+                    {% for a in config.tax_free_accounts %}<th>{{ a.name }} W/D</th>{% endfor %}
+                    <th>IoM Tax</th>
+                    <th>UK Tax</th>
+                    <th>Net Income</th>
+                    {% for p in config.dc_pots %}<th>{{ p.name }} Bal</th>{% endfor %}
+                    {% for a in config.tax_free_accounts %}<th>{{ a.name }} Bal</th>{% endfor %}
+                    <th>Total Capital</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for yr in years %}
+                <tr class="{% if yr.shortfall %}table-danger{% endif %}">
+                    <td>{{ yr.age }}</td>
+                    <td>{{ yr.tax_year }}</td>
+                    <td>&pound;{{ "{:,.0f}".format(yr.target_net) }}</td>
+                    {% for g in config.guaranteed_income %}
+                    <td>&pound;{{ "{:,.0f}".format(yr.guaranteed_income.get(g.name, 0)) }}</td>
+                    {% endfor %}
+                    {% for p in config.dc_pots %}
+                    <td>&pound;{{ "{:,.0f}".format(yr.withdrawal_detail.get(p.name, 0)) }}</td>
+                    {% endfor %}
+                    {% for a in config.tax_free_accounts %}
+                    <td>&pound;{{ "{:,.0f}".format(yr.withdrawal_detail.get(a.name, 0)) }}</td>
+                    {% endfor %}
+                    <td>&pound;{{ "{:,.0f}".format(yr.tax_due) }}</td>
+                    <td>&pound;{{ "{:,.0f}".format(yr.uk_tax_due) }}</td>
+                    <td class="{% if yr.shortfall %}text-danger fw-bold{% else %}text-success{% endif %}">&pound;{{ "{:,.0f}".format(yr.net_income_achieved) }}</td>
+                    {% for p in config.dc_pots %}
+                    <td>&pound;{{ "{:,.0f}".format(yr.pot_balances.get(p.name, 0)) }}</td>
+                    {% endfor %}
+                    {% for a in config.tax_free_accounts %}
+                    <td>&pound;{{ "{:,.0f}".format(yr.tf_balances.get(a.name, 0)) }}</td>
+                    {% endfor %}
+                    <td>&pound;{{ "{:,.0f}".format(yr.total_capital) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Build data from Jinja
+const years = {{ result.years | tojson }};
+const dcPotNames = {{ config.dc_pots | map(attribute='name') | list | tojson }};
+const tfAccNames = {{ config.tax_free_accounts | map(attribute='name') | list | tojson }};
+const ages = years.map(y => y.age);
+
+// Capital Trajectory Chart
+const colours = ['#0d6efd', '#fd7e14', '#198754', '#dc3545', '#6f42c1', '#20c997', '#ffc107'];
+const datasets = [];
+let ci = 0;
+
+dcPotNames.forEach(name => {
+    datasets.push({
+        label: name,
+        data: years.map(y => y.pot_balances[name] || 0),
+        borderColor: colours[ci % colours.length],
+        backgroundColor: colours[ci % colours.length] + '33',
+        fill: true,
+        tension: 0.3,
+    });
+    ci++;
+});
+
+tfAccNames.forEach(name => {
+    datasets.push({
+        label: name,
+        data: years.map(y => y.tf_balances[name] || 0),
+        borderColor: colours[ci % colours.length],
+        backgroundColor: colours[ci % colours.length] + '33',
+        fill: true,
+        tension: 0.3,
+    });
+    ci++;
+});
+
+new Chart(document.getElementById('capitalChart'), {
+    type: 'line',
+    data: { labels: ages, datasets: datasets },
+    options: {
+        responsive: true,
+        plugins: { title: { display: true, text: 'Capital Balances by Age' } },
+        scales: {
+            y: { ticks: { callback: v => '\u00a3' + v.toLocaleString() } }
+        }
+    }
+});
+
+// Income Source Breakdown Chart (Stacked Bar + Lines)
+const guaranteedNames = {{ config.guaranteed_income | map(attribute='name') | list | tojson }};
+const incomeDatasets = [];
+
+// Color palettes: blues for guaranteed, greens/ambers for drawdown, red for tax
+const guaranteedColours = ['#2e86de', '#54a0ff', '#48dbfb', '#0abde3'];
+const drawdownColours  = ['#10ac84', '#1dd1a1', '#feca57', '#ff9f43'];
+
+let gi = 0;
+guaranteedNames.forEach(name => {
+    incomeDatasets.push({
+        label: name,
+        data: years.map(y => y.guaranteed_income[name] || 0),
+        backgroundColor: guaranteedColours[gi % guaranteedColours.length],
+        stack: 'income',
+        order: 2,
+    });
+    gi++;
+});
+
+let di = 0;
+dcPotNames.forEach(name => {
+    incomeDatasets.push({
+        label: name + ' (drawdown)',
+        data: years.map(y => y.withdrawal_detail[name] || 0),
+        backgroundColor: drawdownColours[di % drawdownColours.length],
+        stack: 'income',
+        order: 2,
+    });
+    di++;
+});
+
+tfAccNames.forEach(name => {
+    incomeDatasets.push({
+        label: name + ' (drawdown)',
+        data: years.map(y => y.withdrawal_detail[name] || 0),
+        backgroundColor: drawdownColours[di % drawdownColours.length],
+        stack: 'income',
+        order: 2,
+    });
+    di++;
+});
+
+// Tax deducted (negative bar on separate stack)
+incomeDatasets.push({
+    label: 'Tax Deducted',
+    data: years.map(y => -y.tax_due),
+    backgroundColor: '#ee5253cc',
+    stack: 'tax',
+    order: 2,
+});
+
+// Target income line (dashed)
+incomeDatasets.push({
+    label: 'Target Net Income',
+    data: years.map(y => y.target_net),
+    type: 'line',
+    borderColor: '#222f3e',
+    borderWidth: 2,
+    borderDash: [8, 4],
+    pointRadius: 0,
+    pointHoverRadius: 4,
+    fill: false,
+    order: 0,
+});
+
+// Net income achieved line (solid, red dots on shortfall years)
+incomeDatasets.push({
+    label: 'Net Income Achieved',
+    data: years.map(y => y.net_income_achieved),
+    type: 'line',
+    borderColor: '#10ac84',
+    borderWidth: 2.5,
+    pointRadius: 2,
+    pointHoverRadius: 5,
+    pointBackgroundColor: years.map(y => y.shortfall ? '#ee5253' : '#10ac84'),
+    fill: false,
+    order: 1,
+});
+
+new Chart(document.getElementById('incomeChart'), {
+    type: 'bar',
+    data: { labels: ages, datasets: incomeDatasets },
+    options: {
+        responsive: true,
+        plugins: {
+            title: { display: true, text: 'Income Sources by Age (Gross) with Tax & Net Overlay' },
+            tooltip: {
+                callbacks: {
+                    label: function(ctx) {
+                        let val = ctx.parsed.y;
+                        let sign = val < 0 ? '-' : '';
+                        return ctx.dataset.label + ': ' + sign + '£' + Math.abs(val).toLocaleString('en-GB', {maximumFractionDigits: 0});
+                    }
+                }
+            },
+            legend: {
+                position: 'bottom',
+                labels: { usePointStyle: true, padding: 12, font: { size: 11 } }
+            }
+        },
+        scales: {
+            x: { stacked: true, grid: { display: false } },
+            y: {
+                stacked: true,
+                ticks: { callback: v => (v < 0 ? '-' : '') + '£' + Math.abs(v).toLocaleString() },
+                title: { display: true, text: 'Annual Amount (£)', font: { weight: 'bold' } }
+            }
+        }
+    }
+});
+
+</script>
+{% endblock %}

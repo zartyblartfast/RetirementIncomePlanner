@@ -1,0 +1,371 @@
+{
+  "schema_version": "1.0",
+  "assumptions_id": "six_asset_model_generic",
+  "version_tag": "v1.0.0",
+  "name": "6-Asset Retirement Planning Model (Generic Defaults)",
+  "version_date": "2026-03-04",
+  "currency": "GBP",
+  "return_convention": {
+    "type": "nominal",
+    "period": "annual",
+    "mean_type": "arithmetic",
+    "geometric_note": "Geometric means are auto-derived as: geo \u2248 arith \u2212 (vol\u00b2 / 2). Use geometric for deterministic compounding projections; arithmetic for Monte Carlo draws.",
+    "note": "Arithmetic means are typically used for Monte Carlo draws. For deterministic projections, the geometric_return field provides a more conservative long-run compound rate."
+  },
+  "reference_inflation": {
+    "rate": 0.025,
+    "note": "Assumed long-run CPI. Nominal returns above already embed this expectation. The app's separate inflation setting should align with or be informed by this figure."
+  },
+  "horizon_years": 10,
+  "description": {
+    "purpose": "A small, recognisable set of asset buckets that maps well to typical UK defined-contribution (DC) pension fund menus (e.g., Global Equity, Diversified Growth, Bonds/Gilts, Index-Linked, Cash, Property). Use as app defaults, with user override controls.",
+    "how_to_refresh_values": [
+      "Step 1: Pick your target horizon for assumptions (commonly 10-year for planning). Keep it consistent across all asset classes.",
+      "Step 2: Choose a reference set (or blend) of institutional Capital Market Assumptions (CMAs) for expected returns and volatilities (e.g., Vanguard/BlackRock/Morningstar house views).",
+      "Step 3: Update this JSON's expected_return and volatility for each asset class to match your chosen reference set (or your curated midpoint).",
+      "Step 4: geometric_return fields will be auto-recalculated by the app on load \u2014 no manual update needed.",
+      "Step 5: If you use correlations for portfolio volatility/Monte Carlo, refresh correlations from the same CMA set (or your chosen long-run defaults).",
+      "Step 6: Bump version_date and version_tag, and append a changelog entry describing what changed and why.",
+      "Step 7: In the UI, display the version_date and an 'Assumptions source' note so users know what they're using."
+    ],
+    "when_to_refresh": [
+      "At least annually (common cadence for planning tools).",
+      "Whenever interest-rate regimes change materially (bond/cash assumptions can move quickly).",
+      "Whenever you intentionally change modelling horizon, inflation view, or currency/hedging policy."
+    ],
+    "validation_checks": [
+      "Weights in any user portfolio must sum to 1.0 (within tolerance).",
+      "Expected returns should be plausible relative to each other (e.g., cash < bonds < equities over long horizons, typically).",
+      "Volatility should be non-negative and broadly consistent (cash lowest; equities highest; diversified growth between).",
+      "If correlations are provided: matrix must be symmetric and all values in [-1, +1].",
+      "Geometric return must always be \u2264 arithmetic return."
+    ],
+    "override_policy": "Defaults should be editable per user and per fund/portfolio. Assumptions are not guarantees and should be clearly labelled as planning estimates."
+  },
+  "asset_classes": [
+    {
+      "id": "global_equity",
+      "label": "Global Equity",
+      "expected_return": 0.065,
+      "geometric_return": 0.0506,
+      "volatility": 0.17,
+      "risk_score": 8,
+      "tags": [
+        "equity",
+        "growth",
+        "high_risk"
+      ],
+      "maps_to_common_fund_labels": [
+        "Global Equity",
+        "World Equity",
+        "International Equity",
+        "Equity Index (Global)"
+      ]
+    },
+    {
+      "id": "diversified_growth",
+      "label": "Diversified Growth (Multi-Asset)",
+      "expected_return": 0.05,
+      "geometric_return": 0.045,
+      "volatility": 0.1,
+      "risk_score": 5,
+      "tags": [
+        "multi_asset",
+        "balanced",
+        "medium_risk"
+      ],
+      "definition": "A blended bucket representing diversified multi-asset / growth / default funds that mix equities, bonds, and diversifiers.",
+      "maps_to_common_fund_labels": [
+        "Diversified Growth",
+        "Multi-Asset",
+        "Balanced",
+        "Default Fund",
+        "Growth Fund"
+      ]
+    },
+    {
+      "id": "investment_grade_bonds",
+      "label": "Investment-Grade Bonds / Gilts (Nominal)",
+      "expected_return": 0.035,
+      "geometric_return": 0.0332,
+      "volatility": 0.06,
+      "risk_score": 3,
+      "tags": [
+        "bonds",
+        "income",
+        "lower_risk"
+      ],
+      "maps_to_common_fund_labels": [
+        "Global Bonds",
+        "UK Gilts",
+        "Corporate Bond",
+        "Pre-Retirement Bond"
+      ]
+    },
+    {
+      "id": "inflation_linked_bonds",
+      "label": "Inflation-Linked Bonds (Index-Linked Gilts)",
+      "expected_return": 0.03,
+      "geometric_return": 0.0282,
+      "volatility": 0.06,
+      "risk_score": 3,
+      "tags": [
+        "bonds",
+        "inflation_hedge",
+        "lower_risk"
+      ],
+      "maps_to_common_fund_labels": [
+        "Index-Linked Gilts",
+        "Inflation-Linked Bonds",
+        "Linkers"
+      ]
+    },
+    {
+      "id": "cash",
+      "label": "Cash / Money Market",
+      "expected_return": 0.02,
+      "geometric_return": 0.02,
+      "volatility": 0.01,
+      "risk_score": 1,
+      "tags": [
+        "cash",
+        "capital_preservation",
+        "low_risk"
+      ],
+      "maps_to_common_fund_labels": [
+        "Cash",
+        "Money Market",
+        "Short-Term Deposit"
+      ]
+    },
+    {
+      "id": "property",
+      "label": "Property / REITs",
+      "expected_return": 0.05,
+      "geometric_return": 0.0428,
+      "volatility": 0.12,
+      "risk_score": 6,
+      "tags": [
+        "property",
+        "diversifier",
+        "medium_risk"
+      ],
+      "maps_to_common_fund_labels": [
+        "Property",
+        "Real Estate",
+        "REIT"
+      ]
+    }
+  ],
+  "correlations": {
+    "enabled": true,
+    "matrix_order": [
+      "global_equity",
+      "diversified_growth",
+      "investment_grade_bonds",
+      "inflation_linked_bonds",
+      "cash",
+      "property"
+    ],
+    "values": [
+      [
+        1.0,
+        0.85,
+        -0.1,
+        -0.05,
+        0.0,
+        0.55
+      ],
+      [
+        0.85,
+        1.0,
+        0.1,
+        0.1,
+        0.05,
+        0.45
+      ],
+      [
+        -0.1,
+        0.1,
+        1.0,
+        0.7,
+        0.2,
+        0.1
+      ],
+      [
+        -0.05,
+        0.1,
+        0.7,
+        1.0,
+        0.2,
+        0.1
+      ],
+      [
+        0.0,
+        0.05,
+        0.2,
+        0.2,
+        1.0,
+        0.05
+      ],
+      [
+        0.55,
+        0.45,
+        0.1,
+        0.1,
+        0.05,
+        1.0
+      ]
+    ],
+    "note": "Illustrative long-run placeholders. Use only if you compute portfolio volatility or run correlated Monte Carlo. Refresh from your chosen CMA source if you want tighter accuracy."
+  },
+  "portfolio_templates": [
+    {
+      "id": "equity_100",
+      "label": "100% Global Equity",
+      "risk_score": 8,
+      "weights": [
+        {
+          "asset_class_id": "global_equity",
+          "weight": 1.0
+        }
+      ]
+    },
+    {
+      "id": "balanced_80_20",
+      "label": "Balanced 80/20 (Equity/Bonds)",
+      "risk_score": 7,
+      "weights": [
+        {
+          "asset_class_id": "global_equity",
+          "weight": 0.8
+        },
+        {
+          "asset_class_id": "investment_grade_bonds",
+          "weight": 0.2
+        }
+      ]
+    },
+    {
+      "id": "balanced_60_40",
+      "label": "Balanced 60/40 (Equity/Bonds)",
+      "risk_score": 6,
+      "weights": [
+        {
+          "asset_class_id": "global_equity",
+          "weight": 0.6
+        },
+        {
+          "asset_class_id": "investment_grade_bonds",
+          "weight": 0.4
+        }
+      ]
+    },
+    {
+      "id": "moderate_multi_asset",
+      "label": "Moderate Multi-Asset",
+      "risk_score": 5,
+      "weights": [
+        {
+          "asset_class_id": "global_equity",
+          "weight": 0.5
+        },
+        {
+          "asset_class_id": "investment_grade_bonds",
+          "weight": 0.25
+        },
+        {
+          "asset_class_id": "property",
+          "weight": 0.15
+        },
+        {
+          "asset_class_id": "cash",
+          "weight": 0.1
+        }
+      ]
+    },
+    {
+      "id": "cautious_40_60",
+      "label": "Cautious 40/60 (Equity/Bonds)",
+      "risk_score": 4,
+      "weights": [
+        {
+          "asset_class_id": "global_equity",
+          "weight": 0.4
+        },
+        {
+          "asset_class_id": "investment_grade_bonds",
+          "weight": 0.6
+        }
+      ]
+    },
+    {
+      "id": "defensive_20_80",
+      "label": "Defensive 20/80 (Equity/Bonds)",
+      "risk_score": 3,
+      "weights": [
+        {
+          "asset_class_id": "global_equity",
+          "weight": 0.2
+        },
+        {
+          "asset_class_id": "investment_grade_bonds",
+          "weight": 0.8
+        }
+      ]
+    },
+    {
+      "id": "default_like_diversified_growth",
+      "label": "Default-like (Diversified Growth)",
+      "risk_score": 5,
+      "weights": [
+        {
+          "asset_class_id": "diversified_growth",
+          "weight": 1.0
+        }
+      ]
+    },
+    {
+      "id": "pre_retirement_cautious",
+      "label": "Pre-Retirement Cautious",
+      "risk_score": 2,
+      "weights": [
+        {
+          "asset_class_id": "investment_grade_bonds",
+          "weight": 0.5
+        },
+        {
+          "asset_class_id": "inflation_linked_bonds",
+          "weight": 0.25
+        },
+        {
+          "asset_class_id": "cash",
+          "weight": 0.25
+        }
+      ]
+    }
+  ],
+  "helper_rules": {
+    "weight_sum_tolerance": 1e-06,
+    "default_correlation_if_missing": 0.0,
+    "portfolio_expected_return_formula": "sum(weight_i * expected_return_i)",
+    "portfolio_geometric_return_formula": "sum(weight_i * geometric_return_i)",
+    "portfolio_volatility_formula": "sqrt(w' * Cov * w)",
+    "covariance_formula": "Cov_ij = corr_ij * vol_i * vol_j",
+    "geometric_derivation": "geometric_return \u2248 arithmetic_return \u2212 (volatility\u00b2 / 2)"
+  },
+  "changelog": [
+    {
+      "version_date": "2026-03-04",
+      "version_tag": "v1.0.0",
+      "changes": [
+        "Initial release of 6-asset model defaults with optional correlations and common pension-fund label mappings.",
+        "Added geometric_return fields derived from arithmetic returns and volatility.",
+        "Added reference_inflation (2.5% long-run CPI).",
+        "Added risk_score (1-10) per asset class and per portfolio template.",
+        "Added portfolio templates: Moderate Multi-Asset (4-asset blend) and Pre-Retirement Cautious.",
+        "Added version_tag for semantic versioning."
+      ]
+    }
+  ]
+}

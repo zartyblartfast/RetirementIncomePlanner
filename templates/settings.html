@@ -1,0 +1,757 @@
+{% extends "base.html" %}
+{% block title %}Settings — Retirement Planner{% endblock %}
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-3"><i class="bi bi-gear"></i> Settings</h2>
+        <p class="text-muted">Configure your income streams, pots, and tax settings. Changes apply immediately to the Dashboard.</p>
+    </div>
+</div>
+
+<div class="row g-4">
+
+<!-- ============================================================ -->
+<!-- LEFT COLUMN -->
+<!-- ============================================================ -->
+<div class="col-lg-6">
+
+    <!-- PERSONAL DETAILS -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white"><i class="bi bi-person"></i> Personal Details</div>
+        <div class="card-body">
+            <form method="post">
+                <input type="hidden" name="action" value="save_personal">
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <label class="form-label">Date of Birth</label>
+                        <input type="text" class="form-control" name="date_of_birth" value="{{ config.personal.date_of_birth }}" placeholder="YYYY-MM">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Retirement Date</label>
+                        <input type="text" class="form-control" name="retirement_date" value="{{ config.personal.retirement_date }}" placeholder="YYYY-MM">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Retirement Age</label>
+                        <input type="number" class="form-control" name="retirement_age" value="{{ config.personal.retirement_age }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Plan End Age</label>
+                        <input type="number" class="form-control" name="end_age" value="{{ config.personal.end_age }}">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm mt-3"><i class="bi bi-check-lg"></i> Save</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- TARGET INCOME -->
+    <div class="card mb-4">
+        <div class="card-header bg-success text-white"><i class="bi bi-bullseye"></i> Target Income</div>
+        <div class="card-body">
+            <form method="post">
+                <input type="hidden" name="action" value="save_target">
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <label class="form-label">Net Annual Income (&pound;)</label>
+                        <input type="number" class="form-control" name="net_annual" value="{{ config.target_income.net_annual }}" step="500">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">CPI Inflation Rate</label>
+                        <input type="number" class="form-control" name="cpi_rate" value="{{ config.target_income.cpi_rate }}" step="0.0001">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-success btn-sm mt-3"><i class="bi bi-check-lg"></i> Save</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- TAX SETTINGS -->
+    <div class="card mb-4">
+        <div class="card-header bg-secondary text-white"><i class="bi bi-receipt"></i> Tax Settings</div>
+        <div class="card-body">
+            <form method="post">
+                <input type="hidden" name="action" value="save_tax">
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <label class="form-label">Tax Regime</label>
+                        <input type="text" class="form-control" name="regime" value="{{ config.tax.regime }}" readonly>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Personal Allowance (&pound;)</label>
+                        <input type="number" class="form-control" name="personal_allowance" value="{{ config.tax.personal_allowance }}" step="100">
+                    </div>
+                    <div class="col-12 mt-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="tax_cap_enabled" id="taxCapEnabled" {% if config.tax.tax_cap_enabled %}checked{% endif %}>
+                            <label class="form-check-label" for="taxCapEnabled">Enable IoM Tax Cap (&pound;{{ "{:,.0f}".format(config.tax.tax_cap_amount) }})</label>
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-secondary btn-sm mt-3"><i class="bi bi-check-lg"></i> Save</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- WITHDRAWAL PRIORITY -->
+    <div class="card mb-4">
+        <div class="card-header bg-dark text-white"><i class="bi bi-sort-numeric-down"></i> Withdrawal Priority</div>
+        <div class="card-body">
+            <form method="post">
+                <input type="hidden" name="action" value="save_priority">
+                <input type="hidden" name="withdrawal_priority" id="priorityHidden" value="{{ config.withdrawal_priority | join(', ') }}">
+                <p class="text-muted small">Drag or use arrows to reorder. Top = withdrawn first.</p>
+                <ul class="list-group" id="priorityList">
+                    {% for source in config.withdrawal_priority %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span><span class="badge bg-primary rounded-pill me-2 priority-badge">{{ loop.index }}</span> {{ source }}</span>
+                        <span>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="movePriority(this, -1)" title="Move up"><i class="bi bi-arrow-up"></i></button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="movePriority(this, 1)" title="Move down"><i class="bi bi-arrow-down"></i></button>
+                        </span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                <button type="submit" class="btn btn-dark btn-sm mt-3"><i class="bi bi-check-lg"></i> Save Priority</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- RESET -->
+    <div class="card mb-4 border-danger">
+        <div class="card-body text-center">
+            <form method="post" onsubmit="return confirm('Reset all settings to defaults?');">
+                <input type="hidden" name="action" value="reset_defaults">
+                <button type="submit" class="btn btn-outline-danger"><i class="bi bi-arrow-counterclockwise"></i> Reset All to Defaults</button>
+            </form>
+        </div>
+    </div>
+
+</div>
+
+<!-- ============================================================ -->
+<!-- RIGHT COLUMN -->
+<!-- ============================================================ -->
+<div class="col-lg-6">
+
+    <!-- GUARANTEED INCOME STREAMS -->
+    <div class="card mb-4">
+        <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-shield-check"></i> Guaranteed Income Streams</span>
+            <button class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#addGuaranteedForm"><i class="bi bi-plus-lg"></i> Add</button>
+        </div>
+        <div class="card-body">
+            <!-- Add form (collapsed) -->
+            <div class="collapse mb-3" id="addGuaranteedForm">
+                <div class="card card-body bg-light">
+                    <form method="post">
+                        <input type="hidden" name="action" value="add_guaranteed">
+                        <div class="row g-2">
+                            <div class="col-md-6"><input type="text" class="form-control form-control-sm" name="g_name" placeholder="Name" required></div>
+                            <div class="col-md-6"><input type="number" class="form-control form-control-sm" name="g_gross_annual" placeholder="Gross Annual (&pound;)" step="100" required></div>
+                            <div class="col-md-4"><input type="number" class="form-control form-control-sm" name="g_indexation_rate" placeholder="Indexation" step="0.0001" value="0.03"></div>
+                            <div class="col-md-4"><input type="number" class="form-control form-control-sm" name="g_start_age" placeholder="Start Age" value="68"></div>
+                            <div class="col-md-4"><input type="number" class="form-control form-control-sm" name="g_end_age" placeholder="End Age (blank=never)"></div>
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="g_taxable" checked>
+                                    <label class="form-check-label">Taxable</label>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-info btn-sm mt-2"><i class="bi bi-plus-lg"></i> Add Stream</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Existing streams -->
+            {% for g in config.guaranteed_income %}
+            <div class="card mb-2 border-info">
+                <div class="card-body py-2">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong>{{ g.name }}</strong>
+                        <div>
+                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#editG{{ loop.index0 }}"><i class="bi bi-pencil"></i></button>
+                            <form method="post" class="d-inline" onsubmit="return confirm('Delete {{ g.name }}?');">
+                                <input type="hidden" name="action" value="delete_guaranteed">
+                                <input type="hidden" name="index" value="{{ loop.index0 }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </div>
+                    </div>
+                    <div class="row text-muted small">
+                        <div class="col"><i class="bi bi-cash"></i> &pound;{{ "{:,.2f}".format(g.gross_annual) }}/yr</div>
+                        <div class="col"><i class="bi bi-graph-up"></i> {{ (g.indexation_rate * 100) | round(1) }}%</div>
+                        <div class="col"><i class="bi bi-calendar"></i> Age {{ g.start_age }}{% if g.end_age %}-{{ g.end_age }}{% endif %}</div>
+                        <div class="col">{% if g.taxable %}<span class="badge bg-warning text-dark">Taxable</span>{% else %}<span class="badge bg-success">Tax-free</span>{% endif %}</div>
+                    </div>
+                    <!-- Edit form (collapsed) -->
+                    <div class="collapse mt-2" id="editG{{ loop.index0 }}">
+                        <form method="post">
+                            <input type="hidden" name="action" value="save_guaranteed">
+                            <input type="hidden" name="index" value="{{ loop.index0 }}">
+                            <div class="row g-2">
+                                <div class="col-md-6"><input type="text" class="form-control form-control-sm" name="g_name" value="{{ g.name }}"></div>
+                                <div class="col-md-6"><input type="number" class="form-control form-control-sm" name="g_gross_annual" value="{{ g.gross_annual }}" step="100"></div>
+                                <div class="col-md-4"><input type="number" class="form-control form-control-sm" name="g_indexation_rate" value="{{ g.indexation_rate }}" step="0.0001"></div>
+                                <div class="col-md-4"><input type="number" class="form-control form-control-sm" name="g_start_age" value="{{ g.start_age }}"></div>
+                                <div class="col-md-4"><input type="number" class="form-control form-control-sm" name="g_end_age" value="{{ g.end_age or '' }}"></div>
+                                <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="g_taxable" {% if g.taxable %}checked{% endif %}><label class="form-check-label">Taxable</label></div></div>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-sm mt-2"><i class="bi bi-check-lg"></i> Update</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% if not config.guaranteed_income %}
+            <p class="text-muted text-center">No guaranteed income streams configured.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- DC POTS -->
+    <div class="card mb-4">
+        <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-piggy-bank"></i> DC Pension Pots (Drawdown)</span>
+            <button class="btn btn-sm btn-dark" data-bs-toggle="collapse" data-bs-target="#addDCForm"><i class="bi bi-plus-lg"></i> Add</button>
+        </div>
+        <div class="card-body">
+            <!-- Add form -->
+            <div class="collapse mb-3" id="addDCForm">
+                <div class="card card-body bg-light">
+                    <form method="post" id="formAddDC">
+                        <input type="hidden" name="action" value="add_dc">
+                        <div class="row g-2">
+                            <div class="col-md-6"><input type="text" class="form-control form-control-sm" name="dc_name" placeholder="Pot Name" required></div>
+                            <div class="col-md-6"><input type="number" class="form-control form-control-sm" name="dc_balance" placeholder="Starting Balance (&pound;)" step="1000" required></div>
+                        </div>
+                        <!-- Allocation UI for Add DC -->
+                        <div class="mt-3 alloc-panel" data-prefix="dc" data-ctx="add">
+                            <label class="form-label fw-bold"><i class="bi bi-pie-chart"></i> Investment Strategy</label>
+                            <div class="btn-group btn-group-sm w-100 mb-2" role="group">
+                                <input type="radio" class="btn-check" name="dc_alloc_mode" id="dc_add_mode_template" value="template" checked>
+                                <label class="btn btn-outline-primary" for="dc_add_mode_template"><i class="bi bi-collection"></i> Portfolio Template</label>
+                                <input type="radio" class="btn-check" name="dc_alloc_mode" id="dc_add_mode_custom" value="custom">
+                                <label class="btn btn-outline-primary" for="dc_add_mode_custom"><i class="bi bi-sliders"></i> Custom Mix</label>
+                                <input type="radio" class="btn-check" name="dc_alloc_mode" id="dc_add_mode_manual" value="manual">
+                                <label class="btn btn-outline-primary" for="dc_add_mode_manual"><i class="bi bi-pencil"></i> Manual</label>
+                            </div>
+                            <!-- Template section -->
+                            <div class="alloc-section alloc-template">
+                                <select class="form-select form-select-sm mb-2" name="dc_template_id">
+                                    {% for t in asset_model.portfolio_templates %}
+                                    <option value="{{ t.id }}" data-risk="{{ t.risk_score }}">{{ t.label }}</option>
+                                    {% endfor %}
+                                </select>
+                                <div class="d-flex justify-content-between small">
+                                    <span>Blended return: <strong class="alloc-blended">—</strong></span>
+                                    <span>Risk: <span class="alloc-risk">—</span></span>
+                                </div>
+                            </div>
+                            <!-- Custom section -->
+                            <div class="alloc-section alloc-custom" style="display:none;">
+                                {% for ac in asset_model.asset_classes %}
+                                <div class="row align-items-center g-1 mb-1">
+                                    <div class="col-4"><small>{{ ac.label }}</small></div>
+                                    <div class="col-5"><input type="range" class="form-range alloc-slider" min="0" max="100" step="1" value="0" data-acid="{{ ac.id }}"></div>
+                                    <div class="col-3"><div class="input-group input-group-sm"><input type="number" class="form-control form-control-sm alloc-weight-num" name="dc_weight_{{ ac.id }}" min="0" max="100" step="1" value="0" data-acid="{{ ac.id }}"><span class="input-group-text">%</span></div></div>
+                                </div>
+                                {% endfor %}
+                                <div class="d-flex justify-content-between small mt-2">
+                                    <span>Total: <strong class="alloc-total">0%</strong> <span class="alloc-total-check"></span></span>
+                                    <span>Blended: <strong class="alloc-blended">—</strong></span>
+                                    <span>Risk: <span class="alloc-risk">—</span></span>
+                                </div>
+                            </div>
+                            <!-- Manual section -->
+                            <div class="alloc-section alloc-manual" style="display:none;">
+                                <div class="row g-2">
+                                    <div class="col-12">
+                                        <label class="form-label small">Growth Rate (decimal)</label>
+                                        <input type="number" class="form-control form-control-sm" name="dc_growth" step="0.0001" value="0.04">
+                                    </div>
+                                </div>
+                            </div>
+                            <input type="hidden" name="dc_growth" class="alloc-resolved-rate" value="0.04">
+                        </div>
+                        <div class="row g-2 mt-2">
+                            <div class="col-md-6"><label class="form-label small">Annual Fees</label><input type="number" class="form-control form-control-sm" name="dc_fees" step="0.0001" value="0.005"></div>
+                            <div class="col-md-6"><label class="form-label small">Tax-Free Portion</label><input type="number" class="form-control form-control-sm" name="dc_tfp" step="0.05" value="0.25"></div>
+                        </div>
+                        <button type="submit" class="btn btn-warning btn-sm mt-2"><i class="bi bi-plus-lg"></i> Add Pot</button>
+                    </form>
+                </div>
+            </div>
+
+            {% for pot in config.dc_pots %}
+            {% set alloc = pot.get('allocation', {}) %}
+            {% set alloc_mode = alloc.get('mode', 'manual') if alloc else 'manual' %}
+            <div class="card mb-2 border-warning">
+                <div class="card-body py-2">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong>{{ pot.name }}</strong>
+                        <div>
+                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#editDC{{ loop.index0 }}"><i class="bi bi-pencil"></i></button>
+                            <form method="post" class="d-inline" onsubmit="return confirm('Delete {{ pot.name }}?');">
+                                <input type="hidden" name="action" value="delete_dc">
+                                <input type="hidden" name="index" value="{{ loop.index0 }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </div>
+                    </div>
+                    <div class="row text-muted small">
+                        <div class="col"><i class="bi bi-wallet2"></i> &pound;{{ "{:,.0f}".format(pot.starting_balance) }}</div>
+                        <div class="col"><i class="bi bi-graph-up-arrow"></i> {{ (pot.growth_rate * 100) | round(2) }}%</div>
+                        <div class="col"><i class="bi bi-percent"></i> Fees {{ (pot.annual_fees * 100) | round(1) }}%</div>
+                        <div class="col"><i class="bi bi-pie-chart"></i>
+                            {% if alloc_mode == 'template' %}Template
+                            {% elif alloc_mode == 'custom' %}Custom
+                            {% else %}Manual{% endif %}
+                        </div>
+                    </div>
+                    <div class="collapse mt-2" id="editDC{{ loop.index0 }}">
+                        <form method="post" id="formEditDC{{ loop.index0 }}">
+                            <input type="hidden" name="action" value="save_dc">
+                            <input type="hidden" name="index" value="{{ loop.index0 }}">
+                            <div class="row g-2">
+                                <div class="col-md-6"><input type="text" class="form-control form-control-sm" name="dc_name" value="{{ pot.name }}"></div>
+                                <div class="col-md-6"><input type="number" class="form-control form-control-sm" name="dc_balance" value="{{ pot.starting_balance }}" step="1000"></div>
+                            </div>
+                            <!-- Allocation UI -->
+                            <div class="mt-3 alloc-panel" data-prefix="dc" data-ctx="edit{{ loop.index0 }}">
+                                <label class="form-label fw-bold"><i class="bi bi-pie-chart"></i> Investment Strategy</label>
+                                <div class="btn-group btn-group-sm w-100 mb-2" role="group">
+                                    <input type="radio" class="btn-check" name="dc_alloc_mode" id="dc_edit{{ loop.index0 }}_mode_template" value="template" {% if alloc_mode == 'template' %}checked{% endif %}>
+                                    <label class="btn btn-outline-primary" for="dc_edit{{ loop.index0 }}_mode_template"><i class="bi bi-collection"></i> Portfolio Template</label>
+                                    <input type="radio" class="btn-check" name="dc_alloc_mode" id="dc_edit{{ loop.index0 }}_mode_custom" value="custom" {% if alloc_mode == 'custom' %}checked{% endif %}>
+                                    <label class="btn btn-outline-primary" for="dc_edit{{ loop.index0 }}_mode_custom"><i class="bi bi-sliders"></i> Custom Mix</label>
+                                    <input type="radio" class="btn-check" name="dc_alloc_mode" id="dc_edit{{ loop.index0 }}_mode_manual" value="manual" {% if alloc_mode == 'manual' %}checked{% endif %}>
+                                    <label class="btn btn-outline-primary" for="dc_edit{{ loop.index0 }}_mode_manual"><i class="bi bi-pencil"></i> Manual</label>
+                                </div>
+                                <!-- Template section -->
+                                <div class="alloc-section alloc-template" {% if alloc_mode != 'template' %}style="display:none;"{% endif %}>
+                                    <select class="form-select form-select-sm mb-2" name="dc_template_id">
+                                        {% for t in asset_model.portfolio_templates %}
+                                        <option value="{{ t.id }}" data-risk="{{ t.risk_score }}" {% if alloc.get('template_id') == t.id %}selected{% endif %}>{{ t.label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <div class="d-flex justify-content-between small">
+                                        <span>Blended return: <strong class="alloc-blended">—</strong></span>
+                                        <span>Risk: <span class="alloc-risk">—</span></span>
+                                    </div>
+                                </div>
+                                <!-- Custom section -->
+                                <div class="alloc-section alloc-custom" {% if alloc_mode != 'custom' %}style="display:none;"{% endif %}>
+                                    {% for ac in asset_model.asset_classes %}
+                                    {% set cw = alloc.get('custom_weights', {}) %}
+                                    {% set wval = ((cw.get(ac.id, 0) * 100) | round(0) | int) if alloc_mode == 'custom' else 0 %}
+                                    <div class="row align-items-center g-1 mb-1">
+                                        <div class="col-4"><small>{{ ac.label }}</small></div>
+                                        <div class="col-5"><input type="range" class="form-range alloc-slider" min="0" max="100" step="1" value="{{ wval }}" data-acid="{{ ac.id }}"></div>
+                                        <div class="col-3"><div class="input-group input-group-sm"><input type="number" class="form-control form-control-sm alloc-weight-num" name="dc_weight_{{ ac.id }}" min="0" max="100" step="1" value="{{ wval }}" data-acid="{{ ac.id }}"><span class="input-group-text">%</span></div></div>
+                                    </div>
+                                    {% endfor %}
+                                    <div class="d-flex justify-content-between small mt-2">
+                                        <span>Total: <strong class="alloc-total">0%</strong> <span class="alloc-total-check"></span></span>
+                                        <span>Blended: <strong class="alloc-blended">—</strong></span>
+                                        <span>Risk: <span class="alloc-risk">—</span></span>
+                                    </div>
+                                </div>
+                                <!-- Manual section -->
+                                <div class="alloc-section alloc-manual" {% if alloc_mode != 'manual' %}style="display:none;"{% endif %}>
+                                    <div class="row g-2">
+                                        <div class="col-12">
+                                            <label class="form-label small">Growth Rate (decimal)</label>
+                                            <input type="number" class="form-control form-control-sm" name="dc_growth" step="0.0001" value="{{ pot.growth_rate }}">
+                                        </div>
+                                    </div>
+                                </div>
+                                <input type="hidden" name="dc_growth" class="alloc-resolved-rate" value="{{ pot.growth_rate }}">
+                            </div>
+                            <div class="row g-2 mt-2">
+                                <div class="col-md-6"><label class="form-label small">Annual Fees</label><input type="number" class="form-control form-control-sm" name="dc_fees" value="{{ pot.annual_fees }}" step="0.001"></div>
+                                <div class="col-md-6"><label class="form-label small">Tax-Free Portion</label><input type="number" class="form-control form-control-sm" name="dc_tfp" value="{{ pot.tax_free_portion }}" step="0.05"></div>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-sm mt-2"><i class="bi bi-check-lg"></i> Update</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% if not config.dc_pots %}
+            <p class="text-muted text-center">No DC pots configured.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- TAX-FREE ACCOUNTS -->
+    <div class="card mb-4">
+        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-safe"></i> Tax-Free Accounts (ISAs etc.)</span>
+            <button class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#addTFForm"><i class="bi bi-plus-lg"></i> Add</button>
+        </div>
+        <div class="card-body">
+            <div class="collapse mb-3" id="addTFForm">
+                <div class="card card-body bg-light">
+                    <form method="post" id="formAddTF">
+                        <input type="hidden" name="action" value="add_tf">
+                        <div class="row g-2">
+                            <div class="col-md-6"><input type="text" class="form-control form-control-sm" name="tf_name" placeholder="Account Name" required></div>
+                            <div class="col-md-6"><input type="number" class="form-control form-control-sm" name="tf_balance" placeholder="Balance (&pound;)" step="1000" required></div>
+                        </div>
+                        <!-- Allocation UI for Add TF -->
+                        <div class="mt-3 alloc-panel" data-prefix="tf" data-ctx="add">
+                            <label class="form-label fw-bold"><i class="bi bi-pie-chart"></i> Investment Strategy</label>
+                            <div class="btn-group btn-group-sm w-100 mb-2" role="group">
+                                <input type="radio" class="btn-check" name="tf_alloc_mode" id="tf_add_mode_template" value="template" checked>
+                                <label class="btn btn-outline-success" for="tf_add_mode_template"><i class="bi bi-collection"></i> Portfolio Template</label>
+                                <input type="radio" class="btn-check" name="tf_alloc_mode" id="tf_add_mode_custom" value="custom">
+                                <label class="btn btn-outline-success" for="tf_add_mode_custom"><i class="bi bi-sliders"></i> Custom Mix</label>
+                                <input type="radio" class="btn-check" name="tf_alloc_mode" id="tf_add_mode_manual" value="manual">
+                                <label class="btn btn-outline-success" for="tf_add_mode_manual"><i class="bi bi-pencil"></i> Manual</label>
+                            </div>
+                            <div class="alloc-section alloc-template">
+                                <select class="form-select form-select-sm mb-2" name="tf_template_id">
+                                    {% for t in asset_model.portfolio_templates %}
+                                    <option value="{{ t.id }}">{{ t.label }}</option>
+                                    {% endfor %}
+                                </select>
+                                <div class="d-flex justify-content-between small">
+                                    <span>Blended return: <strong class="alloc-blended">—</strong></span>
+                                    <span>Risk: <span class="alloc-risk">—</span></span>
+                                </div>
+                            </div>
+                            <div class="alloc-section alloc-custom" style="display:none;">
+                                {% for ac in asset_model.asset_classes %}
+                                <div class="row align-items-center g-1 mb-1">
+                                    <div class="col-4"><small>{{ ac.label }}</small></div>
+                                    <div class="col-5"><input type="range" class="form-range alloc-slider" min="0" max="100" step="1" value="0" data-acid="{{ ac.id }}"></div>
+                                    <div class="col-3"><div class="input-group input-group-sm"><input type="number" class="form-control form-control-sm alloc-weight-num" name="tf_weight_{{ ac.id }}" min="0" max="100" step="1" value="0" data-acid="{{ ac.id }}"><span class="input-group-text">%</span></div></div>
+                                </div>
+                                {% endfor %}
+                                <div class="d-flex justify-content-between small mt-2">
+                                    <span>Total: <strong class="alloc-total">0%</strong> <span class="alloc-total-check"></span></span>
+                                    <span>Blended: <strong class="alloc-blended">—</strong></span>
+                                    <span>Risk: <span class="alloc-risk">—</span></span>
+                                </div>
+                            </div>
+                            <div class="alloc-section alloc-manual" style="display:none;">
+                                <div class="row g-2">
+                                    <div class="col-12">
+                                        <label class="form-label small">Growth Rate (decimal)</label>
+                                        <input type="number" class="form-control form-control-sm" name="tf_growth" step="0.0001" value="0.035">
+                                    </div>
+                                </div>
+                            </div>
+                            <input type="hidden" name="tf_growth" class="alloc-resolved-rate" value="0.035">
+                        </div>
+                        <button type="submit" class="btn btn-success btn-sm mt-2"><i class="bi bi-plus-lg"></i> Add Account</button>
+                    </form>
+                </div>
+            </div>
+
+            {% for acc in config.tax_free_accounts %}
+            {% set alloc = acc.get('allocation', {}) %}
+            {% set alloc_mode = alloc.get('mode', 'manual') if alloc else 'manual' %}
+            <div class="card mb-2 border-success">
+                <div class="card-body py-2">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong>{{ acc.name }}</strong>
+                        <div>
+                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#editTF{{ loop.index0 }}"><i class="bi bi-pencil"></i></button>
+                            <form method="post" class="d-inline" onsubmit="return confirm('Delete {{ acc.name }}?');">
+                                <input type="hidden" name="action" value="delete_tf">
+                                <input type="hidden" name="index" value="{{ loop.index0 }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </div>
+                    </div>
+                    <div class="row text-muted small">
+                        <div class="col"><i class="bi bi-wallet2"></i> &pound;{{ "{:,.0f}".format(acc.starting_balance) }}</div>
+                        <div class="col"><i class="bi bi-graph-up-arrow"></i> {{ (acc.growth_rate * 100) | round(2) }}%</div>
+                        <div class="col"><i class="bi bi-pie-chart"></i>
+                            {% if alloc_mode == 'template' %}Template
+                            {% elif alloc_mode == 'custom' %}Custom
+                            {% else %}Manual{% endif %}
+                        </div>
+                    </div>
+                    <div class="collapse mt-2" id="editTF{{ loop.index0 }}">
+                        <form method="post" id="formEditTF{{ loop.index0 }}">
+                            <input type="hidden" name="action" value="save_tf">
+                            <input type="hidden" name="index" value="{{ loop.index0 }}">
+                            <div class="row g-2">
+                                <div class="col-md-6"><input type="text" class="form-control form-control-sm" name="tf_name" value="{{ acc.name }}"></div>
+                                <div class="col-md-6"><input type="number" class="form-control form-control-sm" name="tf_balance" value="{{ acc.starting_balance }}" step="1000"></div>
+                            </div>
+                            <div class="mt-3 alloc-panel" data-prefix="tf" data-ctx="edit{{ loop.index0 }}">
+                                <label class="form-label fw-bold"><i class="bi bi-pie-chart"></i> Investment Strategy</label>
+                                <div class="btn-group btn-group-sm w-100 mb-2" role="group">
+                                    <input type="radio" class="btn-check" name="tf_alloc_mode" id="tf_edit{{ loop.index0 }}_mode_template" value="template" {% if alloc_mode == 'template' %}checked{% endif %}>
+                                    <label class="btn btn-outline-success" for="tf_edit{{ loop.index0 }}_mode_template"><i class="bi bi-collection"></i> Portfolio Template</label>
+                                    <input type="radio" class="btn-check" name="tf_alloc_mode" id="tf_edit{{ loop.index0 }}_mode_custom" value="custom" {% if alloc_mode == 'custom' %}checked{% endif %}>
+                                    <label class="btn btn-outline-success" for="tf_edit{{ loop.index0 }}_mode_custom"><i class="bi bi-sliders"></i> Custom Mix</label>
+                                    <input type="radio" class="btn-check" name="tf_alloc_mode" id="tf_edit{{ loop.index0 }}_mode_manual" value="manual" {% if alloc_mode == 'manual' %}checked{% endif %}>
+                                    <label class="btn btn-outline-success" for="tf_edit{{ loop.index0 }}_mode_manual"><i class="bi bi-pencil"></i> Manual</label>
+                                </div>
+                                <div class="alloc-section alloc-template" {% if alloc_mode != 'template' %}style="display:none;"{% endif %}>
+                                    <select class="form-select form-select-sm mb-2" name="tf_template_id">
+                                        {% for t in asset_model.portfolio_templates %}
+                                        <option value="{{ t.id }}" {% if alloc.get('template_id') == t.id %}selected{% endif %}>{{ t.label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <div class="d-flex justify-content-between small">
+                                        <span>Blended return: <strong class="alloc-blended">—</strong></span>
+                                        <span>Risk: <span class="alloc-risk">—</span></span>
+                                    </div>
+                                </div>
+                                <div class="alloc-section alloc-custom" {% if alloc_mode != 'custom' %}style="display:none;"{% endif %}>
+                                    {% for ac in asset_model.asset_classes %}
+                                    {% set cw = alloc.get('custom_weights', {}) %}
+                                    {% set wval = ((cw.get(ac.id, 0) * 100) | round(0) | int) if alloc_mode == 'custom' else 0 %}
+                                    <div class="row align-items-center g-1 mb-1">
+                                        <div class="col-4"><small>{{ ac.label }}</small></div>
+                                        <div class="col-5"><input type="range" class="form-range alloc-slider" min="0" max="100" step="1" value="{{ wval }}" data-acid="{{ ac.id }}"></div>
+                                        <div class="col-3"><div class="input-group input-group-sm"><input type="number" class="form-control form-control-sm alloc-weight-num" name="tf_weight_{{ ac.id }}" min="0" max="100" step="1" value="{{ wval }}" data-acid="{{ ac.id }}"><span class="input-group-text">%</span></div></div>
+                                    </div>
+                                    {% endfor %}
+                                    <div class="d-flex justify-content-between small mt-2">
+                                        <span>Total: <strong class="alloc-total">0%</strong> <span class="alloc-total-check"></span></span>
+                                        <span>Blended: <strong class="alloc-blended">—</strong></span>
+                                        <span>Risk: <span class="alloc-risk">—</span></span>
+                                    </div>
+                                </div>
+                                <div class="alloc-section alloc-manual" {% if alloc_mode != 'manual' %}style="display:none;"{% endif %}>
+                                    <div class="row g-2">
+                                        <div class="col-12">
+                                            <label class="form-label small">Growth Rate (decimal)</label>
+                                            <input type="number" class="form-control form-control-sm" name="tf_growth" step="0.0001" value="{{ acc.growth_rate }}">
+                                        </div>
+                                    </div>
+                                </div>
+                                <input type="hidden" name="tf_growth" class="alloc-resolved-rate" value="{{ acc.growth_rate }}">
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-sm mt-2"><i class="bi bi-check-lg"></i> Update</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% if not config.tax_free_accounts %}
+            <p class="text-muted text-center">No tax-free accounts configured.</p>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+</div>
+
+<div class="row mt-2">
+    <div class="col-12">
+        <p class="text-muted small text-end"><i class="bi bi-info-circle"></i> Assumptions: {{ asset_model.name }} {{ asset_model.version_tag }} — {{ asset_model.version_date }}</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ============================================================
+// Asset Model data (injected from server)
+// ============================================================
+const ASSET_MODEL = {{ asset_model | tojson }};
+
+// Build lookups
+const AC_LOOKUP = {};
+ASSET_MODEL.asset_classes.forEach(ac => { AC_LOOKUP[ac.id] = ac; });
+const TEMPLATE_LOOKUP = {};
+ASSET_MODEL.portfolio_templates.forEach(t => { TEMPLATE_LOOKUP[t.id] = t; });
+
+// ============================================================
+// Risk score display helper
+// ============================================================
+function riskDots(score, max=10) {
+    let s = '';
+    for (let i = 1; i <= max; i++) {
+        s += i <= score ? '<i class="bi bi-circle-fill text-warning" style="font-size:0.6rem;"></i>' : '<i class="bi bi-circle text-muted" style="font-size:0.6rem;"></i>';
+    }
+    return s;
+}
+
+// ============================================================
+// Compute blended geometric return from weights dict {acid: decimal_weight}
+// ============================================================
+function computeBlended(weights) {
+    let blended = 0;
+    for (const [acid, w] of Object.entries(weights)) {
+        if (AC_LOOKUP[acid]) {
+            blended += w * AC_LOOKUP[acid].geometric_return;
+        }
+    }
+    return blended;
+}
+
+// Compute weighted risk score
+function computeRisk(weights) {
+    let risk = 0;
+    for (const [acid, w] of Object.entries(weights)) {
+        if (AC_LOOKUP[acid]) {
+            risk += w * AC_LOOKUP[acid].risk_score;
+        }
+    }
+    return Math.round(risk);
+}
+
+// ============================================================
+// Get template weights as {acid: weight}
+// ============================================================
+function getTemplateWeights(templateId) {
+    const t = TEMPLATE_LOOKUP[templateId];
+    if (!t) return {};
+    const w = {};
+    t.weights.forEach(tw => { w[tw.asset_class_id] = tw.weight; });
+    return w;
+}
+
+// ============================================================
+// Initialize all allocation panels
+// ============================================================
+function initAllocPanels() {
+    document.querySelectorAll('.alloc-panel').forEach(panel => {
+        const modeRadios = panel.querySelectorAll('input[type="radio"]');
+        const templateSelect = panel.querySelector('.alloc-template select');
+        const sliders = panel.querySelectorAll('.alloc-slider');
+        const numInputs = panel.querySelectorAll('.alloc-weight-num');
+
+        // Mode switching
+        modeRadios.forEach(radio => {
+            radio.addEventListener('change', () => {
+                const mode = radio.value;
+                panel.querySelector('.alloc-template').style.display = mode === 'template' ? '' : 'none';
+                panel.querySelector('.alloc-custom').style.display = mode === 'custom' ? '' : 'none';
+                panel.querySelector('.alloc-manual').style.display = mode === 'manual' ? '' : 'none';
+                updatePanelDisplay(panel);
+            });
+        });
+
+        // Template change
+        if (templateSelect) {
+            templateSelect.addEventListener('change', () => updatePanelDisplay(panel));
+        }
+
+        // Slider <-> number sync
+        sliders.forEach(slider => {
+            const acid = slider.dataset.acid;
+            const numInput = panel.querySelector(`.alloc-weight-num[data-acid="${acid}"]`);
+            slider.addEventListener('input', () => {
+                if (numInput) numInput.value = slider.value;
+                updatePanelDisplay(panel);
+            });
+        });
+        numInputs.forEach(numInput => {
+            const acid = numInput.dataset.acid;
+            const slider = panel.querySelector(`.alloc-slider[data-acid="${acid}"]`);
+            numInput.addEventListener('input', () => {
+                if (slider) slider.value = numInput.value;
+                updatePanelDisplay(panel);
+            });
+        });
+
+        // Initial display
+        updatePanelDisplay(panel);
+    });
+}
+
+function updatePanelDisplay(panel) {
+    const mode = panel.querySelector('input[type="radio"]:checked');
+    if (!mode) return;
+    const currentMode = mode.value;
+
+    let weights = {};
+    let riskScore = 0;
+
+    if (currentMode === 'template') {
+        const sel = panel.querySelector('.alloc-template select');
+        if (sel) {
+            const tid = sel.value;
+            weights = getTemplateWeights(tid);
+            const t = TEMPLATE_LOOKUP[tid];
+            riskScore = t ? t.risk_score : 0;
+        }
+    } else if (currentMode === 'custom') {
+        const nums = panel.querySelectorAll('.alloc-weight-num');
+        nums.forEach(n => {
+            const v = parseFloat(n.value) || 0;
+            if (v > 0) weights[n.dataset.acid] = v / 100;
+        });
+        riskScore = computeRisk(weights);
+
+        // Update total indicator
+        const total = Object.values(weights).reduce((s, v) => s + v, 0);
+        const totalPct = Math.round(total * 100);
+        const totalEl = panel.querySelector('.alloc-custom .alloc-total');
+        const checkEl = panel.querySelector('.alloc-custom .alloc-total-check');
+        if (totalEl) totalEl.textContent = totalPct + '%';
+        if (checkEl) {
+            if (Math.abs(totalPct - 100) <= 1) {
+                checkEl.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
+                totalEl.classList.remove('text-danger');
+                totalEl.classList.add('text-success');
+            } else {
+                checkEl.innerHTML = '<i class="bi bi-exclamation-circle-fill text-danger"></i>';
+                totalEl.classList.remove('text-success');
+                totalEl.classList.add('text-danger');
+            }
+        }
+    } else {
+        // Manual — no blended calc needed
+        return;
+    }
+
+    const blended = computeBlended(weights);
+
+    // Update all blended displays in the active section
+    const activeSection = currentMode === 'template' ? panel.querySelector('.alloc-template') : panel.querySelector('.alloc-custom');
+    if (activeSection) {
+        const blendedEl = activeSection.querySelector('.alloc-blended');
+        const riskEl = activeSection.querySelector('.alloc-risk');
+        if (blendedEl) blendedEl.textContent = (blended * 100).toFixed(2) + '% (geometric)';
+        if (riskEl) riskEl.innerHTML = riskDots(riskScore);
+    }
+
+    // Update hidden resolved rate
+    const hiddenRate = panel.querySelector('.alloc-resolved-rate');
+    if (hiddenRate && currentMode !== 'manual') {
+        hiddenRate.value = blended.toFixed(6);
+    }
+}
+
+// ============================================================
+// Priority reordering (unchanged)
+// ============================================================
+function movePriority(btn, direction) {
+    const li = btn.closest('li');
+    const ul = li.parentElement;
+    const items = Array.from(ul.children);
+    const idx = items.indexOf(li);
+    const newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= items.length) return;
+    if (direction === -1) {
+        ul.insertBefore(li, items[newIdx]);
+    } else {
+        ul.insertBefore(items[newIdx], li);
+    }
+    const updated = Array.from(ul.children);
+    const names = [];
+    updated.forEach((item, i) => {
+        item.querySelector('.priority-badge').textContent = i + 1;
+        const text = item.querySelector('span > span.priority-badge').nextSibling.textContent.trim();
+        names.push(text);
+    });
+    document.getElementById('priorityHidden').value = names.join(', ');
+}
+
+// ============================================================
+// Init on DOM ready
+// ============================================================
+document.addEventListener('DOMContentLoaded', initAllocPanels);
+</script>
+{% endblock %}

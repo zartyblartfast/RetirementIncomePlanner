@@ -1,0 +1,377 @@
+"""Retirement Income Planner — Projection Engine (Dynamic Streams)
+
+Year-by-year deterministic projection supporting dynamic income streams.
+"""
+import copy
+import json
+import math
+import os
+
+
+# ------------------------------------------------------------------ #
+#  Asset Model helpers
+# ------------------------------------------------------------------ #
+ASSET_MODEL_PATH = os.path.join(os.path.dirname(__file__), "asset_model.json")
+
+
+def load_asset_model():
+    """Load the 6-asset model reference data."""
+    with open(ASSET_MODEL_PATH) as f:
+        return json.load(f)
+
+
+def resolve_growth_rate(pot_config, asset_model):
+    """Compute blended geometric growth rate from allocation, or return manual rate.
+
+    If manual_override is True, always use the explicit growth_rate from config.
+    Otherwise, derive the rate from the selected template or custom weights.
+    """
+    alloc = pot_config.get("allocation", {})
+    mode = alloc.get("mode", "manual")
+    manual_override = alloc.get("manual_override", False)
+
+    if mode == "manual" or not alloc or manual_override:
+        return pot_config.get("growth_rate", 0.04)
+
+    # Build asset class lookup
+    ac_lookup = {ac["id"]: ac for ac in asset_model["asset_classes"]}
+
+    if mode == "template":
+        template_id = alloc.get("template_id", "")
+        templates = {t["id"]: t for t in asset_model["portfolio_templates"]}
+        template = templates.get(template_id)
+        if not template:
+            return pot_config.get("growth_rate", 0.04)
+        weights = {w["asset_class_id"]: w["weight"] for w in template["weights"]}
+    elif mode == "custom":
+        weights = alloc.get("custom_weights", {})
+    else:
+        return pot_config.get("growth_rate", 0.04)
+
+    # Compute weighted geometric return
+    blended = sum(
+        weights.get(ac_id, 0) * ac_lookup[ac_id]["geometric_return"]
+        for ac_id in weights
+        if ac_id in ac_lookup
+    )
+    return blended if blended > 0 else pot_config.get("growth_rate", 0.04)
+
+
+class RetirementEngine:
+    """Run a year-by-year retirement income projection."""
+
+    def __init__(self, config: dict):
+        self.cfg = copy.deepcopy(config)
+        self._validate_config()
+
+    # ------------------------------------------------------------------ #
+    #  Validation
+    # ------------------------------------------------------------------ #
+    def _validate_config(self):
+        required = ["personal", "target_income", "guaranteed_income",
+                    "dc_pots", "tax_free_accounts", "withdrawal_priority", "tax"]
+        for key in required:
+            if key not in self.cfg:
+                raise ValueError(f"Missing config key: {key}")
+
+    # ------------------------------------------------------------------ #
+    #  IoM Tax
+    # ------------------------------------------------------------------ #
+    def calculate_tax(self, taxable_income: float) -> float:
+        tax_cfg = self.cfg["tax"]
+        pa = tax_cfg["personal_allowance"]
+        income_after_pa = max(0, taxable_income - pa)
+        tax = 0.0
+        remaining = income_after_pa
+        for band in tax_cfg["bands"]:
+            width = band["width"]
+            rate = band["rate"]
+            if width is None:
+                tax += remaining * rate
+                remaining = 0
+            else:
+                taxable_in_band = min(remaining, width)
+                tax += taxable_in_band * rate
+                remaining -= taxable_in_band
+            if remaining <= 0:
+                break
+        if tax_cfg.get("tax_cap_enabled") and tax > tax_cfg.get("tax_cap_amount", 200000):
+            tax = tax_cfg["tax_cap_amount"]
+        return round(tax, 2)
+
+    # ------------------------------------------------------------------ #
+    #  UK Tax (for comparison)
+    # ------------------------------------------------------------------ #
+    def calculate_uk_tax(self, taxable_income: float) -> float:
+        pa = 12570
+        income_after_pa = max(0, taxable_income - pa)
+        bands = [
+            (37700, 0.20),
+            (99730, 0.40),
+            (None, 0.45),
+        ]
+        tax = 0.0
+        remaining = income_after_pa
+        for width, rate in bands:
+            if width is None:
+                tax += remaining * rate
+                remaining = 0
+            else:
+                taxable_in_band = min(remaining, width)
+                tax += taxable_in_band * rate
+                remaining -= taxable_in_band
+            if remaining <= 0:
+                break
+        return round(tax, 2)
+
+    # ------------------------------------------------------------------ #
+    #  Gross-up solver
+    # ------------------------------------------------------------------ #
+    def gross_up(self, net_needed: float, guaranteed_taxable: float,
+                 tax_free_portion: float) -> float:
+        """Find DC gross withdrawal to achieve net_needed using marginal tax.
+
+        The marginal approach correctly calculates the additional tax caused
+        by the DC withdrawal on top of existing taxable income, rather than
+        pro-rating total tax (which is wrong for progressive tax bands).
+        """
+        if net_needed <= 0:
+            return 0.0
+        tax_on_existing = self.calculate_tax(guaranteed_taxable)
+        lo, hi = net_needed, net_needed * 3
+        for _ in range(80):
+            mid = (lo + hi) / 2
+            taxable_part = mid * (1 - tax_free_portion)
+            total_taxable = guaranteed_taxable + taxable_part
+            total_tax = self.calculate_tax(total_taxable)
+            marginal_tax = total_tax - tax_on_existing
+            net_from_dc = mid - marginal_tax
+            if abs(net_from_dc - net_needed) < 0.50:
+                return round(mid, 2)
+            if net_from_dc < net_needed:
+                lo = mid
+            else:
+                hi = mid
+        return round((lo + hi) / 2, 2)
+
+    # ------------------------------------------------------------------ #
+    #  Main projection
+    # ------------------------------------------------------------------ #
+    def run_projection(self) -> dict:
+        cfg = self.cfg
+        retirement_age = cfg["personal"]["retirement_age"]
+        end_age = cfg["personal"]["end_age"]
+        target_net = cfg["target_income"]["net_annual"]
+        cpi = cfg["target_income"]["cpi_rate"]
+
+        # Load asset model for growth rate resolution
+        asset_model = load_asset_model()
+
+        # Build guaranteed income list with current amounts
+        guaranteed = []
+        for g in cfg["guaranteed_income"]:
+            guaranteed.append({
+                "name": g["name"],
+                "current_annual": g["gross_annual"],
+                "indexation_rate": g.get("indexation_rate", 0),
+                "start_age": g.get("start_age", retirement_age),
+                "end_age": g.get("end_age"),
+                "taxable": g.get("taxable", True),
+            })
+
+        # Build DC pot balances — resolve growth rates from allocation
+        dc_balances = {}
+        dc_meta = {}
+        for pot in cfg["dc_pots"]:
+            name = pot["name"]
+            dc_balances[name] = pot["starting_balance"]
+            dc_meta[name] = {
+                "growth_rate": resolve_growth_rate(pot, asset_model),
+                "annual_fees": pot.get("annual_fees", 0.005),
+                "tax_free_portion": pot.get("tax_free_portion", 0.25),
+            }
+
+        # Build tax-free account balances — resolve growth rates from allocation
+        tf_balances = {}
+        tf_meta = {}
+        for acc in cfg["tax_free_accounts"]:
+            name = acc["name"]
+            tf_balances[name] = acc["starting_balance"]
+            tf_meta[name] = {
+                "growth_rate": resolve_growth_rate(acc, asset_model),
+            }
+
+        # Withdrawal priority
+        priority = cfg.get("withdrawal_priority", [])
+
+        years = []
+        warnings = []
+        current_target = target_net
+        first_shortfall_age = None
+        first_pot_exhausted_age = None
+        total_tax = 0.0
+        total_uk_tax = 0.0
+
+        for age in range(retirement_age, end_age + 1):
+            tax_year = f"{2027 + (age - retirement_age)}/{str(2028 + (age - retirement_age))[-2:]}"
+
+            # Inflate target
+            if age > retirement_age:
+                current_target *= (1 + cpi)
+
+            # Calculate guaranteed income for this year
+            guaranteed_total_gross = 0.0
+            guaranteed_taxable_gross = 0.0
+            guaranteed_detail = {}
+            for g in guaranteed:
+                active = age >= g["start_age"] and (g["end_age"] is None or age <= g["end_age"])
+                if active:
+                    amt = g["current_annual"]
+                    guaranteed_detail[g["name"]] = round(amt, 2)
+                    guaranteed_total_gross += amt
+                    if g["taxable"]:
+                        guaranteed_taxable_gross += amt
+                else:
+                    guaranteed_detail[g["name"]] = 0.0
+
+            # Index guaranteed incomes for next year
+            for g in guaranteed:
+                g["current_annual"] *= (1 + g["indexation_rate"])
+
+            # Tax on guaranteed income alone
+            tax_on_guaranteed = self.calculate_tax(guaranteed_taxable_gross)
+            net_from_guaranteed = guaranteed_total_gross - tax_on_guaranteed
+
+            # Shortfall to fill from drawdown
+            shortfall = max(0, current_target - net_from_guaranteed)
+
+            # Grow DC pots and tax-free accounts
+            for name in dc_balances:
+                meta = dc_meta[name]
+                dc_balances[name] *= (1 + meta["growth_rate"] - meta["annual_fees"])
+
+            for name in tf_balances:
+                meta = tf_meta[name]
+                tf_balances[name] *= (1 + meta["growth_rate"])
+
+            # Withdraw according to priority
+            dc_withdrawal_gross = 0.0
+            dc_tax_free_total = 0.0
+            tf_withdrawal_total = 0.0
+            withdrawal_detail = {}  # per-source withdrawals
+            remaining_shortfall = shortfall
+
+            for source_name in priority:
+                if remaining_shortfall <= 0:
+                    break
+
+                if source_name in dc_balances:
+                    meta = dc_meta[source_name]
+                    tfp = meta["tax_free_portion"]
+                    gross_needed = self.gross_up(remaining_shortfall,
+                                                guaranteed_taxable_gross + dc_withdrawal_gross * (1 - tfp),
+                                                tfp)
+                    gross_needed = min(gross_needed, dc_balances[source_name])
+                    dc_balances[source_name] -= gross_needed
+                    tax_free_part = gross_needed * tfp
+                    dc_withdrawal_gross += gross_needed
+                    dc_tax_free_total += tax_free_part
+                    withdrawal_detail[source_name] = round(gross_needed, 2)
+
+                    taxable_part = gross_needed - tax_free_part
+                    total_taxable = guaranteed_taxable_gross + (dc_withdrawal_gross - dc_tax_free_total)
+                    tax = self.calculate_tax(total_taxable)
+                    net_so_far = guaranteed_total_gross + dc_withdrawal_gross + tf_withdrawal_total - tax
+                    remaining_shortfall = max(0, current_target - net_so_far)
+
+                elif source_name in tf_balances:
+                    withdraw = min(remaining_shortfall, tf_balances[source_name])
+                    tf_balances[source_name] -= withdraw
+                    tf_withdrawal_total += withdraw
+                    withdrawal_detail[source_name] = round(withdraw, 2)
+                    remaining_shortfall -= withdraw
+
+            # Final tax calculation
+            total_taxable_income = guaranteed_taxable_gross + (dc_withdrawal_gross - dc_tax_free_total)
+            tax_due = self.calculate_tax(total_taxable_income)
+            uk_tax_due = self.calculate_uk_tax(total_taxable_income)
+            total_tax += tax_due
+            total_uk_tax += uk_tax_due
+
+            net_income = guaranteed_total_gross + dc_withdrawal_gross + tf_withdrawal_total - tax_due
+            has_shortfall = net_income < current_target - 1
+
+            if has_shortfall and first_shortfall_age is None:
+                first_shortfall_age = age
+
+            # Check pot exhaustion
+            all_pots = {**dc_balances, **tf_balances}
+            for pname, bal in all_pots.items():
+                if bal < 1 and first_pot_exhausted_age is None:
+                    first_pot_exhausted_age = age
+                    warnings.append(f"{pname} exhausted at age {age}")
+
+            # Total capital
+            total_capital = sum(dc_balances.values()) + sum(tf_balances.values())
+
+            # Build year result
+            yr = {
+                "age": age,
+                "tax_year": tax_year,
+                "target_net": round(current_target, 2),
+                "guaranteed_income": guaranteed_detail,
+                "guaranteed_total": round(guaranteed_total_gross, 2),
+                "dc_withdrawal_gross": round(dc_withdrawal_gross, 2),
+                "dc_tax_free_portion": round(dc_tax_free_total, 2),
+                "tf_withdrawal": round(tf_withdrawal_total, 2),
+                "withdrawal_detail": withdrawal_detail,
+                "total_taxable_income": round(total_taxable_income, 2),
+                "tax_due": round(tax_due, 2),
+                "uk_tax_due": round(uk_tax_due, 2),
+                "net_income_achieved": round(net_income, 2),
+                "shortfall": has_shortfall,
+                "pot_balances": {n: round(b, 2) for n, b in dc_balances.items()},
+                "tf_balances": {n: round(b, 2) for n, b in tf_balances.items()},
+                "total_capital": round(total_capital, 2),
+            }
+            years.append(yr)
+
+        # Summary
+        num_years = len(years)
+        summary = {
+            "sustainable": first_shortfall_age is None,
+            "first_shortfall_age": first_shortfall_age,
+            "end_age": end_age,
+            "num_years": num_years,
+            "remaining_capital": round(sum(dc_balances.values()) + sum(tf_balances.values()), 2),
+            "remaining_pots": {n: round(b, 2) for n, b in dc_balances.items()},
+            "remaining_tf": {n: round(b, 2) for n, b in tf_balances.items()},
+            "total_tax_paid": round(total_tax, 2),
+            "total_uk_tax_paid": round(total_uk_tax, 2),
+            "uk_tax_saving": round(total_uk_tax - total_tax, 2),
+            "avg_effective_tax_rate": round(
+                (total_tax / sum(y["total_taxable_income"] for y in years) * 100)
+                if sum(y["total_taxable_income"] for y in years) > 0 else 0, 1),
+            "first_pot_exhausted_age": first_pot_exhausted_age,
+        }
+
+        return {"years": years, "summary": summary, "warnings": warnings}
+
+
+def load_config(path: str = "config_default.json") -> dict:
+    with open(path) as f:
+        return json.load(f)
+
+
+if __name__ == "__main__":
+    cfg = load_config()
+    engine = RetirementEngine(cfg)
+    result = engine.run_projection()
+    s = result["summary"]
+    print(f"Sustainable: {s['sustainable']}")
+    print(f"Remaining capital at age {s['end_age']}: £{s['remaining_capital']:,.0f}")
+    print(f"Total IoM tax: £{s['total_tax_paid']:,.0f}")
+    print(f"Total UK tax:  £{s['total_uk_tax_paid']:,.0f}")
+    print(f"Tax saving:    £{s['uk_tax_saving']:,.0f}")
+    for w in result["warnings"]:
+        print(f"  ⚠ {w}")
