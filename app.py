@@ -159,7 +159,8 @@ def dashboard():
             depletion_age = yr["age"]
             break
     # Trim extended years to depletion_age + 2 (or plan_end_age + 2 if no depletion)
-    chart_end = (depletion_age + 2) if depletion_age else (plan_end_age + 2)
+    # Always show at least 5 years beyond plan end; if depletion occurs, show to depletion+2 or plan_end+5, whichever is greater (capped at 105)
+    chart_end = min(105, max(plan_end_age + 5, (depletion_age + 2) if depletion_age else 0))
     ext_years_trimmed = [y for y in ext_result["years"] if y["age"] <= chart_end]
 
     # ---- Fan chart: optimistic & pessimistic projections ----
