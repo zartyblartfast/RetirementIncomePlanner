@@ -162,10 +162,43 @@ def dashboard():
     chart_end = (depletion_age + 2) if depletion_age else (plan_end_age + 2)
     ext_years_trimmed = [y for y in ext_result["years"] if y["age"] <= chart_end]
 
+    # ---- Fan chart: optimistic & pessimistic projections ----
+    # Optimistic: growth +1.5%, CPI -0.5%
+    opt_cfg = _copy.deepcopy(cfg)
+    opt_cfg["personal"]["end_age"] = 105
+    for pot in opt_cfg["dc_pots"]:
+        pot["growth_rate"] = pot["growth_rate"] + 0.015
+    for acc in opt_cfg["tax_free_accounts"]:
+        acc["growth_rate"] = acc["growth_rate"] + 0.015
+    opt_cfg["target_income"]["cpi_rate"] = max(0, opt_cfg["target_income"]["cpi_rate"] - 0.005)
+    opt_engine = RetirementEngine(opt_cfg)
+    opt_result = opt_engine.run_projection()
+    fan_optimistic = [
+        {"age": y["age"], "total_capital": y["total_capital"]}
+        for y in opt_result["years"] if y["age"] <= chart_end
+    ]
+
+    # Pessimistic: growth -1.5%, CPI +0.5%
+    pes_cfg = _copy.deepcopy(cfg)
+    pes_cfg["personal"]["end_age"] = 105
+    for pot in pes_cfg["dc_pots"]:
+        pot["growth_rate"] = max(0, pot["growth_rate"] - 0.015)
+    for acc in pes_cfg["tax_free_accounts"]:
+        acc["growth_rate"] = max(0, acc["growth_rate"] - 0.015)
+    pes_cfg["target_income"]["cpi_rate"] = pes_cfg["target_income"]["cpi_rate"] + 0.005
+    pes_engine = RetirementEngine(pes_cfg)
+    pes_result = pes_engine.run_projection()
+    fan_pessimistic = [
+        {"age": y["age"], "total_capital": y["total_capital"]}
+        for y in pes_result["years"] if y["age"] <= chart_end
+    ]
+
     return render_template("dashboard.html", config=cfg, result=result,
                            ext_years=ext_years_trimmed,
                            plan_end_age=plan_end_age,
-                           depletion_age=depletion_age)
+                           depletion_age=depletion_age,
+                           fan_optimistic=fan_optimistic,
+                           fan_pessimistic=fan_pessimistic)
 
 # ------------------------------------------------------------------ #
 #  Settings — dynamic income stream management
