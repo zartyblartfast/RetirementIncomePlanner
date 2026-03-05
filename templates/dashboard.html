@@ -360,6 +360,7 @@
     </div>
 </div>
 
+</script>
 {% endblock %}
 
 {% block scripts %}
@@ -494,9 +495,13 @@ new Chart(document.getElementById('capitalChart'), {
     plugins: [verticalLinePlugin]
 });
 
-// Income Source Breakdown Chart (Stacked Bar + Lines)
+// Income Source Breakdown Chart (Stacked Bar + Lines) — Extended
 const guaranteedNames = {{ config.guaranteed_income | map(attribute='name') | list | tojson }};
 const incomeDatasets = [];
+
+// Use extended years for the income chart to show post-depletion phase
+const incomeYears = extYears;  // reuse extended data from capital chart
+const incomeAges = incomeYears.map(y => y.age);
 
 // Color palettes: blues for guaranteed, greens/ambers for drawdown, red for tax
 const guaranteedColours = ['#2e86de', '#54a0ff', '#48dbfb', '#0abde3'];
@@ -506,7 +511,10 @@ let gi = 0;
 guaranteedNames.forEach(name => {
     incomeDatasets.push({
         label: name,
-        data: years.map(y => y.guaranteed_income[name] || 0),
+        data: incomeYears.map(y => {
+            const v = y.guaranteed_income ? (y.guaranteed_income[name] || 0) : 0;
+            return v > 0 ? v : null;  // null hides phantom zero-segments
+        }),
         backgroundColor: guaranteedColours[gi % guaranteedColours.length],
         stack: 'income',
         order: 2,
@@ -518,7 +526,10 @@ let di = 0;
 dcPotNames.forEach(name => {
     incomeDatasets.push({
         label: name + ' (drawdown)',
-        data: years.map(y => y.withdrawal_detail[name] || 0),
+        data: incomeYears.map(y => {
+            const v = y.withdrawal_detail ? (y.withdrawal_detail[name] || 0) : 0;
+            return v > 0 ? v : null;
+        }),
         backgroundColor: drawdownColours[di % drawdownColours.length],
         stack: 'income',
         order: 2,
@@ -529,7 +540,10 @@ dcPotNames.forEach(name => {
 tfAccNames.forEach(name => {
     incomeDatasets.push({
         label: name + ' (drawdown)',
-        data: years.map(y => y.withdrawal_detail[name] || 0),
+        data: incomeYears.map(y => {
+            const v = y.withdrawal_detail ? (y.withdrawal_detail[name] || 0) : 0;
+            return v > 0 ? v : null;
+        }),
         backgroundColor: drawdownColours[di % drawdownColours.length],
         stack: 'income',
         order: 2,
@@ -540,7 +554,10 @@ tfAccNames.forEach(name => {
 // Tax deducted (negative bar on separate stack)
 incomeDatasets.push({
     label: 'Tax Deducted',
-    data: years.map(y => -y.tax_due),
+    data: incomeYears.map(y => {
+        const v = y.tax_due || 0;
+        return v > 0 ? -v : null;
+    }),
     backgroundColor: '#ee5253cc',
     stack: 'tax',
     order: 2,
@@ -549,7 +566,7 @@ incomeDatasets.push({
 // Target income line (dashed)
 incomeDatasets.push({
     label: 'Target Net Income',
-    data: years.map(y => y.target_net),
+    data: incomeYears.map(y => y.target_net),
     type: 'line',
     borderColor: '#222f3e',
     borderWidth: 2,
@@ -563,20 +580,54 @@ incomeDatasets.push({
 // Net income achieved line (solid, red dots on shortfall years)
 incomeDatasets.push({
     label: 'Net Income Achieved',
-    data: years.map(y => y.net_income_achieved),
+    data: incomeYears.map(y => y.net_income_achieved),
     type: 'line',
     borderColor: '#10ac84',
     borderWidth: 2.5,
     pointRadius: 2,
     pointHoverRadius: 5,
-    pointBackgroundColor: years.map(y => y.shortfall ? '#ee5253' : '#10ac84'),
+    pointBackgroundColor: incomeYears.map(y => y.shortfall ? '#ee5253' : '#10ac84'),
     fill: false,
     order: 1,
 });
 
+// Shortfall zone plugin: shades area between target and achieved when shortfall
+const shortfallPlugin = {
+    id: 'shortfallZone',
+    beforeDatasetsDraw(chart) {
+        const ctx = chart.ctx;
+        const xAxis = chart.scales.x;
+        const yAxis = chart.scales.y;
+        const targetDs = chart.data.datasets.find(d => d.label === 'Target Net Income');
+        const achievedDs = chart.data.datasets.find(d => d.label === 'Net Income Achieved');
+        if (!targetDs || !achievedDs) return;
+        const targetMeta = chart.getDatasetMeta(chart.data.datasets.indexOf(targetDs));
+        const achievedMeta = chart.getDatasetMeta(chart.data.datasets.indexOf(achievedDs));
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(238, 82, 83, 0.15)';
+
+        for (let i = 0; i < incomeYears.length; i++) {
+            if (!incomeYears[i].shortfall) continue;
+            const tPt = targetMeta.data[i];
+            const aPt = achievedMeta.data[i];
+            if (!tPt || !aPt) continue;
+
+            // Shade a bar-width rectangle between the two lines
+            const barWidth = xAxis.width / incomeYears.length;
+            const x = tPt.x - barWidth / 2;
+            const yTop = Math.min(aPt.y, tPt.y);
+            const yBot = Math.max(aPt.y, tPt.y);
+            ctx.fillRect(x, yTop, barWidth, yBot - yTop);
+        }
+        ctx.restore();
+    }
+};
+
 new Chart(document.getElementById('incomeChart'), {
     type: 'bar',
-    data: { labels: ages, datasets: incomeDatasets },
+    data: { labels: incomeAges, datasets: incomeDatasets },
+    plugins: [shortfallPlugin],
     options: {
         responsive: true,
         plugins: {
@@ -585,6 +636,7 @@ new Chart(document.getElementById('incomeChart'), {
                 callbacks: {
                     label: function(ctx) {
                         let val = ctx.parsed.y;
+                        if (val === null) return null;
                         let sign = val < 0 ? '-' : '';
                         return ctx.dataset.label + ': ' + sign + '\u00a3' + Math.abs(val).toLocaleString('en-GB', {maximumFractionDigits: 0});
                     }
