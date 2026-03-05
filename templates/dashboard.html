@@ -130,6 +130,7 @@
 <div class="card mb-4">
     <div class="card-header"><i class="bi bi-table"></i> Year-by-Year Projection</div>
     <div class="card-body table-responsive">
+        {% set num_cols = 6 + config.guaranteed_income|length + 2 * config.dc_pots|length + 2 * config.tax_free_accounts|length %}
         <table class="table table-sm table-striped table-hover">
             <thead class="table-dark">
                 <tr>
@@ -199,7 +200,11 @@
                             </table>
                         </div>
                     </td>
-                    <td class="{% if yr.shortfall %}text-danger fw-bold{% else %}text-success{% endif %}">&pound;{{ "{:,.0f}".format(yr.net_income_achieved) }}</td>
+                    <td class="{% if yr.shortfall %}text-danger fw-bold{% else %}text-success{% endif %}">
+                        <a class="text-decoration-none {% if yr.shortfall %}text-danger fw-bold{% else %}text-success{% endif %}" data-bs-toggle="collapse" href="#waterfall-{{ yr.age }}" role="button" aria-expanded="false" aria-controls="waterfall-{{ yr.age }}">
+                            &pound;{{ "{:,.0f}".format(yr.net_income_achieved) }} &#x1F4CA;
+                        </a>
+                    </td>
                     {% for p in config.dc_pots %}
                     <td>&pound;{{ "{:,.0f}".format(yr.pot_balances.get(p.name, 0)) }}</td>
                     {% endfor %}
@@ -207,6 +212,86 @@
                     <td>&pound;{{ "{:,.0f}".format(yr.tf_balances.get(a.name, 0)) }}</td>
                     {% endfor %}
                     <td>&pound;{{ "{:,.0f}".format(yr.total_capital) }}</td>
+                </tr>
+                <!-- Income Waterfall expandable row -->
+                <tr class="waterfall-row">
+                    <td colspan="{{ num_cols }}" class="p-0 border-0">
+                        <div class="collapse" id="waterfall-{{ yr.age }}">
+                            <div class="p-3" style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                                {% set total_gross = yr.guaranteed_total + yr.dc_withdrawal_gross + yr.tf_withdrawal %}
+                                {% set surplus = yr.net_income_achieved - yr.target_net %}
+                                <h6 class="fw-bold mb-3"><i class="bi bi-water"></i> Income Waterfall &mdash; Age {{ yr.age }} ({{ yr.tax_year }})</h6>
+                                <table class="table table-sm table-borderless mb-0" style="max-width: 520px; font-size: 0.85rem;">
+                                    <tbody>
+                                        <!-- Guaranteed Income -->
+                                        <tr><td colspan="2" class="fw-bold pt-2 pb-1">Guaranteed Income</td></tr>
+                                        {% for g in config.guaranteed_income %}
+                                        <tr>
+                                            <td class="ps-3 text-muted">&hookrightarrow; {{ g.name }}</td>
+                                            <td class="text-end">&pound;{{ "{:,.0f}".format(yr.guaranteed_income.get(g.name, 0)) }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                        <!-- Drawdown Withdrawals -->
+                                        <tr><td colspan="2" class="fw-bold pt-2 pb-1">Drawdown Withdrawals</td></tr>
+                                        {% for p in config.dc_pots %}
+                                        <tr>
+                                            <td class="ps-3 text-muted">&hookrightarrow; {{ p.name }}</td>
+                                            <td class="text-end">&pound;{{ "{:,.0f}".format(yr.withdrawal_detail.get(p.name, 0)) }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                        {% for a in config.tax_free_accounts %}
+                                        <tr>
+                                            <td class="ps-3 text-muted">&hookrightarrow; {{ a.name }} <span class="badge bg-success bg-opacity-25 text-success" style="font-size:0.7rem;">tax-free</span></td>
+                                            <td class="text-end">&pound;{{ "{:,.0f}".format(yr.withdrawal_detail.get(a.name, 0)) }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                        <!-- Total Gross -->
+                                        <tr style="border-top: 2px solid #adb5bd;">
+                                            <td class="fw-bold">Total Gross Income</td>
+                                            <td class="text-end fw-bold">&pound;{{ "{:,.0f}".format(total_gross) }}</td>
+                                        </tr>
+                                        <!-- Deductions -->
+                                        <tr><td colspan="2" class="pt-2"></td></tr>
+                                        <tr>
+                                            <td class="text-muted">Less: DC tax-free portion (25%)</td>
+                                            <td class="text-end text-muted">&minus;&pound;{{ "{:,.0f}".format(yr.dc_tax_free_portion) }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted">Less: Tax-free withdrawals</td>
+                                            <td class="text-end text-muted">&minus;&pound;{{ "{:,.0f}".format(yr.tf_withdrawal) }}</td>
+                                        </tr>
+                                        <!-- Taxable Income -->
+                                        <tr style="border-top: 2px solid #adb5bd;">
+                                            <td class="fw-bold">Taxable Income</td>
+                                            <td class="text-end fw-bold">&pound;{{ "{:,.0f}".format(yr.total_taxable_income) }}</td>
+                                        </tr>
+                                        <!-- Tax -->
+                                        <tr><td colspan="2" class="pt-2"></td></tr>
+                                        <tr>
+                                            <td class="text-muted">Less: IoM Tax</td>
+                                            <td class="text-end text-danger">&minus;&pound;{{ "{:,.0f}".format(yr.tax_due) }}</td>
+                                        </tr>
+                                        <!-- Net Income -->
+                                        <tr style="border-top: 2px solid #adb5bd;">
+                                            <td class="fw-bold">Net Income Achieved</td>
+                                            <td class="text-end fw-bold">&pound;{{ "{:,.0f}".format(yr.net_income_achieved) }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted">Target Net Income</td>
+                                            <td class="text-end">&pound;{{ "{:,.0f}".format(yr.target_net) }}</td>
+                                        </tr>
+                                        <!-- Surplus / Shortfall -->
+                                        <tr style="border-top: 2px solid #adb5bd;">
+                                            <td class="fw-bold">{% if surplus >= 0 %}Surplus{% else %}Shortfall{% endif %}</td>
+                                            <td class="text-end fw-bold {% if surplus >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                                {% if surplus >= 0 %}+{% endif %}&pound;{{ "{:,.0f}".format(surplus) }}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -440,7 +525,7 @@ new Chart(document.getElementById('incomeChart'), {
                     label: function(ctx) {
                         let val = ctx.parsed.y;
                         let sign = val < 0 ? '-' : '';
-                        return ctx.dataset.label + ': ' + sign + '£' + Math.abs(val).toLocaleString('en-GB', {maximumFractionDigits: 0});
+                        return ctx.dataset.label + ': ' + sign + '\u00a3' + Math.abs(val).toLocaleString('en-GB', {maximumFractionDigits: 0});
                     }
                 }
             },
@@ -453,8 +538,8 @@ new Chart(document.getElementById('incomeChart'), {
             x: { stacked: true, grid: { display: false } },
             y: {
                 stacked: true,
-                ticks: { callback: v => (v < 0 ? '-' : '') + '£' + Math.abs(v).toLocaleString() },
-                title: { display: true, text: 'Annual Amount (£)', font: { weight: 'bold' } }
+                ticks: { callback: v => (v < 0 ? '-' : '') + '\u00a3' + Math.abs(v).toLocaleString() },
+                title: { display: true, text: 'Annual Amount (\u00a3)', font: { weight: 'bold' } }
             }
         }
     }
