@@ -341,14 +341,35 @@ class RetirementEngine:
             # Shortfall to fill from drawdown
             shortfall = max(0, current_target - net_from_guaranteed)
 
-            # Grow DC pots and tax-free accounts
+            # Grow DC pots and tax-free accounts — track P&L components
+            pot_pnl = {}  # per-pot P&L for this year
+
             for name in dc_balances:
                 meta = dc_meta[name]
-                dc_balances[name] *= (1 + meta["growth_rate"] - meta["annual_fees"])
+                opening = dc_balances[name]
+                growth_amt = opening * meta["growth_rate"]
+                fee_amt = opening * meta["annual_fees"]
+                dc_balances[name] = opening + growth_amt - fee_amt
+                pot_pnl[name] = {
+                    "opening": round(opening, 2),
+                    "growth": round(growth_amt, 2),
+                    "fees": round(fee_amt, 2),
+                    "withdrawal": 0.0,  # filled during withdrawal phase
+                    "closing": 0.0,     # filled after withdrawals
+                }
 
             for name in tf_balances:
                 meta = tf_meta[name]
-                tf_balances[name] *= (1 + meta["growth_rate"])
+                opening = tf_balances[name]
+                growth_amt = opening * meta["growth_rate"]
+                tf_balances[name] = opening + growth_amt
+                pot_pnl[name] = {
+                    "opening": round(opening, 2),
+                    "growth": round(growth_amt, 2),
+                    "fees": 0.0,
+                    "withdrawal": 0.0,
+                    "closing": 0.0,
+                }
 
             # Withdraw according to priority
             dc_withdrawal_gross = 0.0
@@ -373,6 +394,8 @@ class RetirementEngine:
                     dc_withdrawal_gross += gross_needed
                     dc_tax_free_total += tax_free_part
                     withdrawal_detail[source_name] = round(gross_needed, 2)
+                    if source_name in pot_pnl:
+                        pot_pnl[source_name]["withdrawal"] = round(gross_needed, 2)
 
                     taxable_part = gross_needed - tax_free_part
                     total_taxable = guaranteed_taxable_gross + (dc_withdrawal_gross - dc_tax_free_total)
@@ -385,7 +408,17 @@ class RetirementEngine:
                     tf_balances[source_name] -= withdraw
                     tf_withdrawal_total += withdraw
                     withdrawal_detail[source_name] = round(withdraw, 2)
+                    if source_name in pot_pnl:
+                        pot_pnl[source_name]["withdrawal"] = round(withdraw, 2)
                     remaining_shortfall -= withdraw
+
+            # Fill closing balances in pot P&L
+            for name in dc_balances:
+                if name in pot_pnl:
+                    pot_pnl[name]["closing"] = round(dc_balances[name], 2)
+            for name in tf_balances:
+                if name in pot_pnl:
+                    pot_pnl[name]["closing"] = round(tf_balances[name], 2)
 
             # Final tax calculation — store full breakdowns
             total_taxable_income = guaranteed_taxable_gross + (dc_withdrawal_gross - dc_tax_free_total)
@@ -433,6 +466,7 @@ class RetirementEngine:
                 "pot_balances": {n: round(b, 2) for n, b in dc_balances.items()},
                 "tf_balances": {n: round(b, 2) for n, b in tf_balances.items()},
                 "total_capital": round(total_capital, 2),
+                "pot_pnl": pot_pnl,
             }
             years.append(yr)
 

@@ -211,7 +211,61 @@
                     {% for a in config.tax_free_accounts %}
                     <td>&pound;{{ "{:,.0f}".format(yr.tf_balances.get(a.name, 0)) }}</td>
                     {% endfor %}
-                    <td>&pound;{{ "{:,.0f}".format(yr.total_capital) }}</td>
+                    <td>
+                        <a class="text-decoration-none text-dark" data-bs-toggle="collapse" href="#pnl-{{ yr.age }}" role="button" aria-expanded="false" aria-controls="pnl-{{ yr.age }}" style="white-space:nowrap;">
+                            &pound;{{ "{:,.0f}".format(yr.total_capital) }}&nbsp;&#x1F4D1;
+                        </a>
+                    </td>
+                </tr>
+                <!-- Pot P&L expandable row -->
+                <tr class="pnl-row">
+                    <td colspan="{{ num_cols }}" class="p-0 border-0">
+                        <div class="collapse" id="pnl-{{ yr.age }}">
+                            <div class="p-3" style="background: #eef6ff; border-bottom: 2px solid #b8d4f0;">
+                                <h6 class="mb-2"><strong>&#x1F4D1; Pot P&amp;L &mdash; Age {{ yr.age }}</strong></h6>
+                                <table class="table table-sm table-bordered mb-0" style="font-size: 0.85rem; max-width: 800px;">
+                                    <thead class="table-primary">
+                                        <tr>
+                                            <th>Pot</th>
+                                            <th class="text-end">Opening</th>
+                                            <th class="text-end">Growth</th>
+                                            <th class="text-end">Fees</th>
+                                            <th class="text-end">Withdrawal</th>
+                                            <th class="text-end">Closing</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% set ns = namespace(tot_open=0, tot_growth=0, tot_fees=0, tot_wd=0, tot_close=0) %}
+                                        {% for pot_name, pnl in yr.pot_pnl.items() %}
+                                        <tr>
+                                            <td>{{ pot_name }}</td>
+                                            <td class="text-end">&pound;{{ "{:,.0f}".format(pnl.opening) }}</td>
+                                            <td class="text-end text-success">&pound;{{ "{:,.0f}".format(pnl.growth) }}</td>
+                                            <td class="text-end text-danger">{% if pnl.fees > 0 %}-&pound;{{ "{:,.0f}".format(pnl.fees) }}{% else %}&mdash;{% endif %}</td>
+                                            <td class="text-end text-warning">{% if pnl.withdrawal > 0 %}-&pound;{{ "{:,.0f}".format(pnl.withdrawal) }}{% else %}&mdash;{% endif %}</td>
+                                            <td class="text-end fw-bold">&pound;{{ "{:,.0f}".format(pnl.closing) }}</td>
+                                        </tr>
+                                        {% set ns.tot_open = ns.tot_open + pnl.opening %}
+                                        {% set ns.tot_growth = ns.tot_growth + pnl.growth %}
+                                        {% set ns.tot_fees = ns.tot_fees + pnl.fees %}
+                                        {% set ns.tot_wd = ns.tot_wd + pnl.withdrawal %}
+                                        {% set ns.tot_close = ns.tot_close + pnl.closing %}
+                                        {% endfor %}
+                                    </tbody>
+                                    <tfoot class="table-light">
+                                        <tr class="fw-bold">
+                                            <td>Total</td>
+                                            <td class="text-end">&pound;{{ "{:,.0f}".format(ns.tot_open) }}</td>
+                                            <td class="text-end text-success">&pound;{{ "{:,.0f}".format(ns.tot_growth) }}</td>
+                                            <td class="text-end text-danger">{% if ns.tot_fees > 0 %}-&pound;{{ "{:,.0f}".format(ns.tot_fees) }}{% else %}&mdash;{% endif %}</td>
+                                            <td class="text-end text-warning">{% if ns.tot_wd > 0 %}-&pound;{{ "{:,.0f}".format(ns.tot_wd) }}{% else %}&mdash;{% endif %}</td>
+                                            <td class="text-end">&pound;{{ "{:,.0f}".format(ns.tot_close) }}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                    </td>
                 </tr>
                 <!-- Income Waterfall expandable row -->
                 <tr class="waterfall-row">
