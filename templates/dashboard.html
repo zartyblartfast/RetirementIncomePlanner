@@ -247,7 +247,7 @@ const verticalLinePlugin = {
         ctx.fillStyle = '#dc3545';
         ctx.font = 'bold 12px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('Plan end (' + planEndAge + ')', x, yScale.top - 6);
+        ctx.fillText('Plan end (' + planEndAge + ')', x, yScale.top + 14);
         // Depletion age marker
         if (depletionAge) {
             const dIdx = extAges.indexOf(depletionAge);
@@ -262,7 +262,7 @@ const verticalLinePlugin = {
                 ctx.stroke();
                 ctx.setLineDash([]);
                 ctx.fillStyle = '#6c757d';
-                ctx.fillText('Capital depleted (' + depletionAge + ')', dx, yScale.top - 6);
+                ctx.fillText('Capital depleted (' + depletionAge + ')', dx, yScale.top + 14);
             }
         }
         ctx.restore();
@@ -274,8 +274,10 @@ new Chart(document.getElementById('capitalChart'), {
     data: { labels: extAges, datasets: capDatasets },
     options: {
         responsive: true,
+        layout: { padding: { top: 20 } },
         plugins: {
             title: { display: true, text: 'Capital Balances by Age (extended projection)' },
+            legend: { labels: { padding: 16 } },
         },
         scales: {
             y: { ticks: { callback: v => '\u00a3' + v.toLocaleString() } }

@@ -158,9 +158,12 @@ def dashboard():
         if yr["total_capital"] <= 0:
             depletion_age = yr["age"]
             break
+    # Trim extended years to depletion_age + 2 (or plan_end_age + 2 if no depletion)
+    chart_end = (depletion_age + 2) if depletion_age else (plan_end_age + 2)
+    ext_years_trimmed = [y for y in ext_result["years"] if y["age"] <= chart_end]
 
     return render_template("dashboard.html", config=cfg, result=result,
-                           ext_years=ext_result["years"],
+                           ext_years=ext_years_trimmed,
                            plan_end_age=plan_end_age,
                            depletion_age=depletion_age)
 
