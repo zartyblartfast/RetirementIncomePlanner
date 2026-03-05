@@ -40,7 +40,7 @@ The target net income is increased by the CPI rate each year, compounding from t
 Both the State Pension and BP pension are increased by their respective indexation rates, compounding annually.
 
 ### 3. Grow Investment Pots
-Each DC pension pot grows by its assumed rate **minus annual fees** (applied to the opening balance for that year). The ISA grows by its assumed rate with no fees.
+Each DC pension pot grows by its assumed rate **minus annual fees** (applied to the opening balance for that year). The ISA grows by its assumed rate with no fees. Withdrawals are then made from the grown balance — i.e. the full opening balance earns a year's return before any drawdown occurs (beginning-of-year growth, end-of-year withdrawal convention).
 
 ### 4. Calculate Guaranteed Net Income
 The gross State Pension and BP pension are summed, and Isle of Man income tax is applied to determine the net guaranteed income.
