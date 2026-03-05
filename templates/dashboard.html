@@ -201,8 +201,8 @@
                         </div>
                     </td>
                     <td class="{% if yr.shortfall %}text-danger fw-bold{% else %}text-success{% endif %}">
-                        <a class="text-decoration-none {% if yr.shortfall %}text-danger fw-bold{% else %}text-success{% endif %}" data-bs-toggle="collapse" href="#waterfall-{{ yr.age }}" role="button" aria-expanded="false" aria-controls="waterfall-{{ yr.age }}">
-                            &pound;{{ "{:,.0f}".format(yr.net_income_achieved) }} &#x1F4CA;
+                        <a class="text-decoration-none {% if yr.shortfall %}text-danger fw-bold{% else %}text-success{% endif %}" data-bs-toggle="collapse" href="#waterfall-{{ yr.age }}" role="button" aria-expanded="false" aria-controls="waterfall-{{ yr.age }}" style="white-space:nowrap;">
+                            &pound;{{ "{:,.0f}".format(yr.net_income_achieved) }}&nbsp;&#x1F4CA;
                         </a>
                     </td>
                     {% for p in config.dc_pots %}
