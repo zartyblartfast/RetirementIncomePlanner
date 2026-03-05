@@ -6,7 +6,7 @@ import hashlib
 import functools
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify)
-from retirement_engine import RetirementEngine, load_config, load_asset_model, resolve_growth_rate
+from retirement_engine import RetirementEngine, load_config, load_asset_model, resolve_growth_rate, resolve_growth_provenance
 from optimiser import Optimiser
 
 app = Flask(__name__)
@@ -371,7 +371,16 @@ def settings():
         save_session_config(cfg)
         return redirect(url_for("settings"))
 
-    return render_template("settings.html", config=cfg, asset_model=ASSET_MODEL)
+    # Compute growth rate provenance for each pot
+    dc_provenance = []
+    for pot in cfg.get("dc_pots", []):
+        dc_provenance.append(resolve_growth_provenance(pot, ASSET_MODEL))
+    tf_provenance = []
+    for acc in cfg.get("tax_free_accounts", []):
+        tf_provenance.append(resolve_growth_provenance(acc, ASSET_MODEL))
+
+    return render_template("settings.html", config=cfg, asset_model=ASSET_MODEL,
+                           dc_provenance=dc_provenance, tf_provenance=tf_provenance)
 
 # ------------------------------------------------------------------ #
 #  Scenarios

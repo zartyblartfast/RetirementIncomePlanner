@@ -57,6 +57,85 @@ def resolve_growth_rate(pot_config, asset_model):
     return blended if blended > 0 else pot_config.get("growth_rate", 0.04)
 
 
+
+def resolve_growth_provenance(pot_config, asset_model):
+    """Return a provenance dict describing WHERE the growth rate comes from.
+
+    Returns:
+        dict with keys:
+            'source'  – short label  (e.g. "Template", "Manual", "Custom")
+            'detail'  – longer text  (e.g. "Balanced 80/20 (Equity/Bonds) → 5.12%")
+            'rate'    – the resolved numeric rate
+    """
+    alloc = pot_config.get("allocation", {})
+    mode = alloc.get("mode", "manual")
+    manual_override = alloc.get("manual_override", False)
+    fallback_rate = pot_config.get("growth_rate", 0.04)
+
+    if mode == "manual" or not alloc or manual_override:
+        return {
+            "source": "Manual",
+            "detail": f"User-defined rate: {fallback_rate*100:.2f}%",
+            "rate": fallback_rate,
+        }
+
+    ac_lookup = {ac["id"]: ac for ac in asset_model["asset_classes"]}
+
+    if mode == "template":
+        template_id = alloc.get("template_id", "")
+        templates = {t["id"]: t for t in asset_model["portfolio_templates"]}
+        template = templates.get(template_id)
+        if not template:
+            return {
+                "source": "Manual",
+                "detail": f"Template '{template_id}' not found; fallback rate: {fallback_rate*100:.2f}%",
+                "rate": fallback_rate,
+            }
+        # Compute blended rate for detail string
+        weights = {w["asset_class_id"]: w["weight"] for w in template["weights"]}
+        blended = sum(
+            weights.get(ac_id, 0) * ac_lookup[ac_id]["geometric_return"]
+            for ac_id in weights if ac_id in ac_lookup
+        )
+        rate = blended if blended > 0 else fallback_rate
+        # Build weight breakdown
+        parts = []
+        for w in template["weights"]:
+            ac = ac_lookup.get(w["asset_class_id"])
+            if ac and w["weight"] > 0:
+                parts.append(f"{ac["label"]} {w["weight"]*100:.0f}%")
+        mix_str = ", ".join(parts)
+        return {
+            "source": "Template",
+            "detail": f"{template["label"]} (risk {template.get("risk_score","?")}): {mix_str} → {rate*100:.2f}%",
+            "rate": rate,
+        }
+
+    elif mode == "custom":
+        weights = alloc.get("custom_weights", {})
+        blended = sum(
+            weights.get(ac_id, 0) * ac_lookup[ac_id]["geometric_return"]
+            for ac_id in weights if ac_id in ac_lookup
+        )
+        rate = blended if blended > 0 else fallback_rate
+        parts = []
+        for ac_id, w in weights.items():
+            ac = ac_lookup.get(ac_id)
+            if ac and w > 0:
+                parts.append(f"{ac["label"]} {w*100:.0f}%")
+        mix_str = ", ".join(parts)
+        return {
+            "source": "Custom",
+            "detail": f"Custom allocation: {mix_str} → {rate*100:.2f}%",
+            "rate": rate,
+        }
+
+    return {
+        "source": "Manual",
+        "detail": f"Fallback rate: {fallback_rate*100:.2f}%",
+        "rate": fallback_rate,
+    }
+
 class RetirementEngine:
     """Run a year-by-year retirement income projection."""
 
@@ -285,6 +364,7 @@ class RetirementEngine:
                 "growth_rate": resolve_growth_rate(pot, asset_model),
                 "annual_fees": pot.get("annual_fees", 0.005),
                 "tax_free_portion": pot.get("tax_free_portion", 0.25),
+                "provenance": resolve_growth_provenance(pot, asset_model),
             }
 
         # Build tax-free account balances — resolve growth rates from allocation
@@ -295,6 +375,7 @@ class RetirementEngine:
             tf_balances[name] = acc["starting_balance"]
             tf_meta[name] = {
                 "growth_rate": resolve_growth_rate(acc, asset_model),
+                "provenance": resolve_growth_provenance(acc, asset_model),
             }
 
         # Withdrawal priority
@@ -356,6 +437,7 @@ class RetirementEngine:
                     "fees": round(fee_amt, 2),
                     "withdrawal": 0.0,  # filled during withdrawal phase
                     "closing": 0.0,     # filled after withdrawals
+                    "provenance": meta["provenance"],
                 }
 
             for name in tf_balances:
@@ -369,6 +451,7 @@ class RetirementEngine:
                     "fees": 0.0,
                     "withdrawal": 0.0,
                     "closing": 0.0,
+                    "provenance": meta["provenance"],
                 }
 
             # Withdraw according to priority

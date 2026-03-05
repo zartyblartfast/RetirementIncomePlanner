@@ -306,7 +306,14 @@
                     </div>
                     <div class="row text-muted small">
                         <div class="col"><i class="bi bi-wallet2"></i> &pound;{{ "{:,.0f}".format(pot.starting_balance) }}</div>
-                        <div class="col"><i class="bi bi-graph-up-arrow"></i> {{ (pot.growth_rate * 100) | round(2) }}%</div>
+                        <div class="col"><i class="bi bi-graph-up-arrow"></i> {{ (pot.growth_rate * 100) | round(2) }}%
+                            {% if dc_provenance and dc_provenance[loop.index0] %}
+                            <br><span class="badge bg-info text-dark" style="font-size:0.65rem; font-weight:normal;"
+                                title="{{ dc_provenance[loop.index0].detail }}">
+                                <i class="bi bi-info-circle"></i> {{ dc_provenance[loop.index0].source }}
+                            </span>
+                            {% endif %}
+                        </div>
                         <div class="col"><i class="bi bi-percent"></i> Fees {{ (pot.annual_fees * 100) | round(1) }}%</div>
                         <div class="col"><i class="bi bi-pie-chart"></i>
                             {% if alloc_mode == 'template' %}Template
@@ -473,7 +480,14 @@
                     </div>
                     <div class="row text-muted small">
                         <div class="col"><i class="bi bi-wallet2"></i> &pound;{{ "{:,.0f}".format(acc.starting_balance) }}</div>
-                        <div class="col"><i class="bi bi-graph-up-arrow"></i> {{ (acc.growth_rate * 100) | round(2) }}%</div>
+                        <div class="col"><i class="bi bi-graph-up-arrow"></i> {{ (acc.growth_rate * 100) | round(2) }}%
+                            {% if tf_provenance and tf_provenance[loop.index0] %}
+                            <br><span class="badge bg-info text-dark" style="font-size:0.65rem; font-weight:normal;"
+                                title="{{ tf_provenance[loop.index0].detail }}">
+                                <i class="bi bi-info-circle"></i> {{ tf_provenance[loop.index0].source }}
+                            </span>
+                            {% endif %}
+                        </div>
                         <div class="col"><i class="bi bi-pie-chart"></i>
                             {% if alloc_mode == 'template' %}Template
                             {% elif alloc_mode == 'custom' %}Custom

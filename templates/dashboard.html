@@ -238,7 +238,14 @@
                                         {% set ns = namespace(tot_open=0, tot_growth=0, tot_fees=0, tot_wd=0, tot_close=0) %}
                                         {% for pot_name, pnl in yr.pot_pnl.items() %}
                                         <tr>
-                                            <td>{{ pot_name }}</td>
+                                            <td>{{ pot_name }}
+                                                {% if pnl.provenance %}
+                                                <br><span class="badge bg-info text-dark" style="font-size:0.7rem; font-weight:normal;" 
+                                                    title="{{ pnl.provenance.detail }}">
+                                                    <i class="bi bi-info-circle"></i> {{ pnl.provenance.source }}: {{ "%.2f"|format(pnl.provenance.rate * 100) }}%
+                                                </span>
+                                                {% endif %}
+                                            </td>
                                             <td class="text-end">&pound;{{ "{:,.0f}".format(pnl.opening) }}</td>
                                             <td class="text-end text-success">&pound;{{ "{:,.0f}".format(pnl.growth) }}</td>
                                             <td class="text-end text-danger">{% if pnl.fees > 0 %}-&pound;{{ "{:,.0f}".format(pnl.fees) }}{% else %}&mdash;{% endif %}</td>
