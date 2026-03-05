@@ -107,7 +107,7 @@ class RetirementEngine:
         income_after_pa = max(0, taxable_income - pa)
         bands = [
             (37700, 0.20),
-            (99730, 0.40),
+            (74870, 0.40),
             (None, 0.45),
         ]
         tax = 0.0
