@@ -269,7 +269,7 @@ class RetirementEngine:
                     meta = dc_meta[source_name]
                     tfp = meta["tax_free_portion"]
                     gross_needed = self.gross_up(remaining_shortfall,
-                                                guaranteed_taxable_gross + dc_withdrawal_gross * (1 - tfp),
+                                                guaranteed_taxable_gross + (dc_withdrawal_gross - dc_tax_free_total),
                                                 tfp)
                     gross_needed = min(gross_needed, dc_balances[source_name])
                     dc_balances[source_name] -= gross_needed
