@@ -167,13 +167,30 @@ class RetirementEngine:
         # Load asset model for growth rate resolution
         asset_model = load_asset_model()
 
-        # Build guaranteed income list with current amounts
+        # Parse retirement date for pre-retirement indexation
+        ret_date_str = cfg["personal"]["retirement_date"]  # e.g. "2027-04"
+        ret_parts = ret_date_str.split("-")
+        ret_year, ret_month = int(ret_parts[0]), int(ret_parts[1])
+
+        # Build guaranteed income list, auto-indexing from values_as_of to retirement
         guaranteed = []
         for g in cfg["guaranteed_income"]:
+            annual = g["gross_annual"]
+            idx_rate = g.get("indexation_rate", 0)
+
+            # If values_as_of is provided, index forward to retirement date
+            if "values_as_of" in g and g["values_as_of"] and idx_rate > 0:
+                asof_parts = g["values_as_of"].split("-")
+                asof_year, asof_month = int(asof_parts[0]), int(asof_parts[1])
+                gap_months = (ret_year * 12 + ret_month) - (asof_year * 12 + asof_month)
+                if gap_months > 0:
+                    gap_years = gap_months / 12.0
+                    annual = annual * (1 + idx_rate) ** gap_years
+
             guaranteed.append({
                 "name": g["name"],
-                "current_annual": g["gross_annual"],
-                "indexation_rate": g.get("indexation_rate", 0),
+                "current_annual": annual,
+                "indexation_rate": idx_rate,
                 "start_age": g.get("start_age", retirement_age),
                 "end_age": g.get("end_age"),
                 "taxable": g.get("taxable", True),

@@ -17,7 +17,8 @@
       "indexation_rate": 0.035,
       "start_age": 68,
       "end_age": null,
-      "taxable": true
+      "taxable": true,
+      "values_as_of": "2025-03"
     },
     {
       "name": "BP Pension (DB)",
@@ -25,7 +26,8 @@
       "indexation_rate": 0.03,
       "start_age": 68,
       "end_age": null,
-      "taxable": true
+      "taxable": true,
+      "values_as_of": "2025-03"
     }
   ],
   "dc_pots": [

@@ -245,6 +245,7 @@ def settings():
                 "start_age": int(request.form.get("g_start_age", 68)),
                 "end_age": None,
                 "taxable": request.form.get("g_taxable") == "on",
+                "values_as_of": request.form.get("g_values_as_of", "").strip() or None,
             }
             end_age_str = request.form.get("g_end_age", "").strip()
             if end_age_str:
@@ -269,6 +270,7 @@ def settings():
                 end_age_str = request.form.get("g_end_age", "").strip()
                 g["end_age"] = int(end_age_str) if end_age_str else None
                 g["taxable"] = request.form.get("g_taxable") == "on"
+                g["values_as_of"] = request.form.get("g_values_as_of", "").strip() or None
                 flash(f"Updated: {g['name']}", "success")
 
         elif action == "add_dc":
