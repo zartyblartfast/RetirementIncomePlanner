@@ -77,52 +77,131 @@ class RetirementEngine:
     # ------------------------------------------------------------------ #
     #  IoM Tax
     # ------------------------------------------------------------------ #
-    def calculate_tax(self, taxable_income: float) -> float:
+    def calculate_tax(self, taxable_income: float) -> dict:
+        """Calculate IoM tax and return a full breakdown dict.
+
+        Returns:
+            dict with keys: total, taxable_income, personal_allowance,
+                  income_after_pa, bands, marginal_rate, tax_cap_applied
+        """
         tax_cfg = self.cfg["tax"]
         pa = tax_cfg["personal_allowance"]
         income_after_pa = max(0, taxable_income - pa)
         tax = 0.0
         remaining = income_after_pa
+        band_details = []
+        marginal_rate = 0.0
         for band in tax_cfg["bands"]:
             width = band["width"]
             rate = band["rate"]
             if width is None:
-                tax += remaining * rate
+                taxable_in_band = remaining
+                band_tax = remaining * rate
+                tax += band_tax
+                band_details.append({
+                    'name': f'{int(rate * 100)}%',
+                    'rate': rate,
+                    'width': 'remainder',
+                    'taxable_in_band': round(taxable_in_band, 2),
+                    'tax': round(band_tax, 2),
+                })
+                if taxable_in_band > 0:
+                    marginal_rate = rate
                 remaining = 0
             else:
                 taxable_in_band = min(remaining, width)
-                tax += taxable_in_band * rate
+                band_tax = taxable_in_band * rate
+                tax += band_tax
+                band_details.append({
+                    'name': f'{int(rate * 100)}%',
+                    'rate': rate,
+                    'width': width,
+                    'taxable_in_band': round(taxable_in_band, 2),
+                    'tax': round(band_tax, 2),
+                })
+                if taxable_in_band > 0:
+                    marginal_rate = rate
                 remaining -= taxable_in_band
             if remaining <= 0:
                 break
+
+        tax_cap_applied = False
         if tax_cfg.get("tax_cap_enabled") and tax > tax_cfg.get("tax_cap_amount", 200000):
             tax = tax_cfg["tax_cap_amount"]
-        return round(tax, 2)
+            tax_cap_applied = True
+
+        return {
+            'total': round(tax, 2),
+            'taxable_income': round(taxable_income, 2),
+            'personal_allowance': pa,
+            'income_after_pa': round(income_after_pa, 2),
+            'bands': band_details,
+            'marginal_rate': marginal_rate,
+            'tax_cap_applied': tax_cap_applied,
+        }
 
     # ------------------------------------------------------------------ #
     #  UK Tax (for comparison)
     # ------------------------------------------------------------------ #
-    def calculate_uk_tax(self, taxable_income: float) -> float:
+    def calculate_uk_tax(self, taxable_income: float) -> dict:
+        """Calculate UK tax and return a full breakdown dict.
+
+        Returns:
+            dict with keys: total, taxable_income, personal_allowance,
+                  income_after_pa, bands, marginal_rate, tax_cap_applied
+        """
         pa = 12570
         income_after_pa = max(0, taxable_income - pa)
         bands = [
-            (37700, 0.20),
-            (74870, 0.40),
-            (None, 0.45),
+            (37700, 0.20, 'Basic 20%'),
+            (74870, 0.40, 'Higher 40%'),
+            (None, 0.45, 'Additional 45%'),
         ]
         tax = 0.0
         remaining = income_after_pa
-        for width, rate in bands:
+        band_details = []
+        marginal_rate = 0.0
+        for width, rate, name in bands:
             if width is None:
-                tax += remaining * rate
+                taxable_in_band = remaining
+                band_tax = remaining * rate
+                tax += band_tax
+                band_details.append({
+                    'name': name,
+                    'rate': rate,
+                    'width': 'remainder',
+                    'taxable_in_band': round(taxable_in_band, 2),
+                    'tax': round(band_tax, 2),
+                })
+                if taxable_in_band > 0:
+                    marginal_rate = rate
                 remaining = 0
             else:
                 taxable_in_band = min(remaining, width)
-                tax += taxable_in_band * rate
+                band_tax = taxable_in_band * rate
+                tax += band_tax
+                band_details.append({
+                    'name': name,
+                    'rate': rate,
+                    'width': width,
+                    'taxable_in_band': round(taxable_in_band, 2),
+                    'tax': round(band_tax, 2),
+                })
+                if taxable_in_band > 0:
+                    marginal_rate = rate
                 remaining -= taxable_in_band
             if remaining <= 0:
                 break
-        return round(tax, 2)
+
+        return {
+            'total': round(tax, 2),
+            'taxable_income': round(taxable_income, 2),
+            'personal_allowance': pa,
+            'income_after_pa': round(income_after_pa, 2),
+            'bands': band_details,
+            'marginal_rate': marginal_rate,
+            'tax_cap_applied': False,
+        }
 
     # ------------------------------------------------------------------ #
     #  Gross-up solver
@@ -137,13 +216,13 @@ class RetirementEngine:
         """
         if net_needed <= 0:
             return 0.0
-        tax_on_existing = self.calculate_tax(guaranteed_taxable)
+        tax_on_existing = self.calculate_tax(guaranteed_taxable)['total']
         lo, hi = net_needed, net_needed * 3
         for _ in range(80):
             mid = (lo + hi) / 2
             taxable_part = mid * (1 - tax_free_portion)
             total_taxable = guaranteed_taxable + taxable_part
-            total_tax = self.calculate_tax(total_taxable)
+            total_tax = self.calculate_tax(total_taxable)['total']
             marginal_tax = total_tax - tax_on_existing
             net_from_dc = mid - marginal_tax
             if abs(net_from_dc - net_needed) < 0.50:
@@ -256,7 +335,7 @@ class RetirementEngine:
                 g["current_annual"] *= (1 + g["indexation_rate"])
 
             # Tax on guaranteed income alone
-            tax_on_guaranteed = self.calculate_tax(guaranteed_taxable_gross)
+            tax_on_guaranteed = self.calculate_tax(guaranteed_taxable_gross)['total']
             net_from_guaranteed = guaranteed_total_gross - tax_on_guaranteed
 
             # Shortfall to fill from drawdown
@@ -297,7 +376,7 @@ class RetirementEngine:
 
                     taxable_part = gross_needed - tax_free_part
                     total_taxable = guaranteed_taxable_gross + (dc_withdrawal_gross - dc_tax_free_total)
-                    tax = self.calculate_tax(total_taxable)
+                    tax = self.calculate_tax(total_taxable)['total']
                     net_so_far = guaranteed_total_gross + dc_withdrawal_gross + tf_withdrawal_total - tax
                     remaining_shortfall = max(0, current_target - net_so_far)
 
@@ -308,10 +387,12 @@ class RetirementEngine:
                     withdrawal_detail[source_name] = round(withdraw, 2)
                     remaining_shortfall -= withdraw
 
-            # Final tax calculation
+            # Final tax calculation — store full breakdowns
             total_taxable_income = guaranteed_taxable_gross + (dc_withdrawal_gross - dc_tax_free_total)
-            tax_due = self.calculate_tax(total_taxable_income)
-            uk_tax_due = self.calculate_uk_tax(total_taxable_income)
+            iom_tax_result = self.calculate_tax(total_taxable_income)
+            uk_tax_result = self.calculate_uk_tax(total_taxable_income)
+            tax_due = iom_tax_result['total']
+            uk_tax_due = uk_tax_result['total']
             total_tax += tax_due
             total_uk_tax += uk_tax_due
 
@@ -345,6 +426,8 @@ class RetirementEngine:
                 "total_taxable_income": round(total_taxable_income, 2),
                 "tax_due": round(tax_due, 2),
                 "uk_tax_due": round(uk_tax_due, 2),
+                "iom_tax_breakdown": iom_tax_result,
+                "uk_tax_breakdown": uk_tax_result,
                 "net_income_achieved": round(net_income, 2),
                 "shortfall": has_shortfall,
                 "pot_balances": {n: round(b, 2) for n, b in dc_balances.items()},
@@ -386,9 +469,9 @@ if __name__ == "__main__":
     result = engine.run_projection()
     s = result["summary"]
     print(f"Sustainable: {s['sustainable']}")
-    print(f"Remaining capital at age {s['end_age']}: £{s['remaining_capital']:,.0f}")
-    print(f"Total IoM tax: £{s['total_tax_paid']:,.0f}")
-    print(f"Total UK tax:  £{s['total_uk_tax_paid']:,.0f}")
-    print(f"Tax saving:    £{s['uk_tax_saving']:,.0f}")
+    print(f"Remaining capital at age {s['end_age']}: \u00a3{s['remaining_capital']:,.0f}")
+    print(f"Total IoM tax: \u00a3{s['total_tax_paid']:,.0f}")
+    print(f"Total UK tax:  \u00a3{s['total_uk_tax_paid']:,.0f}")
+    print(f"Tax saving:    \u00a3{s['uk_tax_saving']:,.0f}")
     for w in result["warnings"]:
-        print(f"  ⚠ {w}")
+        print(f"  \u26a0 {w}")

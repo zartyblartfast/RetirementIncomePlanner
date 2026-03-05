@@ -162,8 +162,43 @@
                     {% for a in config.tax_free_accounts %}
                     <td>&pound;{{ "{:,.0f}".format(yr.withdrawal_detail.get(a.name, 0)) }}</td>
                     {% endfor %}
-                    <td>&pound;{{ "{:,.0f}".format(yr.tax_due) }}</td>
-                    <td>&pound;{{ "{:,.0f}".format(yr.uk_tax_due) }}</td>
+                    <td>
+                        <a class="text-decoration-none" data-bs-toggle="collapse" href="#iom-tax-{{ yr.age }}" role="button" aria-expanded="false" aria-controls="iom-tax-{{ yr.age }}">
+                            &pound;{{ "{:,.0f}".format(yr.tax_due) }} <small class="text-muted">&#9656;</small>
+                        </a>
+                        <div class="collapse" id="iom-tax-{{ yr.age }}">
+                            <table class="table table-sm table-bordered mt-1 mb-0" style="font-size: 0.8rem;">
+                                <tr class="table-light"><td>Personal Allowance</td><td class="text-end">&pound;{{ "{:,.0f}".format(yr.iom_tax_breakdown.personal_allowance) }}</td></tr>
+                                <tr class="table-light"><td>Taxable after PA</td><td class="text-end">&pound;{{ "{:,.0f}".format(yr.iom_tax_breakdown.income_after_pa) }}</td></tr>
+                                {% for band in yr.iom_tax_breakdown.bands %}
+                                {% if band.taxable_in_band > 0 %}
+                                <tr><td>{{ band.name }} band</td><td class="text-end">&pound;{{ "{:,.0f}".format(band.taxable_in_band) }} &rarr; &pound;{{ "{:,.0f}".format(band.tax) }}</td></tr>
+                                {% endif %}
+                                {% endfor %}
+                                <tr class="table-light"><td><strong>Marginal rate</strong></td><td class="text-end"><strong>{{ (yr.iom_tax_breakdown.marginal_rate * 100) | round(0) | int }}%</strong></td></tr>
+                                {% if yr.iom_tax_breakdown.tax_cap_applied %}
+                                <tr class="table-warning"><td colspan="2"><em>Tax cap applied</em></td></tr>
+                                {% endif %}
+                            </table>
+                        </div>
+                    </td>
+                    <td>
+                        <a class="text-decoration-none" data-bs-toggle="collapse" href="#uk-tax-{{ yr.age }}" role="button" aria-expanded="false" aria-controls="uk-tax-{{ yr.age }}">
+                            &pound;{{ "{:,.0f}".format(yr.uk_tax_due) }} <small class="text-muted">&#9656;</small>
+                        </a>
+                        <div class="collapse" id="uk-tax-{{ yr.age }}">
+                            <table class="table table-sm table-bordered mt-1 mb-0" style="font-size: 0.8rem;">
+                                <tr class="table-light"><td>Personal Allowance</td><td class="text-end">&pound;{{ "{:,.0f}".format(yr.uk_tax_breakdown.personal_allowance) }}</td></tr>
+                                <tr class="table-light"><td>Taxable after PA</td><td class="text-end">&pound;{{ "{:,.0f}".format(yr.uk_tax_breakdown.income_after_pa) }}</td></tr>
+                                {% for band in yr.uk_tax_breakdown.bands %}
+                                {% if band.taxable_in_band > 0 %}
+                                <tr><td>{{ band.name }} band</td><td class="text-end">&pound;{{ "{:,.0f}".format(band.taxable_in_band) }} &rarr; &pound;{{ "{:,.0f}".format(band.tax) }}</td></tr>
+                                {% endif %}
+                                {% endfor %}
+                                <tr class="table-light"><td><strong>Marginal rate</strong></td><td class="text-end"><strong>{{ (yr.uk_tax_breakdown.marginal_rate * 100) | round(0) | int }}%</strong></td></tr>
+                            </table>
+                        </div>
+                    </td>
                     <td class="{% if yr.shortfall %}text-danger fw-bold{% else %}text-success{% endif %}">&pound;{{ "{:,.0f}".format(yr.net_income_achieved) }}</td>
                     {% for p in config.dc_pots %}
                     <td>&pound;{{ "{:,.0f}".format(yr.pot_balances.get(p.name, 0)) }}</td>
