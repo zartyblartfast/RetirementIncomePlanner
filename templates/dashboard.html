@@ -185,19 +185,23 @@
 <script>
 // Build data from Jinja
 const years = {{ result.years | tojson }};
+const extYears = {{ ext_years | tojson }};
 const dcPotNames = {{ config.dc_pots | map(attribute='name') | list | tojson }};
 const tfAccNames = {{ config.tax_free_accounts | map(attribute='name') | list | tojson }};
 const ages = years.map(y => y.age);
+const extAges = extYears.map(y => y.age);
+const planEndAge = {{ plan_end_age }};
+const depletionAge = {{ depletion_age if depletion_age else 'null' }};
 
-// Capital Trajectory Chart
+// Capital Trajectory Chart (extended to show depletion)
 const colours = ['#0d6efd', '#fd7e14', '#198754', '#dc3545', '#6f42c1', '#20c997', '#ffc107'];
-const datasets = [];
+const capDatasets = [];
 let ci = 0;
 
 dcPotNames.forEach(name => {
-    datasets.push({
+    capDatasets.push({
         label: name,
-        data: years.map(y => y.pot_balances[name] || 0),
+        data: extYears.map(y => y.pot_balances[name] || 0),
         borderColor: colours[ci % colours.length],
         backgroundColor: colours[ci % colours.length] + '33',
         fill: true,
@@ -207,9 +211,9 @@ dcPotNames.forEach(name => {
 });
 
 tfAccNames.forEach(name => {
-    datasets.push({
+    capDatasets.push({
         label: name,
-        data: years.map(y => y.tf_balances[name] || 0),
+        data: extYears.map(y => y.tf_balances[name] || 0),
         borderColor: colours[ci % colours.length],
         backgroundColor: colours[ci % colours.length] + '33',
         fill: true,
@@ -218,16 +222,66 @@ tfAccNames.forEach(name => {
     ci++;
 });
 
+// Vertical line plugin for plan end age
+const verticalLinePlugin = {
+    id: 'verticalLine',
+    afterDraw(chart) {
+        const xScale = chart.scales.x;
+        const yScale = chart.scales.y;
+        const ctx = chart.ctx;
+        // Find pixel position of planEndAge
+        const idx = extAges.indexOf(planEndAge);
+        if (idx === -1) return;
+        const x = xScale.getPixelForValue(idx);
+        // Draw dashed vertical line
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([6, 4]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#dc3545';
+        ctx.moveTo(x, yScale.top);
+        ctx.lineTo(x, yScale.bottom);
+        ctx.stroke();
+        // Label
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#dc3545';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Plan end (' + planEndAge + ')', x, yScale.top - 6);
+        // Depletion age marker
+        if (depletionAge) {
+            const dIdx = extAges.indexOf(depletionAge);
+            if (dIdx !== -1) {
+                const dx = xScale.getPixelForValue(dIdx);
+                ctx.beginPath();
+                ctx.setLineDash([3, 3]);
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#6c757d';
+                ctx.moveTo(dx, yScale.top);
+                ctx.lineTo(dx, yScale.bottom);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.fillStyle = '#6c757d';
+                ctx.fillText('Capital depleted (' + depletionAge + ')', dx, yScale.top - 6);
+            }
+        }
+        ctx.restore();
+    }
+};
+
 new Chart(document.getElementById('capitalChart'), {
     type: 'line',
-    data: { labels: ages, datasets: datasets },
+    data: { labels: extAges, datasets: capDatasets },
     options: {
         responsive: true,
-        plugins: { title: { display: true, text: 'Capital Balances by Age' } },
+        plugins: {
+            title: { display: true, text: 'Capital Balances by Age (extended projection)' },
+        },
         scales: {
             y: { ticks: { callback: v => '\u00a3' + v.toLocaleString() } }
         }
-    }
+    },
+    plugins: [verticalLinePlugin]
 });
 
 // Income Source Breakdown Chart (Stacked Bar + Lines)

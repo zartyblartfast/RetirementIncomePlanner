@@ -144,7 +144,25 @@ def dashboard():
 
     engine = RetirementEngine(cfg)
     result = engine.run_projection()
-    return render_template("dashboard.html", config=cfg, result=result)
+
+    # Extended projection to age 105 for capital trajectory chart
+    import copy as _copy
+    ext_cfg = _copy.deepcopy(cfg)
+    ext_cfg["personal"]["end_age"] = 105
+    ext_engine = RetirementEngine(ext_cfg)
+    ext_result = ext_engine.run_projection()
+    plan_end_age = cfg["personal"]["end_age"]
+    # Find depletion age: first age where total_capital <= 0 in extended run
+    depletion_age = None
+    for yr in ext_result["years"]:
+        if yr["total_capital"] <= 0:
+            depletion_age = yr["age"]
+            break
+
+    return render_template("dashboard.html", config=cfg, result=result,
+                           ext_years=ext_result["years"],
+                           plan_end_age=plan_end_age,
+                           depletion_age=depletion_age)
 
 # ------------------------------------------------------------------ #
 #  Settings — dynamic income stream management
