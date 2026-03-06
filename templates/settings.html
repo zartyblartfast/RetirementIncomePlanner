@@ -228,7 +228,16 @@
                         <input type="hidden" name="action" value="add_dc">
                         <div class="row g-2">
                             <div class="col-md-6"><input type="text" class="form-control form-control-sm" name="dc_name" placeholder="Pot Name" required></div>
-                            <div class="col-md-6"><input type="number" class="form-control form-control-sm" name="dc_balance" placeholder="Starting Balance (&pound;)" step="1000" required></div>
+                            <div class="col-md-6"><input type="number" class="form-control form-control-sm" name="dc_balance" placeholder="Current Balance (&pound;)" step="1000" required></div>
+                        </div>
+                        <div class="row g-2 mt-1">
+                            <div class="col-md-6">
+                                <label class="form-label small">Balance as of</label>
+                                <input type="month" class="form-control form-control-sm" name="dc_values_as_of" title="When was this balance last confirmed?">
+                            </div>
+                            <div class="col-md-6">
+                                <small class="text-muted d-block mt-4"><i class="bi bi-info-circle"></i> The engine will grow this balance forward to your retirement date.</small>
+                            </div>
                         </div>
                         <!-- Allocation UI for Add DC -->
                         <div class="mt-3 alloc-panel" data-prefix="dc" data-ctx="add">
@@ -305,7 +314,7 @@
                         </div>
                     </div>
                     <div class="row text-muted small">
-                        <div class="col"><i class="bi bi-wallet2"></i> &pound;{{ "{:,.0f}".format(pot.starting_balance) }}</div>
+                        <div class="col"><i class="bi bi-wallet2"></i> &pound;{{ "{:,.0f}".format(pot.starting_balance) }}{% if pot.values_as_of %} <small class="text-muted">(as of {{ pot.values_as_of }})</small>{% endif %}</div>
                         <div class="col"><i class="bi bi-graph-up-arrow"></i> {{ (pot.growth_rate * 100) | round(2) }}%
                             {% if dc_provenance and dc_provenance[loop.index0] %}
                             <br><span class="badge bg-info text-dark" style="font-size:0.65rem; font-weight:normal;"
@@ -327,7 +336,19 @@
                             <input type="hidden" name="index" value="{{ loop.index0 }}">
                             <div class="row g-2">
                                 <div class="col-md-6"><input type="text" class="form-control form-control-sm" name="dc_name" value="{{ pot.name }}"></div>
-                                <div class="col-md-6"><input type="number" class="form-control form-control-sm" name="dc_balance" value="{{ pot.starting_balance }}" step="1000"></div>
+                                <div class="col-md-6">
+                                    <label class="form-label small">Current Balance (&pound;)</label>
+                                    <input type="number" class="form-control form-control-sm" name="dc_balance" value="{{ pot.starting_balance }}" step="1000">
+                                </div>
+                            </div>
+                            <div class="row g-2 mt-1">
+                                <div class="col-md-6">
+                                    <label class="form-label small">Balance as of</label>
+                                    <input type="month" class="form-control form-control-sm" name="dc_values_as_of" value="{{ pot.values_as_of or '' }}" title="When was this balance last confirmed?">
+                                </div>
+                                <div class="col-md-6">
+                                    <small class="text-muted d-block mt-4"><i class="bi bi-info-circle"></i> Leave blank to use retirement start date.</small>
+                                </div>
                             </div>
                             <!-- Allocation UI -->
                             <div class="mt-3 alloc-panel" data-prefix="dc" data-ctx="edit{{ loop.index0 }}">
@@ -409,7 +430,16 @@
                         <input type="hidden" name="action" value="add_tf">
                         <div class="row g-2">
                             <div class="col-md-6"><input type="text" class="form-control form-control-sm" name="tf_name" placeholder="Account Name" required></div>
-                            <div class="col-md-6"><input type="number" class="form-control form-control-sm" name="tf_balance" placeholder="Balance (&pound;)" step="1000" required></div>
+                            <div class="col-md-6"><input type="number" class="form-control form-control-sm" name="tf_balance" placeholder="Current Balance (&pound;)" step="1000" required></div>
+                        </div>
+                        <div class="row g-2 mt-1">
+                            <div class="col-md-6">
+                                <label class="form-label small">Balance as of</label>
+                                <input type="month" class="form-control form-control-sm" name="tf_values_as_of" title="When was this balance last confirmed?">
+                            </div>
+                            <div class="col-md-6">
+                                <small class="text-muted d-block mt-4"><i class="bi bi-info-circle"></i> The engine will grow this balance forward to your retirement date.</small>
+                            </div>
                         </div>
                         <!-- Allocation UI for Add TF -->
                         <div class="mt-3 alloc-panel" data-prefix="tf" data-ctx="add">
@@ -479,7 +509,7 @@
                         </div>
                     </div>
                     <div class="row text-muted small">
-                        <div class="col"><i class="bi bi-wallet2"></i> &pound;{{ "{:,.0f}".format(acc.starting_balance) }}</div>
+                        <div class="col"><i class="bi bi-wallet2"></i> &pound;{{ "{:,.0f}".format(acc.starting_balance) }}{% if acc.values_as_of %} <small class="text-muted">(as of {{ acc.values_as_of }})</small>{% endif %}</div>
                         <div class="col"><i class="bi bi-graph-up-arrow"></i> {{ (acc.growth_rate * 100) | round(2) }}%
                             {% if tf_provenance and tf_provenance[loop.index0] %}
                             <br><span class="badge bg-info text-dark" style="font-size:0.65rem; font-weight:normal;"
@@ -500,7 +530,19 @@
                             <input type="hidden" name="index" value="{{ loop.index0 }}">
                             <div class="row g-2">
                                 <div class="col-md-6"><input type="text" class="form-control form-control-sm" name="tf_name" value="{{ acc.name }}"></div>
-                                <div class="col-md-6"><input type="number" class="form-control form-control-sm" name="tf_balance" value="{{ acc.starting_balance }}" step="1000"></div>
+                                <div class="col-md-6">
+                                    <label class="form-label small">Current Balance (&pound;)</label>
+                                    <input type="number" class="form-control form-control-sm" name="tf_balance" value="{{ acc.starting_balance }}" step="1000">
+                                </div>
+                            </div>
+                            <div class="row g-2 mt-1">
+                                <div class="col-md-6">
+                                    <label class="form-label small">Balance as of</label>
+                                    <input type="month" class="form-control form-control-sm" name="tf_values_as_of" value="{{ acc.values_as_of or '' }}" title="When was this balance last confirmed?">
+                                </div>
+                                <div class="col-md-6">
+                                    <small class="text-muted d-block mt-4"><i class="bi bi-info-circle"></i> Leave blank to use retirement start date.</small>
+                                </div>
                             </div>
                             <div class="mt-3 alloc-panel" data-prefix="tf" data-ctx="edit{{ loop.index0 }}">
                                 <label class="form-label fw-bold"><i class="bi bi-pie-chart"></i> Investment Strategy</label>

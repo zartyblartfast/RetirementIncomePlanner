@@ -253,6 +253,7 @@ def settings():
             new_pot = {
                 "name": request.form.get("dc_name", "New DC Pot"),
                 "starting_balance": float(request.form.get("dc_balance", 0)),
+                "values_as_of": request.form.get("dc_values_as_of", "").strip() or None,
                 "growth_rate": resolved_rate,
                 "annual_fees": float(request.form.get("dc_fees", 0.005)),
                 "tax_free_portion": float(request.form.get("dc_tfp", 0.25)),
@@ -278,6 +279,7 @@ def settings():
                 p = cfg["dc_pots"][idx]
                 p["name"] = request.form.get("dc_name", p["name"])
                 p["starting_balance"] = float(request.form.get("dc_balance", p["starting_balance"]))
+                p["values_as_of"] = request.form.get("dc_values_as_of", "").strip() or p.get("values_as_of")
                 p["annual_fees"] = float(request.form.get("dc_fees", p["annual_fees"]))
                 p["tax_free_portion"] = float(request.form.get("dc_tfp", p["tax_free_portion"]))
 
@@ -297,6 +299,7 @@ def settings():
             new_acc = {
                 "name": request.form.get("tf_name", "New Account"),
                 "starting_balance": float(request.form.get("tf_balance", 0)),
+                "values_as_of": request.form.get("tf_values_as_of", "").strip() or None,
                 "growth_rate": resolved_rate,
                 "allocation": alloc,
             }
@@ -320,6 +323,7 @@ def settings():
                 a = cfg["tax_free_accounts"][idx]
                 a["name"] = request.form.get("tf_name", a["name"])
                 a["starting_balance"] = float(request.form.get("tf_balance", a["starting_balance"]))
+                a["values_as_of"] = request.form.get("tf_values_as_of", "").strip() or a.get("values_as_of")
 
                 # Handle allocation
                 alloc, resolved_rate = build_allocation_from_form(request.form, "tf")
