@@ -148,7 +148,7 @@ def dashboard():
     # Extended projection to age 105 for capital trajectory chart
     import copy as _copy
     ext_cfg = _copy.deepcopy(cfg)
-    ext_cfg["personal"]["end_age"] = 105
+    ext_cfg["personal"]["end_age"] = 120
     ext_engine = RetirementEngine(ext_cfg)
     ext_result = ext_engine.run_projection()
     plan_end_age = cfg["personal"]["end_age"]
@@ -159,14 +159,19 @@ def dashboard():
             depletion_age = yr["age"]
             break
     # Trim extended years to depletion_age + 2 (or plan_end_age + 2 if no depletion)
-    # Always show at least 5 years beyond plan end; if depletion occurs, show to depletion+2 or plan_end+5, whichever is greater (capped at 105)
-    chart_end = min(105, max(plan_end_age + 5, (depletion_age + 2) if depletion_age else 0))
+    # Smart chart range: show depletion if within reasonable range
+    MAX_CHART_AGE = 115
+    if depletion_age and depletion_age <= MAX_CHART_AGE:
+        chart_end = max(plan_end_age + 5, depletion_age + 2)
+    else:
+        chart_end = plan_end_age + 5
+    depletion_beyond_chart = depletion_age and depletion_age > chart_end
     ext_years_trimmed = [y for y in ext_result["years"] if y["age"] <= chart_end]
 
     # ---- Fan chart: optimistic & pessimistic projections ----
     # Optimistic: growth +1.5%, CPI -0.5%
     opt_cfg = _copy.deepcopy(cfg)
-    opt_cfg["personal"]["end_age"] = 105
+    opt_cfg["personal"]["end_age"] = 120
     for pot in opt_cfg["dc_pots"]:
         pot["growth_rate"] = pot["growth_rate"] + 0.015
     for acc in opt_cfg["tax_free_accounts"]:
@@ -181,7 +186,7 @@ def dashboard():
 
     # Pessimistic: growth -1.5%, CPI +0.5%
     pes_cfg = _copy.deepcopy(cfg)
-    pes_cfg["personal"]["end_age"] = 105
+    pes_cfg["personal"]["end_age"] = 120
     for pot in pes_cfg["dc_pots"]:
         pot["growth_rate"] = max(0, pot["growth_rate"] - 0.015)
     for acc in pes_cfg["tax_free_accounts"]:
@@ -198,6 +203,7 @@ def dashboard():
                            ext_years=ext_years_trimmed,
                            plan_end_age=plan_end_age,
                            depletion_age=depletion_age,
+                           depletion_beyond_chart=depletion_beyond_chart,
                            fan_optimistic=fan_optimistic,
                            fan_pessimistic=fan_pessimistic)
 
