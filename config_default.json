@@ -42,7 +42,8 @@
         "template_id": "balanced_60_40",
         "custom_weights": {},
         "manual_override": true
-      }
+      },
+      "values_as_of": "2025-03"
     },
     {
       "name": "Employer DC Pot",
@@ -55,7 +56,8 @@
         "template_id": "balanced_60_40",
         "custom_weights": {},
         "manual_override": true
-      }
+      },
+      "values_as_of": "2025-03"
     }
   ],
   "tax_free_accounts": [
@@ -68,7 +70,8 @@
         "template_id": "cautious_40_60",
         "custom_weights": {},
         "manual_override": true
-      }
+      },
+      "values_as_of": "2025-03"
     }
   ],
   "withdrawal_priority": [

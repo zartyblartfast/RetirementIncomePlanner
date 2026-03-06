@@ -325,22 +325,94 @@ class RetirementEngine:
         # Load asset model for growth rate resolution
         asset_model = load_asset_model()
 
-        # Parse retirement date for pre-retirement indexation
+        # Parse retirement date
         ret_date_str = cfg["personal"]["retirement_date"]  # e.g. "2027-04"
         ret_parts = ret_date_str.split("-")
         ret_year, ret_month = int(ret_parts[0]), int(ret_parts[1])
 
-        # Build guaranteed income list, auto-indexing from values_as_of to retirement
+        # Parse date of birth for age calculations
+        dob_str = cfg["personal"]["date_of_birth"]  # e.g. "1958-07"
+        dob_parts = dob_str.split("-")
+        dob_year, dob_month = int(dob_parts[0]), int(dob_parts[1])
+
+        # ------------------------------------------------------------ #
+        #  Helper: convert YYYY-MM string to fractional months
+        # ------------------------------------------------------------ #
+        def ym_to_months(y, m):
+            return y * 12 + m
+
+        def date_to_age(date_year, date_month):
+            """Convert a YYYY-MM date to a fractional age."""
+            months_from_birth = ym_to_months(date_year, date_month) - ym_to_months(dob_year, dob_month)
+            return months_from_birth / 12.0
+
+        def parse_ym(s):
+            """Parse a YYYY-MM string into (year, month) tuple."""
+            parts = s.split("-")
+            return int(parts[0]), int(parts[1])
+
+        # ------------------------------------------------------------ #
+        #  C3: Determine anchor date — latest values_as_of across all
+        #  sources, but never earlier than retirement date.
+        # ------------------------------------------------------------ #
+        all_asof_months = []
+
+        # Guaranteed income values_as_of
+        for g in cfg["guaranteed_income"]:
+            if g.get("values_as_of"):
+                gy, gm = parse_ym(g["values_as_of"])
+                all_asof_months.append(ym_to_months(gy, gm))
+
+        # DC pot values_as_of
+        for pot in cfg["dc_pots"]:
+            if pot.get("values_as_of"):
+                py, pm = parse_ym(pot["values_as_of"])
+                all_asof_months.append(ym_to_months(py, pm))
+
+        # Tax-free account values_as_of
+        for acc in cfg["tax_free_accounts"]:
+            if acc.get("values_as_of"):
+                ay, am = parse_ym(acc["values_as_of"])
+                all_asof_months.append(ym_to_months(ay, am))
+
+        ret_months = ym_to_months(ret_year, ret_month)
+
+        if all_asof_months:
+            latest_asof_months = max(all_asof_months)
+        else:
+            latest_asof_months = ret_months
+
+        # Anchor is the later of retirement date or latest values_as_of
+        # If all values_as_of are pre-retirement, anchor = retirement date
+        # If any values_as_of is post-retirement, anchor = latest values_as_of
+        anchor_months = max(ret_months, latest_asof_months)
+        anchor_year = anchor_months // 12
+        anchor_month = anchor_months % 12
+        if anchor_month == 0:
+            anchor_month = 12
+            anchor_year -= 1
+
+        # Compute anchor age (integer, rounded down)
+        anchor_age_frac = date_to_age(anchor_year, anchor_month)
+        anchor_age = int(anchor_age_frac)
+        # Ensure anchor_age is at least retirement_age
+        anchor_age = max(anchor_age, retirement_age)
+
+        # Store phase info for UI
+        is_post_retirement = anchor_months > ret_months
+
+        # ------------------------------------------------------------ #
+        #  Build guaranteed income list, auto-indexing to anchor date
+        # ------------------------------------------------------------ #
         guaranteed = []
         for g in cfg["guaranteed_income"]:
             annual = g["gross_annual"]
             idx_rate = g.get("indexation_rate", 0)
 
-            # If values_as_of is provided, index forward to retirement date
+            # Index from values_as_of to anchor date
             if "values_as_of" in g and g["values_as_of"] and idx_rate > 0:
-                asof_parts = g["values_as_of"].split("-")
-                asof_year, asof_month = int(asof_parts[0]), int(asof_parts[1])
-                gap_months = (ret_year * 12 + ret_month) - (asof_year * 12 + asof_month)
+                asof_y, asof_m = parse_ym(g["values_as_of"])
+                gap_months = anchor_months - ym_to_months(asof_y, asof_m)
                 if gap_months > 0:
                     gap_years = gap_months / 12.0
                     annual = annual * (1 + idx_rate) ** gap_years
@@ -354,27 +426,56 @@ class RetirementEngine:
                 "taxable": g.get("taxable", True),
             })
 
-        # Build DC pot balances — resolve growth rates from allocation
+        # ------------------------------------------------------------ #
+        #  Build DC pot balances — resolve growth rates, then apply
+        #  C2: pre-retirement / stale-pot growth compounding
+        # ------------------------------------------------------------ #
         dc_balances = {}
         dc_meta = {}
         for pot in cfg["dc_pots"]:
             name = pot["name"]
-            dc_balances[name] = pot["starting_balance"]
+            balance = pot["starting_balance"]
+            growth = resolve_growth_rate(pot, asset_model)
+            fees = pot.get("annual_fees", 0.005)
+
+            # C2/C3: Grow balance from values_as_of to anchor date
+            if pot.get("values_as_of"):
+                pot_y, pot_m = parse_ym(pot["values_as_of"])
+                gap_months = anchor_months - ym_to_months(pot_y, pot_m)
+                if gap_months > 0:
+                    gap_years = gap_months / 12.0
+                    net_growth = growth - fees
+                    balance = balance * (1 + net_growth) ** gap_years
+
+            dc_balances[name] = balance
             dc_meta[name] = {
-                "growth_rate": resolve_growth_rate(pot, asset_model),
-                "annual_fees": pot.get("annual_fees", 0.005),
+                "growth_rate": growth,
+                "annual_fees": fees,
                 "tax_free_portion": pot.get("tax_free_portion", 0.25),
                 "provenance": resolve_growth_provenance(pot, asset_model),
             }
 
-        # Build tax-free account balances — resolve growth rates from allocation
+        # ------------------------------------------------------------ #
+        #  Build tax-free account balances — resolve growth, apply C2/C3
+        # ------------------------------------------------------------ #
         tf_balances = {}
         tf_meta = {}
         for acc in cfg["tax_free_accounts"]:
             name = acc["name"]
-            tf_balances[name] = acc["starting_balance"]
+            balance = acc["starting_balance"]
+            growth = resolve_growth_rate(acc, asset_model)
+
+            # C2/C3: Grow balance from values_as_of to anchor date (no fees)
+            if acc.get("values_as_of"):
+                acc_y, acc_m = parse_ym(acc["values_as_of"])
+                gap_months = anchor_months - ym_to_months(acc_y, acc_m)
+                if gap_months > 0:
+                    gap_years = gap_months / 12.0
+                    balance = balance * (1 + growth) ** gap_years
+
+            tf_balances[name] = balance
             tf_meta[name] = {
-                "growth_rate": resolve_growth_rate(acc, asset_model),
+                "growth_rate": growth,
                 "provenance": resolve_growth_provenance(acc, asset_model),
             }
 
@@ -389,11 +490,21 @@ class RetirementEngine:
         total_tax = 0.0
         total_uk_tax = 0.0
 
-        for age in range(retirement_age, end_age + 1):
-            tax_year = f"{2027 + (age - retirement_age)}/{str(2028 + (age - retirement_age))[-2:]}"
+        # C3: Inflate target to anchor age if anchor > retirement_age
+        if anchor_age > retirement_age:
+            years_to_anchor = anchor_age - retirement_age
+            current_target = target_net * (1 + cpi) ** years_to_anchor
 
-            # Inflate target
-            if age > retirement_age:
+        # ------------------------------------------------------------ #
+        #  Main year-by-year loop — starts from anchor_age
+        # ------------------------------------------------------------ #
+        for age in range(anchor_age, end_age + 1):
+            # Tax year label based on calendar year
+            cal_year = anchor_year + (age - anchor_age) if is_post_retirement else 2027 + (age - retirement_age)
+            tax_year = f"{cal_year}/{str(cal_year + 1)[-2:]}"
+
+            # Inflate target (skip first year at anchor)
+            if age > anchor_age:
                 current_target *= (1 + cpi)
 
             # Calculate guaranteed income for this year
@@ -416,14 +527,14 @@ class RetirementEngine:
                 g["current_annual"] *= (1 + g["indexation_rate"])
 
             # Tax on guaranteed income alone
-            tax_on_guaranteed = self.calculate_tax(guaranteed_taxable_gross)['total']
+            tax_on_guaranteed = self.calculate_tax(guaranteed_taxable_gross)["total"]
             net_from_guaranteed = guaranteed_total_gross - tax_on_guaranteed
 
             # Shortfall to fill from drawdown
             shortfall = max(0, current_target - net_from_guaranteed)
 
             # Grow DC pots and tax-free accounts — track P&L components
-            pot_pnl = {}  # per-pot P&L for this year
+            pot_pnl = {}
 
             for name in dc_balances:
                 meta = dc_meta[name]
@@ -435,8 +546,8 @@ class RetirementEngine:
                     "opening": round(opening, 2),
                     "growth": round(growth_amt, 2),
                     "fees": round(fee_amt, 2),
-                    "withdrawal": 0.0,  # filled during withdrawal phase
-                    "closing": 0.0,     # filled after withdrawals
+                    "withdrawal": 0.0,
+                    "closing": 0.0,
                     "provenance": meta["provenance"],
                 }
 
@@ -458,7 +569,7 @@ class RetirementEngine:
             dc_withdrawal_gross = 0.0
             dc_tax_free_total = 0.0
             tf_withdrawal_total = 0.0
-            withdrawal_detail = {}  # per-source withdrawals
+            withdrawal_detail = {}
             remaining_shortfall = shortfall
 
             for source_name in priority:
@@ -482,7 +593,7 @@ class RetirementEngine:
 
                     taxable_part = gross_needed - tax_free_part
                     total_taxable = guaranteed_taxable_gross + (dc_withdrawal_gross - dc_tax_free_total)
-                    tax = self.calculate_tax(total_taxable)['total']
+                    tax = self.calculate_tax(total_taxable)["total"]
                     net_so_far = guaranteed_total_gross + dc_withdrawal_gross + tf_withdrawal_total - tax
                     remaining_shortfall = max(0, current_target - net_so_far)
 
@@ -507,8 +618,8 @@ class RetirementEngine:
             total_taxable_income = guaranteed_taxable_gross + (dc_withdrawal_gross - dc_tax_free_total)
             iom_tax_result = self.calculate_tax(total_taxable_income)
             uk_tax_result = self.calculate_uk_tax(total_taxable_income)
-            tax_due = iom_tax_result['total']
-            uk_tax_due = uk_tax_result['total']
+            tax_due = iom_tax_result["total"]
+            uk_tax_due = uk_tax_result["total"]
             total_tax += tax_due
             total_uk_tax += uk_tax_due
 
@@ -559,6 +670,8 @@ class RetirementEngine:
             "sustainable": first_shortfall_age is None,
             "first_shortfall_age": first_shortfall_age,
             "end_age": end_age,
+            "anchor_age": anchor_age,
+            "is_post_retirement": is_post_retirement,
             "num_years": num_years,
             "remaining_capital": round(sum(dc_balances.values()) + sum(tf_balances.values()), 2),
             "remaining_pots": {n: round(b, 2) for n, b in dc_balances.items()},
@@ -573,7 +686,6 @@ class RetirementEngine:
         }
 
         return {"years": years, "summary": summary, "warnings": warnings}
-
 
 def load_config(path: str = "config_default.json") -> dict:
     with open(path) as f:
