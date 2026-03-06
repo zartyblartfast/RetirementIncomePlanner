@@ -133,6 +133,91 @@ def build_allocation_from_form(form, prefix):
 
 # ------------------------------------------------------------------ #
 #  Dashboard
+
+# ------------------------------------------------------------------ #
+#  Phase detection & staleness warnings (C5)
+# ------------------------------------------------------------------ #
+def compute_phase_info(cfg):
+    """Determine retirement phase and flag stale pot balances."""
+    from datetime import date, datetime
+    import math
+
+    today = date.today()
+    ret_str = cfg["personal"].get("retirement_date", "2027-04")
+    try:
+        ret_year, ret_month = int(ret_str[:4]), int(ret_str[5:7])
+        retirement_date = date(ret_year, ret_month, 1)
+    except (ValueError, IndexError):
+        retirement_date = date(2027, 4, 1)
+
+    # Phase detection
+    if today.year == retirement_date.year and today.month == retirement_date.month:
+        phase = "at_retirement"
+        phase_label = "At Retirement"
+        phase_icon = "🎉"  # party popper
+        phase_class = "success"
+        phase_msg = "This is your retirement month! Your plan is now live."
+    elif today < retirement_date:
+        phase = "pre_retirement"
+        phase_label = "Pre-Retirement"
+        phase_icon = "⏳"  # hourglass
+        phase_class = "info"
+        months_to_go = (retirement_date.year - today.year) * 12 + (retirement_date.month - today.month)
+        years_to_go = months_to_go // 12
+        rem_months = months_to_go % 12
+        if years_to_go > 0 and rem_months > 0:
+            countdown = f"{years_to_go} year{'s' if years_to_go != 1 else ''} and {rem_months} month{'s' if rem_months != 1 else ''}"
+        elif years_to_go > 0:
+            countdown = f"{years_to_go} year{'s' if years_to_go != 1 else ''}"
+        else:
+            countdown = f"{rem_months} month{'s' if rem_months != 1 else ''}"
+        phase_msg = f"You are in the accumulation phase. Retirement begins in {countdown} ({ret_str})."
+    else:
+        phase = "post_retirement"
+        phase_label = "Post-Retirement"
+        phase_icon = "🏖️"  # beach
+        phase_class = "secondary"
+        months_since = (today.year - retirement_date.year) * 12 + (today.month - retirement_date.month)
+        years_since = months_since // 12
+        phase_msg = f"You have been retired for {years_since} year{'s' if years_since != 1 else ''}."
+
+    # Staleness detection (flag pots with values_as_of > 6 months old)
+    STALE_THRESHOLD_MONTHS = 6
+    stale_items = []
+    for pot in cfg.get("dc_pots", []):
+        vao = pot.get("values_as_of", "")
+        if vao:
+            try:
+                vao_y, vao_m = int(vao[:4]), int(vao[5:7])
+                vao_date = date(vao_y, vao_m, 1)
+                months_old = (today.year - vao_date.year) * 12 + (today.month - vao_date.month)
+                if months_old > STALE_THRESHOLD_MONTHS:
+                    stale_items.append({"name": pot["name"], "type": "DC Pot", "as_of": vao, "months_old": months_old})
+            except (ValueError, IndexError):
+                pass
+    for acc in cfg.get("tax_free_accounts", []):
+        vao = acc.get("values_as_of", "")
+        if vao:
+            try:
+                vao_y, vao_m = int(vao[:4]), int(vao[5:7])
+                vao_date = date(vao_y, vao_m, 1)
+                months_old = (today.year - vao_date.year) * 12 + (today.month - vao_date.month)
+                if months_old > STALE_THRESHOLD_MONTHS:
+                    stale_items.append({"name": acc["name"], "type": "Tax-Free Account", "as_of": vao, "months_old": months_old})
+            except (ValueError, IndexError):
+                pass
+
+    return {
+        "phase": phase,
+        "phase_label": phase_label,
+        "phase_icon": phase_icon,
+        "phase_class": phase_class,
+        "phase_msg": phase_msg,
+        "stale_items": stale_items,
+        "has_stale": len(stale_items) > 0,
+    }
+
+
 # ------------------------------------------------------------------ #
 @app.route("/", methods=["GET", "POST"])
 @login_required
@@ -169,11 +254,13 @@ def dashboard():
     ext_years_trimmed = [y for y in ext_result["years"] if y["age"] <= chart_end]
 
 
+    phase_info = compute_phase_info(cfg)
     return render_template("dashboard.html", config=cfg, result=result,
                            ext_years=ext_years_trimmed,
                            plan_end_age=plan_end_age,
                            depletion_age=depletion_age,
-                           depletion_beyond_chart=depletion_beyond_chart,)
+                           depletion_beyond_chart=depletion_beyond_chart,
+                           phase_info=phase_info,)
 
 # ------------------------------------------------------------------ #
 #  Settings — dynamic income stream management
@@ -358,8 +445,10 @@ def settings():
     for acc in cfg.get("tax_free_accounts", []):
         tf_provenance.append(resolve_growth_provenance(acc, ASSET_MODEL))
 
+    phase_info = compute_phase_info(cfg)
     return render_template("settings.html", config=cfg, asset_model=ASSET_MODEL,
-                           dc_provenance=dc_provenance, tf_provenance=tf_provenance)
+                           dc_provenance=dc_provenance, tf_provenance=tf_provenance,
+                           phase_info=phase_info)
 
 # ------------------------------------------------------------------ #
 #  Scenarios

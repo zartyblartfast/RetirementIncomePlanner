@@ -64,6 +64,30 @@
             {% endif %}
         {% endwith %}
 
+        <!-- Phase banner (C5) -->
+        {% if phase_info is defined and phase_info %}
+        <div class="alert alert-{{ phase_info.phase_class }} d-flex align-items-center mb-2" role="alert">
+            <span class="fs-4 me-2">{{ phase_info.phase_icon }}</span>
+            <div>
+                <strong>{{ phase_info.phase_label }}</strong> &mdash; {{ phase_info.phase_msg }}
+            </div>
+        </div>
+        {% if phase_info.has_stale %}
+        <div class="alert alert-warning d-flex align-items-start mb-2" role="alert">
+            <span class="fs-4 me-2">&#9888;&#65039;</span>
+            <div>
+                <strong>Stale data detected</strong> &mdash; The following balances have not been updated in over 6 months.
+                Consider updating them on the <a href="/settings" class="alert-link">Settings</a> page for more accurate projections.
+                <ul class="mb-0 mt-1">
+                {% for item in phase_info.stale_items %}
+                    <li><strong>{{ item.name }}</strong> ({{ item.type }}) &mdash; last updated {{ item.as_of }}, {{ item.months_old }} months ago</li>
+                {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+        {% endif %}
+
         {% block content %}{% endblock %}
     </div>
 
