@@ -446,9 +446,59 @@ def settings():
         tf_provenance.append(resolve_growth_provenance(acc, ASSET_MODEL))
 
     phase_info = compute_phase_info(cfg)
+
+    # C6: Compute projected retirement-date values for DC pots and ISAs
+    dc_projected = []
+    tf_projected = []
+    if phase_info.get("phase") == "pre_retirement":
+        from datetime import date
+        ret_str = cfg["personal"].get("retirement_date", "2027-04")
+        try:
+            ret_y, ret_m = int(ret_str[:4]), int(ret_str[5:7])
+        except (ValueError, IndexError):
+            ret_y, ret_m = 2027, 4
+        ret_months = ret_y * 12 + ret_m
+
+        for pot in cfg.get("dc_pots", []):
+            if pot.get("values_as_of"):
+                try:
+                    py, pm = int(pot["values_as_of"][:4]), int(pot["values_as_of"][5:7])
+                    gap_months = ret_months - (py * 12 + pm)
+                    if gap_months > 0:
+                        gap_years = gap_months / 12.0
+                        growth = resolve_growth_rate(pot, ASSET_MODEL)
+                        fees = pot.get("annual_fees", 0.005)
+                        net_growth = growth - fees
+                        projected = pot["starting_balance"] * (1 + net_growth) ** gap_years
+                        dc_projected.append(round(projected))
+                    else:
+                        dc_projected.append(None)
+                except (ValueError, IndexError):
+                    dc_projected.append(None)
+            else:
+                dc_projected.append(None)
+
+        for acc in cfg.get("tax_free_accounts", []):
+            if acc.get("values_as_of"):
+                try:
+                    ay, am = int(acc["values_as_of"][:4]), int(acc["values_as_of"][5:7])
+                    gap_months = ret_months - (ay * 12 + am)
+                    if gap_months > 0:
+                        gap_years = gap_months / 12.0
+                        growth = resolve_growth_rate(acc, ASSET_MODEL)
+                        projected = acc["starting_balance"] * (1 + growth) ** gap_years
+                        tf_projected.append(round(projected))
+                    else:
+                        tf_projected.append(None)
+                except (ValueError, IndexError):
+                    tf_projected.append(None)
+            else:
+                tf_projected.append(None)
+
     return render_template("settings.html", config=cfg, asset_model=ASSET_MODEL,
                            dc_provenance=dc_provenance, tf_provenance=tf_provenance,
-                           phase_info=phase_info)
+                           phase_info=phase_info,
+                           dc_projected=dc_projected, tf_projected=tf_projected)
 
 # ------------------------------------------------------------------ #
 #  Scenarios

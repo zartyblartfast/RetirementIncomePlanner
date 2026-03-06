@@ -330,6 +330,16 @@
                             {% else %}Manual{% endif %}
                         </div>
                     </div>
+                    {% if dc_projected and dc_projected[loop.index0] is not none %}
+                    <div class="row mt-1">
+                        <div class="col">
+                            <span class="badge bg-success bg-opacity-25 text-success" style="font-size:0.8rem;">
+                                <i class="bi bi-rocket-takeoff"></i>
+                                Projected at retirement: &pound;{{ "{:,.0f}".format(dc_projected[loop.index0]) }}
+                            </span>
+                        </div>
+                    </div>
+                    {% endif %}
                     <div class="collapse mt-2" id="editDC{{ loop.index0 }}">
                         <form method="post" id="formEditDC{{ loop.index0 }}">
                             <input type="hidden" name="action" value="save_dc">
@@ -524,6 +534,16 @@
                             {% else %}Manual{% endif %}
                         </div>
                     </div>
+                    {% if tf_projected and tf_projected[loop.index0] is not none %}
+                    <div class="row mt-1">
+                        <div class="col">
+                            <span class="badge bg-success bg-opacity-25 text-success" style="font-size:0.8rem;">
+                                <i class="bi bi-rocket-takeoff"></i>
+                                Projected at retirement: &pound;{{ "{:,.0f}".format(tf_projected[loop.index0]) }}
+                            </span>
+                        </div>
+                    </div>
+                    {% endif %}
                     <div class="collapse mt-2" id="editTF{{ loop.index0 }}">
                         <form method="post" id="formEditTF{{ loop.index0 }}">
                             <input type="hidden" name="action" value="save_tf">
