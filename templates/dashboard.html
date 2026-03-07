@@ -111,6 +111,161 @@
     </div>
 </div>
 
+<!-- Live Market Data Card -->
+<div class="card mb-4" id="marketDataCard" style="display:none;">
+    <div class="card-header bg-dark text-white">
+        <i class="bi bi-broadcast"></i> Live Market Data
+        <span id="mdFreshness" class="float-end small"></span>
+    </div>
+    <div class="card-body p-0">
+        <div id="mdLoading" class="text-center py-3">
+            <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+            <span class="text-muted ms-2">Fetching live market data&hellip;</span>
+        </div>
+        <div id="mdError" class="alert alert-warning m-3" style="display:none;">
+            <i class="bi bi-wifi-off"></i> Market data unavailable &mdash; your planning assumptions are unaffected.
+        </div>
+        <table class="table table-sm table-hover mb-0" id="mdTable" style="display:none;">
+            <thead class="table-light">
+                <tr>
+                    <th>Indicator</th>
+                    <th class="text-end">Your Assumption</th>
+                    <th class="text-end">Market (1Y Trailing)</th>
+                    <th class="text-end">Difference</th>
+                    <th class="text-center">Status</th>
+                </tr>
+            </thead>
+            <tbody id="mdTableBody"></tbody>
+        </table>
+        <div class="card-footer bg-light">
+            <small class="text-muted">
+                <i class="bi bi-info-circle"></i>
+                Trailing 1-year returns are <strong>backward-looking</strong> and volatile.
+                Your planning assumptions use conservative long-run geometric means.
+                A green status means recent markets exceeded your cautious estimate &mdash; not a recommendation to change it.
+            </small>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    // Your planning assumptions (from asset_model.json geometric returns)
+    const assumptions = {
+        developed_equity:  { label: "Developed Equity",    rate: 0.0506 },
+        emerging_equity:   { label: "Emerging Equity",     rate: 0.0506 },
+        global_smallcap:   { label: "Global Small-Cap",    rate: 0.0506 },
+        global_bonds:      { label: "Global Bonds",        rate: 0.0332 },
+        global_property:   { label: "Property / REITs",    rate: 0.0428 },
+        uk_inflation:      { label: "UK Inflation (CPI)",  rate: 0.025  },
+        uk_cash:           { label: "Cash (SONIA proxy)",  rate: 0.02   }
+    };
+
+    function pct(v) { return (v * 100).toFixed(2) + "%"; }
+
+    function trafficLight(assumed, market) {
+        // For inflation: market > assumed is BAD (amber/red)
+        // For everything else: market > assumed is GOOD (green)
+        return { assumed, market };
+    }
+
+    function statusBadge(key, assumed, market) {
+        const diff = market - assumed;
+        const absDiff = Math.abs(diff);
+        const threshold = 0.02; // 2pp
+
+        if (key === "uk_inflation") {
+            // Higher inflation is worse
+            if (diff > threshold)      return '<span class="badge bg-danger">⚠ Above</span>';
+            if (diff > 0)              return '<span class="badge bg-warning text-dark">Slightly Above</span>';
+            return '<span class="badge bg-success">✓ At/Below</span>';
+        } else {
+            // Higher returns are better
+            if (diff > threshold)      return '<span class="badge bg-success">✓ Outperforming</span>';
+            if (diff > -threshold)     return '<span class="badge bg-warning text-dark">In Line</span>';
+            return '<span class="badge bg-danger">⚠ Underperforming</span>';
+        }
+    }
+
+    function diffCell(assumed, market) {
+        const diff = market - assumed;
+        const sign = diff >= 0 ? "+" : "";
+        const cls = diff >= 0 ? "text-success" : "text-danger";
+        return '<span class="' + cls + '">' + sign + pct(diff) + '</span>';
+    }
+
+    async function loadMarketData() {
+        const card = document.getElementById("marketDataCard");
+        const loading = document.getElementById("mdLoading");
+        const errorDiv = document.getElementById("mdError");
+        const table = document.getElementById("mdTable");
+        const tbody = document.getElementById("mdTableBody");
+        const freshness = document.getElementById("mdFreshness");
+
+        card.style.display = "block";
+
+        try {
+            const resp = await fetch("https://marketdata.countdays.co.uk/api/v1/reference-data");
+            if (!resp.ok) throw new Error("HTTP " + resp.status);
+            const data = await resp.json();
+
+            const bm = data.benchmarks.benchmarks;
+            const ukCPI = data.inflation.nations.UK;
+            const ukRate = data.interest_rates.nations.UK;
+
+            // Check staleness
+            const isStale = data.benchmarks._meta.stale || data.inflation._meta.stale;
+            const asOf = data.as_of || "";
+
+            if (isStale) {
+                freshness.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> Stale data</span> ' + asOf;
+            } else {
+                freshness.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Live</span> ' + asOf;
+            }
+
+            // Build rows
+            const rows = [
+                { key: "developed_equity",  market: bm.developed_equity.return_1y,  proxy: bm.developed_equity.proxy },
+                { key: "emerging_equity",   market: bm.emerging_equity.return_1y,   proxy: bm.emerging_equity.proxy },
+                { key: "global_smallcap",   market: bm.global_smallcap.return_1y,   proxy: bm.global_smallcap.proxy },
+                { key: "global_bonds",      market: bm.global_bonds.return_1y,      proxy: bm.global_bonds.proxy },
+                { key: "global_property",   market: bm.global_property.return_1y,   proxy: bm.global_property.proxy },
+                { key: "uk_inflation",      market: ukCPI.rate,                     proxy: "CPI" },
+                { key: "uk_cash",           market: ukRate.rate,                    proxy: "SONIA" }
+            ];
+
+            let html = "";
+            for (const row of rows) {
+                const a = assumptions[row.key];
+                html += "<tr>";
+                html += '<td>' + a.label + ' <small class="text-muted">(' + row.proxy + ')</small></td>';
+                html += '<td class="text-end">' + pct(a.rate) + '</td>';
+                html += '<td class="text-end fw-bold">' + pct(row.market) + '</td>';
+                html += '<td class="text-end">' + diffCell(a.rate, row.market) + '</td>';
+                html += '<td class="text-center">' + statusBadge(row.key, a.rate, row.market) + '</td>';
+                html += "</tr>";
+            }
+            tbody.innerHTML = html;
+
+            loading.style.display = "none";
+            table.style.display = "table";
+
+        } catch (err) {
+            console.warn("Market data fetch failed:", err);
+            loading.style.display = "none";
+            errorDiv.style.display = "block";
+        }
+    }
+
+    // Load on page ready
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", loadMarketData);
+    } else {
+        loadMarketData();
+    }
+})();
+</script>
+
 <!-- Warnings -->
 {% if result.warnings %}
 <div class="alert alert-warning">
