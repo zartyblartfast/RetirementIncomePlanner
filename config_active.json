@@ -97,6 +97,34 @@
           "weight": 0.2
         }
       ]
+    },
+    {
+      "name": "Test Pot",
+      "starting_balance": 50000.0,
+      "values_as_of": "2025-06",
+      "growth_rate": 0.04,
+      "annual_fees": 0.005,
+      "tax_free_portion": 0.25,
+      "allocation": {
+        "mode": "manual",
+        "template_id": "",
+        "custom_weights": {},
+        "manual_override": true
+      }
+    },
+    {
+      "name": "Test Pot",
+      "starting_balance": 55000.0,
+      "values_as_of": "2025-09",
+      "growth_rate": 0.04,
+      "annual_fees": 0.005,
+      "tax_free_portion": 0.25,
+      "allocation": {
+        "mode": "manual",
+        "template_id": "",
+        "custom_weights": {},
+        "manual_override": true
+      }
     }
   ],
   "tax_free_accounts": [
@@ -138,12 +166,38 @@
           "weight": 0.1983
         }
       ]
+    },
+    {
+      "name": "Test ISA",
+      "starting_balance": 20000.0,
+      "values_as_of": "2025-03",
+      "growth_rate": 0.035,
+      "allocation": {
+        "mode": "manual",
+        "template_id": "",
+        "custom_weights": {},
+        "manual_override": true
+      }
+    },
+    {
+      "name": "Test ISA",
+      "starting_balance": 22000.0,
+      "values_as_of": "2025-08",
+      "growth_rate": 0.035,
+      "allocation": {
+        "mode": "manual",
+        "template_id": "",
+        "custom_weights": {},
+        "manual_override": true
+      }
     }
   ],
   "withdrawal_priority": [
     "Employer DC Pot",
     "Consolidated DC Pot",
-    "ISA"
+    "ISA",
+    "Test Pot",
+    "Test ISA"
   ],
   "tax": {
     "regime": "Isle of Man",
