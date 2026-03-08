@@ -243,14 +243,12 @@ def dashboard():
         if yr["total_capital"] <= 0:
             depletion_age = yr["age"]
             break
-    # Trim extended years to depletion_age + 2 (or plan_end_age + 2 if no depletion)
-    # Smart chart range: show depletion if within reasonable range
-    MAX_CHART_AGE = 115
-    if depletion_age and depletion_age <= MAX_CHART_AGE:
+    # Trim extended years: always show depletion visually if it occurs
+    if depletion_age:
         chart_end = max(plan_end_age + 5, depletion_age + 2)
     else:
         chart_end = plan_end_age + 5
-    depletion_beyond_chart = depletion_age and depletion_age > chart_end
+    depletion_beyond_chart = False
     ext_years_trimmed = [y for y in ext_result["years"] if y["age"] <= chart_end]
 
 
