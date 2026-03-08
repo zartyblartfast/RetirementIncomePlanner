@@ -46,24 +46,28 @@
       "values_as_of": "2025-03",
       "holdings": [
         {
-          "fund_name": "Global Equity",
+          "fund_name": "Vanguard FTSE Developed World ex-U.K. Equity Index",
           "benchmark_key": "developed_equity",
-          "weight": 0.385
+          "weight": 0.385,
+          "isin": "GB00BPN5NY15"
         },
         {
-          "fund_name": "Global Small-Cap Equity",
+          "fund_name": "Vanguard Global Small-Cap Index",
           "benchmark_key": "global_smallcap",
-          "weight": 0.377
+          "weight": 0.377,
+          "isin": "IE00BPT2BD14"
         },
         {
-          "fund_name": "Emerging Markets Equity",
+          "fund_name": "L&G Global Emerging Markets Index",
           "benchmark_key": "emerging_equity",
-          "weight": 0.2095
+          "weight": 0.2095,
+          "isin": "GB00BG0QP489"
         },
         {
-          "fund_name": "UK Large-Cap Equity",
+          "fund_name": "iShares UK Equity Index",
           "benchmark_key": "uk_largecap",
-          "weight": 0.0276
+          "weight": 0.0276,
+          "isin": "GB00B7C44X99"
         },
         {
           "fund_name": "Cash",
@@ -88,11 +92,13 @@
       "holdings": [
         {
           "fund_name": "Developed Market Equity (Unhedged)",
+          "isin": "GB00BHFG8070",
           "benchmark_key": "developed_equity",
           "weight": 0.8
         },
         {
           "fund_name": "Emerging Markets Equity",
+          "isin": "GB00B8ZF2K98",
           "benchmark_key": "emerging_equity",
           "weight": 0.2
         }
@@ -113,24 +119,28 @@
       "values_as_of": "2025-03",
       "holdings": [
         {
-          "fund_name": "Global Equity",
+          "fund_name": "Vanguard FTSE Developed World ex-U.K. Equity Index",
           "benchmark_key": "developed_equity",
-          "weight": 0.286
+          "weight": 0.286,
+          "isin": "GB00BPN5NY15"
         },
         {
-          "fund_name": "Global Small-Cap Equity",
+          "fund_name": "Vanguard Global Small-Cap Index",
           "benchmark_key": "global_smallcap",
-          "weight": 0.2799
+          "weight": 0.2799,
+          "isin": "IE00BPT2BD14"
         },
         {
-          "fund_name": "Emerging Markets Equity",
+          "fund_name": "L&G Global Emerging Markets Index",
           "benchmark_key": "emerging_equity",
-          "weight": 0.2082
+          "weight": 0.2082,
+          "isin": "GB00BG0QP489"
         },
         {
-          "fund_name": "UK Large-Cap Equity",
+          "fund_name": "iShares UK Equity Index",
           "benchmark_key": "uk_largecap",
-          "weight": 0.0276
+          "weight": 0.0276,
+          "isin": "GB00B7C44X99"
         },
         {
           "fund_name": "Cash GBP",

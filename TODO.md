@@ -106,6 +106,102 @@ To manage complexity and avoid long single changes:
 
 ---
 
+
+---
+
+## 🆕 Holdings Integration & Market Data (H-Series)
+
+### Overview
+Connect real fund-level holdings data to live market benchmarks, giving users
+transparent pot-level performance tracking and planning-rate sanity checks.
+
+### ✅ H1 — Holdings JSON Schema *(Complete)*
+
+**Scope:** Add fund-level holdings with ISINs and API benchmark mappings to each
+DC pot and ISA in the config schema.
+
+| Item | Detail |
+|------|--------|
+| **Config fields** | `holdings` array on each DC pot and ISA |
+| **Per holding** | `name`, `isin`, `asset_class`, `weight`, `benchmark_key` |
+| **Benchmark keys** | `developed_equity`, `emerging_equity`, `global_smallcap`, `uk_largecap`, `global_bonds`, `property`, `cash` |
+| **Validation** | Weights sum to 1.0 per pot |
+| **Files** | `config_default.json`, `config_active.json` |
+
+### 🔲 H2 — Backend: Blended Return Calculator
+
+**Scope:** Server-side helper that combines holdings data with live MarketDataAPI
+data to produce per-pot market intelligence.
+
+| Item | Detail |
+|------|--------|
+| **Input** | Pot's `holdings` array + MarketDataAPI response |
+| **Output** | Structured dict per pot: each asset with name, ISIN, weight, benchmark key, live return; plus blended total |
+| **API call** | Single fetch to MarketDataAPI `/api/benchmarks` + `/api/inflation` + `/api/interest-rates` |
+| **Blended calc** | Weighted average: `Σ (weight × benchmark_return)` for each holding |
+| **Cash mapping** | Cash holdings use SONIA rate from `/api/interest-rates` |
+| **Fallback** | If API unreachable → return `None` (UI handles gracefully) |
+| **Files** | New `market_data.py` helper module |
+
+### 🔲 H3 — Dashboard: Pot-Level Market Data Tables
+
+**Scope:** Replace the current generic Market Data Card with rich, per-pot
+breakdown tables on the Dashboard.
+
+#### Per-Pot Table (for each DC pot & ISA with holdings)
+
+| Column | Source |
+|--------|--------|
+| Asset Class | Holdings config |
+| Holding Name | Holdings config (fund name) |
+| Weight | Holdings config |
+| Market Return (1yr) | Live API via H2 |
+
+#### Per-Pot Summary Footer
+
+| Row | Value |
+|-----|-------|
+| **Blended market return** | Calculated by H2 |
+| **Your planning rate** | From pot's `growth_rate` in config |
+| **Variance** | Difference + traffic-light (🟢 conservative / 🟡 close / 🔴 aggressive) |
+
+#### Macro Overview (slim, retained)
+
+| Metric | Source |
+|--------|--------|
+| UK CPI (actual vs assumed) | API `/api/inflation` vs config `cpi_rate` |
+| SONIA rate | API `/api/interest-rates` |
+
+#### Behaviour
+- Tables only appear for pots that have `holdings` defined.
+- Pots without holdings show "No holdings data" note.
+- If API unreachable → section shows "Market data unavailable" with retry.
+- **Files:** `dashboard.html`, `app.py`
+
+### 🔲 H4 — Settings: Compact Market Rate Badge
+
+**Scope:** Add a read-only market-derived growth rate next to each pot's editable
+planning rate on the Settings page.
+
+#### Display Format
+On each pot summary card, below the growth rate:
+> **Growth rate:** `5.15%` *(editable)*
+> 📊 Market blended: `8.4%` *(trailing 1yr)*
+
+#### Behaviour
+- Uses the same H2 helper function.
+- Fetched on Settings page load.
+- If API unreachable → badge simply hidden (no error).
+- Purely informational — does **not** affect projections.
+- **Files:** `settings.html`, `app.py`
+
+### Build Order & Dependencies
+```
+H1 ✅ → H2 (backend) → H3 (dashboard) + H4 (settings)
+                         ↑ both depend on H2
+```
+H3 and H4 can be built in either order once H2 is done. H3 is higher-value.
+
 ## 🆕 V1.1 Feature: Projection History & "Show Full Timeline"
 
 ### Overview
