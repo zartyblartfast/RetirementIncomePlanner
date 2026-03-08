@@ -7,6 +7,7 @@ import functools
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify)
 from retirement_engine import RetirementEngine, load_config, load_asset_model, resolve_growth_rate, resolve_growth_provenance
+from market_data import fetch_market_data, get_all_pot_intelligence
 from optimiser import Optimiser
 
 app = Flask(__name__)
@@ -253,12 +254,18 @@ def dashboard():
 
 
     phase_info = compute_phase_info(cfg)
+
+    # H3: Fetch live market data and compute per-pot intelligence
+    market_raw = fetch_market_data()
+    market_intel = get_all_pot_intelligence(cfg, market_raw) if market_raw else None
+
     return render_template("dashboard.html", config=cfg, result=result,
                            ext_years=ext_years_trimmed,
                            plan_end_age=plan_end_age,
                            depletion_age=depletion_age,
                            depletion_beyond_chart=depletion_beyond_chart,
-                           phase_info=phase_info,)
+                           phase_info=phase_info,
+                           market_intel=market_intel,)
 
 # ------------------------------------------------------------------ #
 #  Settings — dynamic income stream management

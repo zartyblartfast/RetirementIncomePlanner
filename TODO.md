@@ -128,7 +128,7 @@ DC pot and ISA in the config schema.
 | **Validation** | Weights sum to 1.0 per pot |
 | **Files** | `config_default.json`, `config_active.json` |
 
-### 🔲 H2 — Backend: Blended Return Calculator
+### ✅ H2 — Backend: Blended Return Calculator
 
 **Scope:** Server-side helper that combines holdings data with live MarketDataAPI
 data to produce per-pot market intelligence.
@@ -143,7 +143,7 @@ data to produce per-pot market intelligence.
 | **Fallback** | If API unreachable → return `None` (UI handles gracefully) |
 | **Files** | New `market_data.py` helper module |
 
-### 🔲 H3 — Dashboard: Pot-Level Market Data Tables
+### ✅ H3 — Dashboard: Pot-Level Market Data Tables
 
 **Scope:** Replace the current generic Market Data Card with rich, per-pot
 breakdown tables on the Dashboard.
