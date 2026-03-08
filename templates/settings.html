@@ -322,6 +322,13 @@
                                 <i class="bi bi-info-circle"></i> {{ dc_provenance[loop.index0].source }}
                             </span>
                             {% endif %}
+                            {% if market_intel and pot.name in market_intel.pots %}
+                            {% set mkt = market_intel.pots[pot.name] %}
+                            <br><span class="badge {% if mkt.status == 'green' %}bg-success{% elif mkt.status == 'amber' %}bg-warning text-dark{% elif mkt.status == 'red' %}bg-danger{% else %}bg-secondary{% endif %}" style="font-size:0.65rem; font-weight:normal;"
+                                title="Trailing 1yr blended market return for this pot's holdings">
+                                <i class="bi bi-broadcast"></i> Market {{ mkt.blended_return_pct }}%
+                            </span>
+                            {% endif %}
                         </div>
                         <div class="col"><i class="bi bi-percent"></i> Fees {{ (pot.annual_fees * 100) | round(1) }}%</div>
                         <div class="col"><i class="bi bi-pie-chart"></i>
@@ -525,6 +532,13 @@
                             <br><span class="badge bg-info text-dark" style="font-size:0.65rem; font-weight:normal;"
                                 title="{{ tf_provenance[loop.index0].detail }}">
                                 <i class="bi bi-info-circle"></i> {{ tf_provenance[loop.index0].source }}
+                            </span>
+                            {% endif %}
+                            {% if market_intel and acc.name in market_intel.pots %}
+                            {% set mkt = market_intel.pots[acc.name] %}
+                            <br><span class="badge {% if mkt.status == 'green' %}bg-success{% elif mkt.status == 'amber' %}bg-warning text-dark{% elif mkt.status == 'red' %}bg-danger{% else %}bg-secondary{% endif %}" style="font-size:0.65rem; font-weight:normal;"
+                                title="Trailing 1yr blended market return for this account's holdings">
+                                <i class="bi bi-broadcast"></i> Market {{ mkt.blended_return_pct }}%
                             </span>
                             {% endif %}
                         </div>

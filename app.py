@@ -500,10 +500,15 @@ def settings():
             else:
                 tf_projected.append(None)
 
+    # H4: Fetch live market data for compact rate badges
+    market_raw = fetch_market_data()
+    market_intel = get_all_pot_intelligence(cfg, market_raw) if market_raw else None
+
     return render_template("settings.html", config=cfg, asset_model=ASSET_MODEL,
                            dc_provenance=dc_provenance, tf_provenance=tf_provenance,
                            phase_info=phase_info,
-                           dc_projected=dc_projected, tf_projected=tf_projected)
+                           dc_projected=dc_projected, tf_projected=tf_projected,
+                           market_intel=market_intel)
 
 # ------------------------------------------------------------------ #
 #  Scenarios

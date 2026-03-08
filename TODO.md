@@ -178,7 +178,7 @@ breakdown tables on the Dashboard.
 - If API unreachable → section shows "Market data unavailable" with retry.
 - **Files:** `dashboard.html`, `app.py`
 
-### 🔲 H4 — Settings: Compact Market Rate Badge
+### ✅ H4 — Settings: Compact Market Rate Badge
 
 **Scope:** Add a read-only market-derived growth rate next to each pot's editable
 planning rate on the Settings page.
