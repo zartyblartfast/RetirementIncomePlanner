@@ -238,12 +238,17 @@ def dashboard():
     ext_engine = RetirementEngine(ext_cfg)
     ext_result = ext_engine.run_projection()
     plan_end_age = cfg["personal"]["end_age"]
-    # Find depletion age: first age where total_capital <= 0 in extended run
+    # Find depletion age: use engine's depletion_events (last pot to deplete)
+    # or fall back to first age where total_capital <= 0
     depletion_age = None
-    for yr in ext_result["years"]:
-        if yr["total_capital"] <= 0:
-            depletion_age = yr["age"]
-            break
+    dep_events = ext_result.get("summary", {}).get("depletion_events", [])
+    if dep_events:
+        depletion_age = max(ev["age"] for ev in dep_events)
+    else:
+        for yr in ext_result["years"]:
+            if yr["total_capital"] <= 0:
+                depletion_age = yr["age"]
+                break
     # Trim extended years: always show depletion visually if it occurs
     if depletion_age:
         chart_end = max(plan_end_age + 5, depletion_age + 2)

@@ -7,7 +7,7 @@
     "currency": "GBP"
   },
   "target_income": {
-    "net_annual": 36500.0,
+    "net_annual": 35000.0,
     "cpi_rate": 0.03
   },
   "guaranteed_income": [
@@ -33,7 +33,7 @@
   "dc_pots": [
     {
       "name": "Consolidated DC Pot",
-      "starting_balance": 166000.0,
+      "starting_balance": 147000.0,
       "growth_rate": 0.05,
       "annual_fees": 0.005,
       "tax_free_portion": 0.25,

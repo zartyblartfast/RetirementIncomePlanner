@@ -1,11 +1,22 @@
-"""Retirement Income Planner — Projection Engine (Dynamic Streams)
+"""Retirement Income Planner — Projection Engine (Monthly Stepping)
 
-Year-by-year deterministic projection supporting dynamic income streams.
+Month-by-month deterministic projection supporting dynamic income streams.
+Tax is computed annually; growth, fees, and withdrawals step monthly.
 """
 import copy
 import json
 import math
 import os
+
+
+# ------------------------------------------------------------------ #
+#  Monthly conversion helpers
+# ------------------------------------------------------------------ #
+def annual_to_monthly_rate(annual_rate):
+    """Convert an annual rate to a monthly compound-equivalent rate."""
+    if annual_rate == 0:
+        return 0.0
+    return (1 + annual_rate) ** (1 / 12) - 1
 
 
 # ------------------------------------------------------------------ #
@@ -137,7 +148,7 @@ def resolve_growth_provenance(pot_config, asset_model):
     }
 
 class RetirementEngine:
-    """Run a year-by-year retirement income projection."""
+    """Run a monthly-stepping retirement income projection with annual tax."""
 
     def __init__(self, config: dict):
         self.cfg = copy.deepcopy(config)
@@ -482,6 +493,21 @@ class RetirementEngine:
         # Withdrawal priority
         priority = cfg.get("withdrawal_priority", [])
 
+        # ------------------------------------------------------------ #
+        #  Pre-compute monthly compound rates for all pots
+        # ------------------------------------------------------------ #
+        dc_monthly = {}
+        for name, meta in dc_meta.items():
+            dc_monthly[name] = {
+                "growth": annual_to_monthly_rate(meta["growth_rate"]),
+                "fees": annual_to_monthly_rate(meta["annual_fees"]),
+            }
+        tf_monthly = {}
+        for name, meta in tf_meta.items():
+            tf_monthly[name] = {
+                "growth": annual_to_monthly_rate(meta["growth_rate"]),
+            }
+
         years = []
         warnings = []
         current_target = target_net
@@ -489,6 +515,8 @@ class RetirementEngine:
         first_pot_exhausted_age = None
         total_tax = 0.0
         total_uk_tax = 0.0
+        depletion_events = []
+        depleted_pots = set()
 
         # C3: Inflate target to anchor age if anchor > retirement_age
         if anchor_age > retirement_age:
@@ -496,18 +524,18 @@ class RetirementEngine:
             current_target = target_net * (1 + cpi) ** years_to_anchor
 
         # ------------------------------------------------------------ #
-        #  Main year-by-year loop — starts from anchor_age
+        #  Main loop — annual planning with monthly execution
         # ------------------------------------------------------------ #
         for age in range(anchor_age, end_age + 1):
             # Tax year label based on calendar year
-            cal_year = anchor_year + (age - anchor_age) if is_post_retirement else 2027 + (age - retirement_age)
+            cal_year = anchor_year + (age - anchor_age) if is_post_retirement else ret_year + (age - retirement_age)
             tax_year = f"{cal_year}/{str(cal_year + 1)[-2:]}"
 
             # Inflate target (skip first year at anchor)
             if age > anchor_age:
                 current_target *= (1 + cpi)
 
-            # Calculate guaranteed income for this year
+            # ---- Phase 1: Annual guaranteed income for this year ---- #
             guaranteed_total_gross = 0.0
             guaranteed_taxable_gross = 0.0
             guaranteed_detail = {}
@@ -526,96 +554,180 @@ class RetirementEngine:
             for g in guaranteed:
                 g["current_annual"] *= (1 + g["indexation_rate"])
 
-            # Tax on guaranteed income alone
+            # ---- Phase 2: Annual withdrawal plan (tax + gross-up) ---- #
             tax_on_guaranteed = self.calculate_tax(guaranteed_taxable_gross)["total"]
             net_from_guaranteed = guaranteed_total_gross - tax_on_guaranteed
+            annual_shortfall = max(0, current_target - net_from_guaranteed)
 
-            # Shortfall to fill from drawdown
-            shortfall = max(0, current_target - net_from_guaranteed)
-
-            # Grow DC pots and tax-free accounts — track P&L components
-            pot_pnl = {}
-
-            for name in dc_balances:
-                meta = dc_meta[name]
-                opening = dc_balances[name]
-                growth_amt = opening * meta["growth_rate"]
-                fee_amt = opening * meta["annual_fees"]
-                dc_balances[name] = opening + growth_amt - fee_amt
-                pot_pnl[name] = {
-                    "opening": round(opening, 2),
-                    "growth": round(growth_amt, 2),
-                    "fees": round(fee_amt, 2),
-                    "withdrawal": 0.0,
-                    "closing": 0.0,
-                    "provenance": meta["provenance"],
-                }
-
-            for name in tf_balances:
-                meta = tf_meta[name]
-                opening = tf_balances[name]
-                growth_amt = opening * meta["growth_rate"]
-                tf_balances[name] = opening + growth_amt
-                pot_pnl[name] = {
-                    "opening": round(opening, 2),
-                    "growth": round(growth_amt, 2),
-                    "fees": 0.0,
-                    "withdrawal": 0.0,
-                    "closing": 0.0,
-                    "provenance": meta["provenance"],
-                }
-
-            # Withdraw according to priority
-            dc_withdrawal_gross = 0.0
-            dc_tax_free_total = 0.0
-            tf_withdrawal_total = 0.0
-            withdrawal_detail = {}
-            remaining_shortfall = shortfall
+            # Plan annual withdrawals through priority order
+            planned_dc_gross = 0.0
+            planned_dc_tf = 0.0
+            planned_tf = 0.0
+            remaining_plan = annual_shortfall
 
             for source_name in priority:
-                if remaining_shortfall <= 0:
+                if remaining_plan <= 0:
                     break
 
                 if source_name in dc_balances:
                     meta = dc_meta[source_name]
                     tfp = meta["tax_free_portion"]
-                    gross_needed = self.gross_up(remaining_shortfall,
-                                                guaranteed_taxable_gross + (dc_withdrawal_gross - dc_tax_free_total),
-                                                tfp)
-                    gross_needed = min(gross_needed, dc_balances[source_name])
-                    dc_balances[source_name] -= gross_needed
-                    tax_free_part = gross_needed * tfp
-                    dc_withdrawal_gross += gross_needed
-                    dc_tax_free_total += tax_free_part
-                    withdrawal_detail[source_name] = round(gross_needed, 2)
-                    if source_name in pot_pnl:
-                        pot_pnl[source_name]["withdrawal"] = round(gross_needed, 2)
-
-                    taxable_part = gross_needed - tax_free_part
-                    total_taxable = guaranteed_taxable_gross + (dc_withdrawal_gross - dc_tax_free_total)
+                    gross_needed = self.gross_up(
+                        remaining_plan,
+                        guaranteed_taxable_gross + (planned_dc_gross - planned_dc_tf),
+                        tfp)
+                    gross_needed = min(gross_needed, max(0, dc_balances[source_name]))
+                    planned_dc_gross += gross_needed
+                    planned_dc_tf += gross_needed * tfp
+                    total_taxable = guaranteed_taxable_gross + (planned_dc_gross - planned_dc_tf)
                     tax = self.calculate_tax(total_taxable)["total"]
-                    net_so_far = guaranteed_total_gross + dc_withdrawal_gross + tf_withdrawal_total - tax
-                    remaining_shortfall = max(0, current_target - net_so_far)
+                    net_so_far = guaranteed_total_gross + planned_dc_gross + planned_tf - tax
+                    remaining_plan = max(0, current_target - net_so_far)
 
                 elif source_name in tf_balances:
-                    withdraw = min(remaining_shortfall, tf_balances[source_name])
-                    tf_balances[source_name] -= withdraw
-                    tf_withdrawal_total += withdraw
-                    withdrawal_detail[source_name] = round(withdraw, 2)
-                    if source_name in pot_pnl:
-                        pot_pnl[source_name]["withdrawal"] = round(withdraw, 2)
-                    remaining_shortfall -= withdraw
+                    withdraw = min(remaining_plan, max(0, tf_balances[source_name]))
+                    planned_tf += withdraw
+                    remaining_plan -= withdraw
 
-            # Fill closing balances in pot P&L
+            # Monthly targets derived from annual plan
+            monthly_dc_target = planned_dc_gross / 12.0
+            monthly_tf_target = planned_tf / 12.0
+
+            # ---- Phase 3: Monthly execution ---- #
+            pot_pnl = {}
             for name in dc_balances:
-                if name in pot_pnl:
-                    pot_pnl[name]["closing"] = round(dc_balances[name], 2)
+                pot_pnl[name] = {
+                    "opening": round(dc_balances[name], 2),
+                    "growth": 0.0, "fees": 0.0, "withdrawal": 0.0,
+                    "closing": 0.0, "provenance": dc_meta[name]["provenance"],
+                }
             for name in tf_balances:
-                if name in pot_pnl:
-                    pot_pnl[name]["closing"] = round(tf_balances[name], 2)
+                pot_pnl[name] = {
+                    "opening": round(tf_balances[name], 2),
+                    "growth": 0.0, "fees": 0.0, "withdrawal": 0.0,
+                    "closing": 0.0, "provenance": tf_meta[name]["provenance"],
+                }
 
-            # Final tax calculation — store full breakdowns
-            total_taxable_income = guaranteed_taxable_gross + (dc_withdrawal_gross - dc_tax_free_total)
+            year_dc_gross = 0.0
+            year_dc_tf = 0.0
+            year_tf = 0.0
+            year_withdrawal_detail = {}
+
+            for month in range(12):
+                # 3a. Monthly growth and fees
+                for name in list(dc_balances):
+                    bal = dc_balances[name]
+                    if bal > 0:
+                        g = bal * dc_monthly[name]["growth"]
+                        f = bal * dc_monthly[name]["fees"]
+                        dc_balances[name] = bal + g - f
+                        pot_pnl[name]["growth"] += g
+                        pot_pnl[name]["fees"] += f
+
+                for name in list(tf_balances):
+                    bal = tf_balances[name]
+                    if bal > 0:
+                        g = bal * tf_monthly[name]["growth"]
+                        tf_balances[name] = bal + g
+                        pot_pnl[name]["growth"] += g
+
+                # 3b. Monthly withdrawals — walk priority order
+                remaining_dc = monthly_dc_target
+                remaining_tf = monthly_tf_target
+
+                for source_name in priority:
+                    if source_name in dc_balances and remaining_dc > 0:
+                        available = max(0, dc_balances[source_name])
+                        actual = min(remaining_dc, available)
+                        if actual > 0:
+                            dc_balances[source_name] -= actual
+                            tfp = dc_meta[source_name]["tax_free_portion"]
+                            year_dc_gross += actual
+                            year_dc_tf += actual * tfp
+                            year_withdrawal_detail[source_name] = (
+                                year_withdrawal_detail.get(source_name, 0) + actual)
+                            pot_pnl[source_name]["withdrawal"] += actual
+                            remaining_dc -= actual
+
+                    elif source_name in tf_balances and remaining_tf > 0:
+                        available = max(0, tf_balances[source_name])
+                        actual = min(remaining_tf, available)
+                        if actual > 0:
+                            tf_balances[source_name] -= actual
+                            year_tf += actual
+                            year_withdrawal_detail[source_name] = (
+                                year_withdrawal_detail.get(source_name, 0) + actual)
+                            pot_pnl[source_name]["withdrawal"] += actual
+                            remaining_tf -= actual
+
+                # 3c. Check depletion (month-level precision)
+                all_pots_now = {**dc_balances, **tf_balances}
+                for pname, bal in all_pots_now.items():
+                    if bal < 1 and pname not in depleted_pots:
+                        depleted_pots.add(pname)
+                        depletion_events.append({
+                            "pot": pname,
+                            "age": age,
+                            "month": month + 1,
+                        })
+                        if first_pot_exhausted_age is None:
+                            first_pot_exhausted_age = age
+                        warnings.append(
+                            f"{pname} exhausted at age {age} month {month + 1}")
+
+            # ---- Phase 4: Year-end settlement ---- #
+            # Sweep tiny residual balances to zero (prevents multi-year tail)
+            RESIDUAL_THRESHOLD = 100.0
+            for name in list(dc_balances):
+                if 0 < dc_balances[name] < RESIDUAL_THRESHOLD:
+                    residual = dc_balances[name]
+                    dc_balances[name] = 0.0
+                    year_dc_gross += residual
+                    tfp = dc_meta[name]["tax_free_portion"]
+                    year_dc_tf += residual * tfp
+                    year_withdrawal_detail[name] = (
+                        year_withdrawal_detail.get(name, 0) + residual)
+                    pot_pnl[name]["withdrawal"] += residual
+                    if name not in depleted_pots:
+                        depleted_pots.add(name)
+                        depletion_events.append({
+                            "pot": name, "age": age, "month": 12,
+                        })
+                        if first_pot_exhausted_age is None:
+                            first_pot_exhausted_age = age
+                        warnings.append(
+                            f"{name} exhausted at age {age} month 12")
+            for name in list(tf_balances):
+                if 0 < tf_balances[name] < RESIDUAL_THRESHOLD:
+                    residual = tf_balances[name]
+                    tf_balances[name] = 0.0
+                    year_tf += residual
+                    year_withdrawal_detail[name] = (
+                        year_withdrawal_detail.get(name, 0) + residual)
+                    pot_pnl[name]["withdrawal"] += residual
+                    if name not in depleted_pots:
+                        depleted_pots.add(name)
+                        depletion_events.append({
+                            "pot": name, "age": age, "month": 12,
+                        })
+                        if first_pot_exhausted_age is None:
+                            first_pot_exhausted_age = age
+                        warnings.append(
+                            f"{name} exhausted at age {age} month 12")
+
+            # Round P&L accumulators
+            for name in dc_balances:
+                pot_pnl[name]["growth"] = round(pot_pnl[name]["growth"], 2)
+                pot_pnl[name]["fees"] = round(pot_pnl[name]["fees"], 2)
+                pot_pnl[name]["withdrawal"] = round(pot_pnl[name]["withdrawal"], 2)
+                pot_pnl[name]["closing"] = round(dc_balances[name], 2)
+            for name in tf_balances:
+                pot_pnl[name]["growth"] = round(pot_pnl[name]["growth"], 2)
+                pot_pnl[name]["withdrawal"] = round(pot_pnl[name]["withdrawal"], 2)
+                pot_pnl[name]["closing"] = round(tf_balances[name], 2)
+
+            # Annual tax on actual totals
+            total_taxable_income = guaranteed_taxable_gross + (year_dc_gross - year_dc_tf)
             iom_tax_result = self.calculate_tax(total_taxable_income)
             uk_tax_result = self.calculate_uk_tax(total_taxable_income)
             tax_due = iom_tax_result["total"]
@@ -623,32 +735,28 @@ class RetirementEngine:
             total_tax += tax_due
             total_uk_tax += uk_tax_due
 
-            net_income = guaranteed_total_gross + dc_withdrawal_gross + tf_withdrawal_total - tax_due
+            net_income = guaranteed_total_gross + year_dc_gross + year_tf - tax_due
             has_shortfall = net_income < current_target - 1
 
             if has_shortfall and first_shortfall_age is None:
                 first_shortfall_age = age
 
-            # Check pot exhaustion
-            all_pots = {**dc_balances, **tf_balances}
-            for pname, bal in all_pots.items():
-                if bal < 1 and first_pot_exhausted_age is None:
-                    first_pot_exhausted_age = age
-                    warnings.append(f"{pname} exhausted at age {age}")
-
             # Total capital
             total_capital = sum(dc_balances.values()) + sum(tf_balances.values())
 
-            # Build year result
+            # Round withdrawal detail
+            withdrawal_detail = {n: round(v, 2) for n, v in year_withdrawal_detail.items()}
+
+            # Build year result (same shape as before)
             yr = {
                 "age": age,
                 "tax_year": tax_year,
                 "target_net": round(current_target, 2),
                 "guaranteed_income": guaranteed_detail,
                 "guaranteed_total": round(guaranteed_total_gross, 2),
-                "dc_withdrawal_gross": round(dc_withdrawal_gross, 2),
-                "dc_tax_free_portion": round(dc_tax_free_total, 2),
-                "tf_withdrawal": round(tf_withdrawal_total, 2),
+                "dc_withdrawal_gross": round(year_dc_gross, 2),
+                "dc_tax_free_portion": round(year_dc_tf, 2),
+                "tf_withdrawal": round(year_tf, 2),
                 "withdrawal_detail": withdrawal_detail,
                 "total_taxable_income": round(total_taxable_income, 2),
                 "tax_due": round(tax_due, 2),
@@ -683,6 +791,7 @@ class RetirementEngine:
                 (total_tax / sum(y["total_taxable_income"] for y in years) * 100)
                 if sum(y["total_taxable_income"] for y in years) > 0 else 0, 1),
             "first_pot_exhausted_age": first_pot_exhausted_age,
+            "depletion_events": depletion_events,
         }
 
         return {"years": years, "summary": summary, "warnings": warnings}
