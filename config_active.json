@@ -7,7 +7,7 @@
     "currency": "GBP"
   },
   "target_income": {
-    "net_annual": 30000,
+    "net_annual": 36500.0,
     "cpi_rate": 0.03
   },
   "guaranteed_income": [
@@ -33,13 +33,13 @@
   "dc_pots": [
     {
       "name": "Consolidated DC Pot",
-      "starting_balance": 180000,
-      "growth_rate": 0.04,
+      "starting_balance": 166000.0,
+      "growth_rate": 0.05,
       "annual_fees": 0.005,
       "tax_free_portion": 0.25,
       "allocation": {
-        "mode": "template",
-        "template_id": "balanced_60_40",
+        "mode": "manual",
+        "template_id": "",
         "custom_weights": {},
         "manual_override": true
       },
@@ -47,30 +47,36 @@
       "holdings": [
         {
           "fund_name": "Vanguard FTSE Developed World ex-U.K. Equity Index",
+          "input_type": "isin",
+          "input_value": "GB00BPN5NY15",
           "benchmark_key": "developed_equity",
-          "weight": 0.385,
-          "isin": "GB00BPN5NY15"
+          "weight": 0.385
         },
         {
           "fund_name": "Vanguard Global Small-Cap Index",
+          "input_type": "isin",
+          "input_value": "IE00BPT2BD14",
           "benchmark_key": "global_smallcap",
-          "weight": 0.377,
-          "isin": "IE00BPT2BD14"
+          "weight": 0.377
         },
         {
           "fund_name": "L&G Global Emerging Markets Index",
+          "input_type": "isin",
+          "input_value": "GB00BG0QP489",
           "benchmark_key": "emerging_equity",
-          "weight": 0.2095,
-          "isin": "GB00BG0QP489"
+          "weight": 0.2095
         },
         {
           "fund_name": "iShares UK Equity Index",
+          "input_type": "isin",
+          "input_value": "GB00B7C44X99",
           "benchmark_key": "uk_largecap",
-          "weight": 0.0276,
-          "isin": "GB00B7C44X99"
+          "weight": 0.0276
         },
         {
           "fund_name": "Cash",
+          "input_type": "manual_asset_class",
+          "input_value": "",
           "benchmark_key": "interest_rate",
           "weight": 0.0009
         }
@@ -78,13 +84,13 @@
     },
     {
       "name": "Employer DC Pot",
-      "starting_balance": 95000,
-      "growth_rate": 0.04,
+      "starting_balance": 95000.0,
+      "growth_rate": 0.0499,
       "annual_fees": 0.005,
       "tax_free_portion": 0.25,
       "allocation": {
-        "mode": "template",
-        "template_id": "balanced_60_40",
+        "mode": "manual",
+        "template_id": "",
         "custom_weights": {},
         "manual_override": true
       },
@@ -92,13 +98,15 @@
       "holdings": [
         {
           "fund_name": "Developed Market Equity (Unhedged)",
-          "isin": "GB00BHFG8070",
+          "input_type": "isin",
+          "input_value": "GB00BHFG8070",
           "benchmark_key": "developed_equity",
           "weight": 0.8
         },
         {
           "fund_name": "Emerging Markets Equity",
-          "isin": "GB00B8ZF2K98",
+          "input_type": "isin",
+          "input_value": "GB00B8ZF2K98",
           "benchmark_key": "emerging_equity",
           "weight": 0.2
         }
@@ -108,11 +116,11 @@
   "tax_free_accounts": [
     {
       "name": "ISA",
-      "starting_balance": 20000,
-      "growth_rate": 0.035,
+      "starting_balance": 39000.0,
+      "growth_rate": 0.05,
       "allocation": {
-        "mode": "template",
-        "template_id": "cautious_40_60",
+        "mode": "manual",
+        "template_id": "",
         "custom_weights": {},
         "manual_override": true
       },
@@ -120,30 +128,36 @@
       "holdings": [
         {
           "fund_name": "Vanguard FTSE Developed World ex-U.K. Equity Index",
+          "input_type": "isin",
+          "input_value": "GB00BPN5NY15",
           "benchmark_key": "developed_equity",
-          "weight": 0.286,
-          "isin": "GB00BPN5NY15"
+          "weight": 0.286
         },
         {
           "fund_name": "Vanguard Global Small-Cap Index",
+          "input_type": "isin",
+          "input_value": "IE00BPT2BD14",
           "benchmark_key": "global_smallcap",
-          "weight": 0.2799,
-          "isin": "IE00BPT2BD14"
+          "weight": 0.2799
         },
         {
           "fund_name": "L&G Global Emerging Markets Index",
+          "input_type": "isin",
+          "input_value": "GB00BG0QP489",
           "benchmark_key": "emerging_equity",
-          "weight": 0.2082,
-          "isin": "GB00BG0QP489"
+          "weight": 0.2082
         },
         {
           "fund_name": "iShares UK Equity Index",
+          "input_type": "isin",
+          "input_value": "GB00B7C44X99",
           "benchmark_key": "uk_largecap",
-          "weight": 0.0276,
-          "isin": "GB00B7C44X99"
+          "weight": 0.0276
         },
         {
           "fund_name": "Cash GBP",
+          "input_type": "manual_asset_class",
+          "input_value": "",
           "benchmark_key": "interest_rate",
           "weight": 0.1983
         }

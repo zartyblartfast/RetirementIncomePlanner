@@ -89,12 +89,62 @@ def _resolve_benchmark_return(benchmark_key, market_data):
     return (None, None, None)
 
 
+def normalize_holding(h):
+    """Normalize a holding dict to the canonical format.
+
+    Handles backward compatibility with old format where 'isin' was a
+    top-level field and 'input_type'/'input_value' did not exist.
+
+    Canonical format:
+        fund_name, input_type, input_value, benchmark_key, weight
+
+    Where input_type is one of: 'isin', 'lookup', 'manual_asset_class'
+
+    Returns:
+        dict in canonical format (new dict, does not mutate input)
+    """
+    normalized = {
+        "fund_name": h.get("fund_name", "Unknown"),
+        "benchmark_key": h.get("benchmark_key", ""),
+        "weight": h.get("weight", 0.0),
+    }
+
+    if "input_type" in h:
+        normalized["input_type"] = h["input_type"]
+        normalized["input_value"] = h.get("input_value", "")
+    elif h.get("isin"):
+        normalized["input_type"] = "isin"
+        normalized["input_value"] = h["isin"]
+    elif h.get("benchmark_key"):
+        normalized["input_type"] = "manual_asset_class"
+        normalized["input_value"] = ""
+    else:
+        normalized["input_type"] = "manual_asset_class"
+        normalized["input_value"] = ""
+
+    return normalized
+
+
+def normalize_holdings(holdings):
+    """Normalize a list of holdings to canonical format.
+
+    Args:
+        holdings: list of holding dicts (old or new format)
+
+    Returns:
+        list of holding dicts in canonical format
+    """
+    if not holdings:
+        return []
+    return [normalize_holding(h) for h in holdings]
+
+
 def calc_pot_blended_return(holdings, market_data):
     """Calculate the blended market return for a single pot.
 
     Args:
-        holdings: list of holding dicts from config
-                  [{fund_name, benchmark_key, weight, isin?}, ...]
+        holdings: list of holding dicts from config (old or new format)
+                  [{fund_name, input_type, input_value, benchmark_key, weight}, ...]
         market_data: dict returned by fetch_market_data()
 
     Returns:
@@ -106,21 +156,24 @@ def calc_pot_blended_return(holdings, market_data):
     if not holdings or not market_data:
         return None
 
+    normalized = normalize_holdings(holdings)
     details = []
     weighted_sum = 0.0
     covered_weight = 0.0
 
-    for h in holdings:
-        fund_name = h.get("fund_name", "Unknown")
-        benchmark_key = h.get("benchmark_key", "")
-        weight = h.get("weight", 0.0)
-        isin = h.get("isin", "")
+    for h in normalized:
+        fund_name = h["fund_name"]
+        benchmark_key = h["benchmark_key"]
+        weight = h["weight"]
+        input_type = h["input_type"]
+        input_value = h["input_value"]
 
         live_return, bm_label, proxy = _resolve_benchmark_return(benchmark_key, market_data)
 
         detail = {
             "fund_name": fund_name,
-            "isin": isin,
+            "input_type": input_type,
+            "input_value": input_value,
             "benchmark_key": benchmark_key,
             "benchmark_label": bm_label,
             "proxy_ticker": proxy,
