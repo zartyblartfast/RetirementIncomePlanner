@@ -413,7 +413,7 @@ class RetirementEngine:
     # ------------------------------------------------------------------ #
     #  Main projection  (truly monthly planning)
     # ------------------------------------------------------------------ #
-    def run_projection(self) -> dict:
+    def run_projection(self, include_monthly: bool = False) -> dict:
         cfg = self.cfg
         retirement_age = cfg["personal"]["retirement_age"]
         end_age = cfg["personal"]["end_age"]
@@ -626,6 +626,9 @@ class RetirementEngine:
         # Tax-year YTD taxable income (for tax context)
         taxable_ytd = 0.0
 
+        # Optional monthly debug rows
+        monthly_rows = [] if include_monthly else None
+
         # ------------------------------------------------------------ #
         #  MAIN MONTHLY LOOP
         #  Annual withdrawal plan at year boundaries; monthly execution.
@@ -642,39 +645,6 @@ class RetirementEngine:
             # ---- Year boundary: finalise previous, plan next ---- #
             if year_age != current_year_age:
                 if current_agg is not None:
-                    # Residual sweep
-                    RESIDUAL_THRESHOLD = 100.0
-                    for nm in list(dc_balances):
-                        if 0 < dc_balances[nm] < RESIDUAL_THRESHOLD:
-                            res = dc_balances[nm]
-                            dc_balances[nm] = 0.0
-                            current_agg["dc_gross"] += res
-                            _tfp = dc_meta[nm]["tax_free_portion"]
-                            current_agg["dc_tf"] += res * _tfp
-                            current_agg["withdrawal_detail"][nm] = (
-                                current_agg["withdrawal_detail"].get(nm, 0) + res)
-                            current_agg["pnl"][nm]["withdrawal"] += res
-                            if nm not in depleted_pots:
-                                depleted_pots.add(nm)
-                                depletion_events.append({"pot": nm, "age": current_agg["age"], "month": 12})
-                                if first_pot_exhausted_age is None:
-                                    first_pot_exhausted_age = current_agg["age"]
-                                warnings.append(f"{nm} exhausted at age {current_agg['age']} month 12")
-                    for nm in list(tf_balances):
-                        if 0 < tf_balances[nm] < RESIDUAL_THRESHOLD:
-                            res = tf_balances[nm]
-                            tf_balances[nm] = 0.0
-                            current_agg["tf_total"] += res
-                            current_agg["withdrawal_detail"][nm] = (
-                                current_agg["withdrawal_detail"].get(nm, 0) + res)
-                            current_agg["pnl"][nm]["withdrawal"] += res
-                            if nm not in depleted_pots:
-                                depleted_pots.add(nm)
-                                depletion_events.append({"pot": nm, "age": current_agg["age"], "month": 12})
-                                if first_pot_exhausted_age is None:
-                                    first_pot_exhausted_age = current_agg["age"]
-                                warnings.append(f"{nm} exhausted at age {current_agg['age']} month 12")
-
                     # Build annual row
                     total_taxable_yr = (current_agg["guaranteed_taxable"]
                                         + (current_agg["dc_gross"] - current_agg["dc_tf"]))
@@ -790,6 +760,8 @@ class RetirementEngine:
                     actual = min(remaining_dc, available)
                     if actual > 0:
                         dc_balances[source_name] -= actual
+                        if dc_balances[source_name] < 0.01:
+                            dc_balances[source_name] = 0.0
                         tfp = dc_meta[source_name]["tax_free_portion"]
                         current_agg["dc_gross"] += actual
                         current_agg["dc_tf"] += actual * tfp
@@ -804,6 +776,8 @@ class RetirementEngine:
                     actual = min(remaining_tf, available)
                     if actual > 0:
                         tf_balances[source_name] -= actual
+                        if tf_balances[source_name] < 0.01:
+                            tf_balances[source_name] = 0.0
                         current_agg["tf_total"] += actual
                         current_agg["withdrawal_detail"][source_name] = (
                             current_agg["withdrawal_detail"].get(source_name, 0) + actual)
@@ -812,7 +786,7 @@ class RetirementEngine:
 
             # ---- Step 4: Depletion detection ---- #
             for pname in list(dc_balances):
-                if dc_balances[pname] < 1 and pname not in depleted_pots:
+                if dc_balances[pname] <= 0 and pname not in depleted_pots:
                     depleted_pots.add(pname)
                     month_in_year = (abs_m - anchor_abs) % 12 + 1
                     depletion_events.append({
@@ -824,7 +798,7 @@ class RetirementEngine:
                     warnings.append(
                         f"{pname} exhausted at age {year_age} month {month_in_year}")
             for pname in list(tf_balances):
-                if tf_balances[pname] < 1 and pname not in depleted_pots:
+                if tf_balances[pname] <= 0 and pname not in depleted_pots:
                     depleted_pots.add(pname)
                     month_in_year = (abs_m - anchor_abs) % 12 + 1
                     depletion_events.append({
@@ -840,42 +814,34 @@ class RetirementEngine:
             monthly_target *= (1 + monthly_cpi)
             current_agg["months_counted"] += 1
 
+            # ---- Step 6: Collect monthly debug row ---- #
+            if monthly_rows is not None:
+                month_in_year = (abs_m - anchor_abs) % 12 + 1
+                monthly_rows.append({
+                    "year": cal_y,
+                    "month": cal_m,
+                    "age": year_age,
+                    "month_in_year": month_in_year,
+                    "target_monthly": round(monthly_target / (1 + monthly_cpi), 2),
+                    "guaranteed_this_month": round(
+                        sum(gi["monthly"] for gi in guaranteed
+                            if abs_m >= gi["start_abs"]
+                            and (gi["end_abs"] is None or abs_m <= gi["end_abs"])), 2),
+                    "dc_drawdown_this_month": round(
+                        monthly_dc_target - remaining_dc, 2),
+                    "tf_drawdown_this_month": round(
+                        monthly_tf_target - remaining_tf, 2),
+                    "dc_balances": {n: round(b, 2) for n, b in dc_balances.items()},
+                    "tf_balances": {n: round(b, 2) for n, b in tf_balances.items()},
+                    "total_capital": round(
+                        sum(dc_balances.values()) + sum(tf_balances.values()), 2),
+                    "depleted_this_month": [
+                        e["pot"] for e in depletion_events
+                        if e["age"] == year_age and e["month"] == month_in_year],
+                })
+
         # ---- Finalise last year ---- #
         if current_agg is not None and current_agg["months_counted"] > 0:
-            # Residual sweep
-            RESIDUAL_THRESHOLD = 100.0
-            for name in list(dc_balances):
-                if 0 < dc_balances[name] < RESIDUAL_THRESHOLD:
-                    residual = dc_balances[name]
-                    dc_balances[name] = 0.0
-                    current_agg["dc_gross"] += residual
-                    tfp = dc_meta[name]["tax_free_portion"]
-                    current_agg["dc_tf"] += residual * tfp
-                    taxable_ytd += residual * (1 - tfp)
-                    prev_wd = current_agg["withdrawal_detail"].get(name, 0)
-                    current_agg["withdrawal_detail"][name] = prev_wd + residual
-                    current_agg["pnl"][name]["withdrawal"] += residual
-                    if name not in depleted_pots:
-                        depleted_pots.add(name)
-                        depletion_events.append({"pot": name, "age": current_agg["age"], "month": 12})
-                        if first_pot_exhausted_age is None:
-                            first_pot_exhausted_age = current_agg["age"]
-                        warnings.append(f"{name} exhausted at age {current_agg['age']} month 12")
-            for name in list(tf_balances):
-                if 0 < tf_balances[name] < RESIDUAL_THRESHOLD:
-                    residual = tf_balances[name]
-                    tf_balances[name] = 0.0
-                    current_agg["tf_total"] += residual
-                    prev_wd = current_agg["withdrawal_detail"].get(name, 0)
-                    current_agg["withdrawal_detail"][name] = prev_wd + residual
-                    current_agg["pnl"][name]["withdrawal"] += residual
-                    if name not in depleted_pots:
-                        depleted_pots.add(name)
-                        depletion_events.append({"pot": name, "age": current_agg["age"], "month": 12})
-                        if first_pot_exhausted_age is None:
-                            first_pot_exhausted_age = current_agg["age"]
-                        warnings.append(f"{name} exhausted at age {current_agg['age']} month 12")
-
             total_taxable_final = (current_agg["guaranteed_taxable"]
                                    + (current_agg["dc_gross"] - current_agg["dc_tf"]))
             iom_tax = self.calculate_tax(total_taxable_final)
@@ -917,7 +883,10 @@ class RetirementEngine:
             "depletion_events": depletion_events,
         }
 
-        return {"years": years, "summary": summary, "warnings": warnings}
+        result = {"years": years, "summary": summary, "warnings": warnings}
+        if monthly_rows is not None:
+            result["monthly_rows"] = monthly_rows
+        return result
 
 def load_config(path: str = "config_default.json") -> dict:
     with open(path) as f:

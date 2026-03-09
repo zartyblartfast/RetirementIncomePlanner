@@ -623,5 +623,79 @@ class TestPreAnchorGrowth(unittest.TestCase):
         self.assertLess(opening, 106000)
 
 
+class TestMonthlyDebugOutput(unittest.TestCase):
+    """Verify the optional monthly debug rows."""
+
+    def setUp(self):
+        self.cfg = make_config(
+            personal={
+                "date_of_birth": "1960-01",
+                "retirement_date": "2028-01",
+                "retirement_age": 68,
+                "end_age": 70,
+                "currency": "GBP",
+            },
+            target_income={"net_annual": 12000, "cpi_rate": 0.0},
+            tax_free_accounts=[{
+                "name": "ISA",
+                "starting_balance": 50000,
+                "growth_rate": 0.0,
+                "allocation": {"mode": "manual", "manual_override": True},
+                "values_as_of": "2028-01",
+            }],
+            withdrawal_priority=["ISA"],
+        )
+
+    def test_default_no_monthly_rows(self):
+        result = RetirementEngine(self.cfg).run_projection()
+        self.assertNotIn("monthly_rows", result)
+
+    def test_flag_false_no_monthly_rows(self):
+        result = RetirementEngine(self.cfg).run_projection(include_monthly=False)
+        self.assertNotIn("monthly_rows", result)
+
+    def test_flag_true_has_monthly_rows(self):
+        result = RetirementEngine(self.cfg).run_projection(include_monthly=True)
+        self.assertIn("monthly_rows", result)
+
+    def test_monthly_row_count(self):
+        result = RetirementEngine(self.cfg).run_projection(include_monthly=True)
+        # Ages 68-70 inclusive = 3 years × 12 months = 36 rows
+        self.assertEqual(len(result["monthly_rows"]), 36)
+
+    def test_monthly_row_keys(self):
+        result = RetirementEngine(self.cfg).run_projection(include_monthly=True)
+        expected = {
+            "year", "month", "age", "month_in_year", "target_monthly",
+            "guaranteed_this_month", "dc_drawdown_this_month",
+            "tf_drawdown_this_month", "dc_balances", "tf_balances",
+            "total_capital", "depleted_this_month",
+        }
+        self.assertTrue(expected.issubset(set(result["monthly_rows"][0].keys())))
+
+    def test_annual_output_unchanged_with_flag(self):
+        without = RetirementEngine(self.cfg).run_projection(include_monthly=False)
+        with_monthly = RetirementEngine(self.cfg).run_projection(include_monthly=True)
+        # Annual years and summary should be identical
+        self.assertEqual(len(without["years"]), len(with_monthly["years"]))
+        self.assertEqual(without["summary"], with_monthly["summary"])
+        for i, yr in enumerate(without["years"]):
+            self.assertEqual(yr["age"], with_monthly["years"][i]["age"])
+            self.assertAlmostEqual(
+                yr["net_income_achieved"],
+                with_monthly["years"][i]["net_income_achieved"], places=2)
+
+    def test_balances_decrease_over_months(self):
+        result = RetirementEngine(self.cfg).run_projection(include_monthly=True)
+        rows = result["monthly_rows"]
+        # ISA balance should decrease as withdrawals happen
+        self.assertGreater(rows[0]["total_capital"], rows[-1]["total_capital"])
+
+    def test_first_month_target(self):
+        result = RetirementEngine(self.cfg).run_projection(include_monthly=True)
+        # Monthly target ≈ 12000 / 12 = 1000
+        self.assertAlmostEqual(result["monthly_rows"][0]["target_monthly"], 1000, delta=5)
+
+
 if __name__ == "__main__":
     unittest.main()
