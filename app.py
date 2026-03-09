@@ -238,17 +238,18 @@ def dashboard():
     ext_engine = RetirementEngine(ext_cfg)
     ext_result = ext_engine.run_projection()
     plan_end_age = cfg["personal"]["end_age"]
-    # Find depletion age: use engine's depletion_events (last pot to deplete)
-    # or fall back to first age where total_capital <= 0
+    # Find depletion age: first year where TOTAL capital is effectively zero.
+    # This drives the "Capital Depleted" chart marker.
+    # Note: depletion_events in the engine track individual pot exhaustion,
+    # which is different — do NOT use them for the total-capital marker.
+    # The engine uses last-residual-drawdown logic to sweep near-empty pots,
+    # so total_capital should reach zero cleanly without a long tail.
+    DEPLETION_EPSILON = 1.0
     depletion_age = None
-    dep_events = ext_result.get("summary", {}).get("depletion_events", [])
-    if dep_events:
-        depletion_age = max(ev["age"] for ev in dep_events)
-    else:
-        for yr in ext_result["years"]:
-            if yr["total_capital"] <= 0:
-                depletion_age = yr["age"]
-                break
+    for yr in ext_result["years"]:
+        if yr["total_capital"] <= DEPLETION_EPSILON:
+            depletion_age = yr["age"]
+            break
     # Trim extended years: always show depletion visually if it occurs
     if depletion_age:
         chart_end = max(plan_end_age + 5, depletion_age + 2)

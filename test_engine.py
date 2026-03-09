@@ -85,9 +85,10 @@ class TestZeroGrowthDepletion(unittest.TestCase):
         ev = self.result["summary"]["depletion_events"][0]
         self.assertEqual(ev["pot"], "Cash ISA")
         self.assertEqual(ev["age"], 70)
-        # Annual plan caps withdrawal at pot balance (£6k) and spreads
-        # over 12 months (£500/mo), so depletion occurs at month 12.
-        self.assertEqual(ev["month"], 12)
+        # Annual plan spreads £6k over 12 months (£500/mo).  After month 11
+        # the remaining £500 < monthly target (£1k), so the last-residual
+        # drawdown sweeps it → depletion at month 11.
+        self.assertEqual(ev["month"], 11)
 
     def test_year1_balance(self):
         yr0 = self.result["years"][0]

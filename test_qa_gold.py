@@ -97,9 +97,10 @@ class TestGold_ZeroGrowthExactDepletion(unittest.TestCase):
         self.assertEqual(self.s["depletion_events"][0]["age"], 70)
 
     def test_depletion_month(self):
-        # Annual plan caps withdrawal at pot balance (£6k) and spreads
-        # over 12 months (£500/mo), so depletion occurs at month 12.
-        self.assertEqual(self.s["depletion_events"][0]["month"], 12)
+        # Annual plan spreads £6k over 12 months (£500/mo).  After month 11
+        # the remaining £500 < monthly target (£1k), so the last-residual
+        # drawdown sweeps it → depletion at month 11.
+        self.assertEqual(self.s["depletion_events"][0]["month"], 11)
 
     def test_year1_capital(self):
         self.assertAlmostEqual(
@@ -372,6 +373,87 @@ class TestGold_BaselineRealistic(unittest.TestCase):
     def test_yr0_net_meets_target(self):
         yr0 = self.r["years"][0]
         self.assertGreaterEqual(yr0["net_income_achieved"], yr0["target_net"] - 1)
+
+
+# ===================================================================
+#  Scenario 7: Regression — total-capital depletion age vs pot depletion
+#  Two pots deplete at different ages. The "Capital Depleted" marker
+#  should be based on when TOTAL capital hits zero, not when the last
+#  individual pot depletes.
+#
+#  ISA-A (£10k, priority 1) depletes first.
+#  ISA-B (£5k, priority 2) depletes later.
+#  Total capital depletion = when ISA-B hits zero (since it's the last).
+#  The dashboard must use total_capital <= epsilon, not max(pot depletion ages).
+# ===================================================================
+class TestGold_TotalCapitalDepletionAge(unittest.TestCase):
+    """Regression: depletion marker must reflect total capital, not last pot event."""
+
+    # Match the dashboard logic: capital is "effectively depleted" when it
+    # can't cover one month of target income.
+    DEPLETION_EPSILON = 0.01  # For this scenario (TF-only, 0 growth), exact zero is reached
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cfg = _cfg(
+            personal={
+                "date_of_birth": "1960-01",
+                "retirement_date": "2028-01",
+                "retirement_age": 68,
+                "end_age": 78,
+                "currency": "GBP",
+            },
+            target_income={"net_annual": 12000, "cpi_rate": 0.0},
+            tax_free_accounts=[
+                {
+                    "name": "ISA-A",
+                    "starting_balance": 10000,
+                    "growth_rate": 0.0,
+                    "allocation": {"mode": "manual", "manual_override": True},
+                    "values_as_of": "2028-01",
+                },
+                {
+                    "name": "ISA-B",
+                    "starting_balance": 5000,
+                    "growth_rate": 0.0,
+                    "allocation": {"mode": "manual", "manual_override": True},
+                    "values_as_of": "2028-01",
+                },
+            ],
+            withdrawal_priority=["ISA-A", "ISA-B"],
+        )
+        cls.r = RetirementEngine(cls.cfg).run_projection()
+        cls.s = cls.r["summary"]
+
+    def test_isa_a_depletes_before_isa_b(self):
+        dep = {e["pot"]: e["age"] for e in self.s["depletion_events"]}
+        self.assertIn("ISA-A", dep)
+        self.assertIn("ISA-B", dep)
+        self.assertLessEqual(dep["ISA-A"], dep["ISA-B"])
+
+    def test_total_capital_depletion_age(self):
+        """The dashboard logic: first year where total_capital <= epsilon."""
+        depletion_age = None
+        for yr in self.r["years"]:
+            if yr["total_capital"] <= self.DEPLETION_EPSILON:
+                depletion_age = yr["age"]
+                break
+        # Total capital depletes when ISA-B (the last source) hits zero.
+        # This must equal the ISA-B depletion age, NOT be later.
+        isa_b_dep = next(e["age"] for e in self.s["depletion_events"]
+                         if e["pot"] == "ISA-B")
+        self.assertEqual(depletion_age, isa_b_dep)
+
+    def test_depletion_age_not_after_last_pot(self):
+        """Ensure total-capital depletion is never LATER than last pot depletion."""
+        depletion_age = None
+        for yr in self.r["years"]:
+            if yr["total_capital"] <= self.DEPLETION_EPSILON:
+                depletion_age = yr["age"]
+                break
+        max_pot_age = max(e["age"] for e in self.s["depletion_events"])
+        if depletion_age is not None:
+            self.assertLessEqual(depletion_age, max_pot_age)
 
 
 if __name__ == "__main__":

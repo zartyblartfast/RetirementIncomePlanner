@@ -760,7 +760,13 @@ class RetirementEngine:
                     actual = min(remaining_dc, available)
                     if actual > 0:
                         dc_balances[source_name] -= actual
-                        if dc_balances[source_name] < 0.01:
+                        # Last-residual drawdown: if what's left can't
+                        # cover a full month's income, sweep the rest.
+                        residual = dc_balances[source_name]
+                        if 0 < residual < monthly_target:
+                            actual += residual
+                            dc_balances[source_name] = 0.0
+                        elif residual < 0.01:
                             dc_balances[source_name] = 0.0
                         tfp = dc_meta[source_name]["tax_free_portion"]
                         current_agg["dc_gross"] += actual
@@ -776,7 +782,13 @@ class RetirementEngine:
                     actual = min(remaining_tf, available)
                     if actual > 0:
                         tf_balances[source_name] -= actual
-                        if tf_balances[source_name] < 0.01:
+                        # Last-residual drawdown: if what's left can't
+                        # cover a full month's income, sweep the rest.
+                        residual = tf_balances[source_name]
+                        if 0 < residual < monthly_target:
+                            actual += residual
+                            tf_balances[source_name] = 0.0
+                        elif residual < 0.01:
                             tf_balances[source_name] = 0.0
                         current_agg["tf_total"] += actual
                         current_agg["withdrawal_detail"][source_name] = (
