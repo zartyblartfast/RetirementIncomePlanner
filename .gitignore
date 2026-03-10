@@ -13,8 +13,9 @@ output/
 # Scenarios (may contain personal financial data)
 scenarios/
 
-# Session/config overrides
+# Session/config overrides (user data — must not be overwritten by deploy)
 config_live.json
+config_active.json
 
 # Backups
 *.bak
