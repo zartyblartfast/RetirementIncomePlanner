@@ -9,9 +9,17 @@ from flask import (Flask, render_template, request, redirect, url_for,
 from retirement_engine import RetirementEngine, load_config, load_asset_model, resolve_growth_rate, resolve_growth_provenance
 from market_data import fetch_market_data, get_all_pot_intelligence
 from optimiser import Optimiser
+from version import get_version_info
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "pension-planner-secret-key-2025")
+
+# ------------------------------------------------------------------ #
+#  Version info — available in all templates as {{ version_info }}
+# ------------------------------------------------------------------ #
+@app.context_processor
+def inject_version():
+    return {"version_info": get_version_info()}
 
 # ------------------------------------------------------------------ #
 #  Asset Model (read-only reference data)
