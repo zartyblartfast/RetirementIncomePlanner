@@ -552,7 +552,7 @@ def compare():
                 dep_age = yr["age"]
                 break
         if dep_age:
-            chart_end = min(120, max(plan_end_age + 5, dep_age + 2))
+            chart_end = min(120, max(plan_end_age, dep_age))
         else:
             chart_end = min(120, plan_end_age + 5)
         ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= chart_end]
