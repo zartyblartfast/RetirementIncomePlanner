@@ -215,5 +215,50 @@
     </div>
 </div>
 
+<!-- Q5: Income Sweep -->
+<div class="col-12">
+    <div class="card h-100">
+        <div class="card-header bg-dark text-white"><i class="bi bi-graph-up-arrow"></i> Q5: Income Sweep — Best Strategy at Each Income Level</div>
+        <div class="card-body">
+            <p class="text-muted">For each target income, the optimal drawdown order is automatically determined (end age fixed at {{ results.income_sweep.end_age }}).</p>
+            {% set q5 = results.income_sweep %}
+            {% if q5.rows %}
+            <div class="table-responsive">
+            <table class="table table-sm table-striped table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Target Income</th>
+                        <th>Best Drawdown Order</th>
+                        <th>Sustainable?</th>
+                        <th>Capital at {{ q5.end_age }}</th>
+                        <th>Total Tax</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in q5.rows %}
+                    <tr class="{% if row.is_current %}table-primary fw-bold{% elif not row.sustainable %}table-light text-muted{% endif %}">
+                        <td>&pound;{{ "{:,.0f}".format(row.income) }}{% if row.is_current %} <span class="badge bg-primary">Current</span>{% endif %}</td>
+                        <td class="small">{{ row.best_order_label }}</td>
+                        <td>
+                            {% if row.sustainable %}
+                                <span class="text-success"><i class="bi bi-check-circle-fill"></i> Yes</span>
+                            {% else %}
+                                <span class="text-danger"><i class="bi bi-x-circle-fill"></i> No (age {{ row.first_shortfall_age }})</span>
+                            {% endif %}
+                        </td>
+                        <td>&pound;{{ "{:,.0f}".format(row.remaining_capital) }}</td>
+                        <td>&pound;{{ "{:,.0f}".format(row.total_tax) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <p class="text-muted">No drawable sources configured.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
 </div>
 {% endblock %}

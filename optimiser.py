@@ -763,18 +763,109 @@ if __name__ == '__main__':
 
 
 # =====================================================================
+# Q5: Income Sweep — best drawdown order at each income level
+# =====================================================================
+def find_income_sweep(base_config: dict, max_sustainable_income: float) -> dict:
+    """
+    Sweep target income from 70% of current up to the max sustainable level,
+    auto-finding the best drawdown order at each step.
+
+    Returns:
+        {
+            'rows': [{income, best_order, best_order_label, sustainable,
+                      remaining_capital, total_tax, is_current}],
+            'current_income': float,
+            'end_age': int,
+        }
+    """
+    current_income = base_config['target_income']['net_annual']
+    end_age = base_config['personal']['end_age']
+    all_sources = _get_all_drawable_sources(base_config)
+
+    # Determine sweep range
+    lo = max(1000, round(current_income * 0.7, -3))  # round to nearest £1k
+    hi = round(max_sustainable_income, -3)
+    if hi <= lo:
+        hi = lo + 5000
+
+    # Pick step size to keep ~10-20 rows
+    span = hi - lo
+    if span <= 10000:
+        step = 1000
+    elif span <= 30000:
+        step = 2000
+    else:
+        step = 5000
+
+    incomes = list(range(int(lo), int(hi) + 1, int(step)))
+    # Ensure current income is included
+    if current_income not in incomes:
+        incomes.append(current_income)
+        incomes.sort()
+
+    rows = []
+    for income in incomes:
+        best = None
+        for perm in itertools.permutations(all_sources):
+            perm_list = list(perm)
+            cfg = copy.deepcopy(base_config)
+            cfg['target_income']['net_annual'] = income
+            cfg['withdrawal_priority'] = perm_list
+            result = RetirementEngine(cfg).run_projection()
+            s = result['summary']
+            entry = {
+                'priority': perm_list,
+                'remaining_capital': s['remaining_capital'],
+                'total_tax': s['total_tax_paid'],
+                'sustainable': s['sustainable'],
+                'first_shortfall_age': s['first_shortfall_age'],
+            }
+            # Pick best: sustainable first, then highest remaining capital
+            if best is None:
+                best = entry
+            elif (entry['sustainable'] and not best['sustainable']):
+                best = entry
+            elif (entry['sustainable'] == best['sustainable']
+                  and entry['remaining_capital'] > best['remaining_capital']):
+                best = entry
+
+        rows.append({
+            'income': income,
+            'best_order': best['priority'],
+            'best_order_label': ' \u2192 '.join(best['priority']),
+            'sustainable': best['sustainable'],
+            'first_shortfall_age': best['first_shortfall_age'],
+            'remaining_capital': best['remaining_capital'],
+            'total_tax': best['total_tax'],
+            'is_current': (income == current_income),
+        })
+
+    return {
+        'rows': rows,
+        'current_income': current_income,
+        'end_age': end_age,
+    }
+
+
+# =====================================================================
 # Wrapper class for Flask app integration
 # =====================================================================
 class Optimiser:
-    """Convenience wrapper that runs all four optimisation questions."""
+    """Convenience wrapper that runs all optimisation questions."""
 
     def __init__(self, config: dict):
         self.config = config
 
     def run_all(self) -> dict:
+        q1 = find_best_drawdown_order(self.config)
+        q2 = find_max_sustainable_income(self.config)
+        q3 = find_max_sustainable_age(self.config)
+        q4 = find_tax_efficient_strategy(self.config)
+        q5 = find_income_sweep(self.config, q2['max_income'])
         return {
-            "best_drawdown": find_best_drawdown_order(self.config),
-            "max_income": find_max_sustainable_income(self.config),
-            "max_age": find_max_sustainable_age(self.config),
-            "tax_efficient": find_tax_efficient_strategy(self.config),
+            "best_drawdown": q1,
+            "max_income": q2,
+            "max_age": q3,
+            "tax_efficient": q4,
+            "income_sweep": q5,
         }
