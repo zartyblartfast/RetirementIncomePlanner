@@ -25,7 +25,7 @@ Design principles
 """
 
 import unittest
-from retirement_engine import RetirementEngine, load_config
+from retirement_engine import RetirementEngine
 
 
 # ---------------------------------------------------------------------------
@@ -315,24 +315,60 @@ class TestGold_CPICompoundsTarget(unittest.TestCase):
 
 
 # ===================================================================
-#  Scenario 6: Baseline realistic projection (config_active.json)
-#  Uses the real-world configuration with LOOSE tolerances.
-#  Only a few meaningful checkpoints — not overfitted.
+#  Scenario 6: Realistic multi-source projection (fixed config)
+#  DB Pension £12k/yr (2% indexation), DC £150k (4% growth, 0.5% fees),
+#  ISA £50k (3% growth). Target £20k/yr net, 2% CPI. IoM tax.
 #
-#  Expected baseline (captured 2026-03-09):
+#  Expected baseline:
 #    sustainable: True
 #    num_years: 23
-#    first_pot_exhausted_age: 75 (Employer DC Pot)
-#    remaining_capital: ~£93,811
-#    yr0 capital: ~£307,767
-#    yr5 capital: ~£296,744
+#    ISA depletes first (~age 74)
+#    yr0 capital: ~£198,617
+#    yr5 capital: ~£188,866
+#    remaining_capital: ~£67,120
+#    total_tax: ~£24,586
 # ===================================================================
 class TestGold_BaselineRealistic(unittest.TestCase):
-    """Real-world config with loose checkpoints to catch major regressions."""
+    """Fixed multi-source config — deterministic, no user data dependency."""
 
     @classmethod
     def setUpClass(cls):
-        cls.cfg = load_config("config_active.json")
+        cls.cfg = _cfg(
+            personal={
+                "date_of_birth": "1960-01",
+                "retirement_date": "2028-01",
+                "retirement_age": 68,
+                "end_age": 90,
+                "currency": "GBP",
+            },
+            target_income={"net_annual": 20000, "cpi_rate": 0.02},
+            guaranteed_income=[{
+                "name": "DB Pension",
+                "gross_annual": 12000,
+                "indexation_rate": 0.02,
+                "start_age": 68,
+                "end_age": None,
+                "taxable": True,
+                "values_as_of": "2028-01",
+            }],
+            dc_pots=[{
+                "name": "Main DC",
+                "starting_balance": 150000,
+                "growth_rate": 0.04,
+                "annual_fees": 0.005,
+                "tax_free_portion": 0.25,
+                "allocation": {"mode": "manual", "manual_override": True},
+                "values_as_of": "2028-01",
+            }],
+            tax_free_accounts=[{
+                "name": "ISA",
+                "starting_balance": 50000,
+                "growth_rate": 0.03,
+                "allocation": {"mode": "manual", "manual_override": True},
+                "values_as_of": "2028-01",
+            }],
+            withdrawal_priority=["ISA", "Main DC"],
+        )
         cls.r = RetirementEngine(cls.cfg).run_projection()
         cls.s = cls.r["summary"]
 
@@ -342,33 +378,28 @@ class TestGold_BaselineRealistic(unittest.TestCase):
     def test_num_years(self):
         self.assertEqual(self.s["num_years"], 23)
 
-    def test_first_pot_exhausted_is_employer_dc(self):
+    def test_isa_depletes_first(self):
         self.assertGreater(len(self.s["depletion_events"]), 0)
-        self.assertEqual(
-            self.s["depletion_events"][0]["pot"], "Employer DC Pot")
+        self.assertEqual(self.s["depletion_events"][0]["pot"], "ISA")
 
-    def test_employer_dc_depletes_around_age_75(self):
-        evt = self.s["depletion_events"][0]
-        self.assertAlmostEqual(evt["age"], 75, delta=1)
-
-    def test_yr0_capital_around_308k(self):
+    def test_yr0_capital(self):
         self.assertAlmostEqual(
-            self.r["years"][0]["total_capital"], 307767, delta=5000)
+            self.r["years"][0]["total_capital"], 198617, delta=500)
 
-    def test_yr5_capital_around_297k(self):
+    def test_yr5_capital(self):
         self.assertAlmostEqual(
-            self.r["years"][5]["total_capital"], 296744, delta=5000)
+            self.r["years"][5]["total_capital"], 188866, delta=500)
 
-    def test_remaining_capital_around_94k(self):
+    def test_remaining_capital(self):
         self.assertAlmostEqual(
-            self.s["remaining_capital"], 93811, delta=5000)
+            self.s["remaining_capital"], 67120, delta=500)
 
-    def test_total_tax_reasonable(self):
+    def test_total_tax(self):
         self.assertAlmostEqual(
-            self.s["total_tax_paid"], 156300, delta=5000)
+            self.s["total_tax_paid"], 24586, delta=500)
 
     def test_yr0_guaranteed_income_positive(self):
-        self.assertGreater(self.r["years"][0]["guaranteed_total"], 20000)
+        self.assertGreater(self.r["years"][0]["guaranteed_total"], 0)
 
     def test_yr0_net_meets_target(self):
         yr0 = self.r["years"][0]
@@ -462,7 +493,7 @@ class TestGold_TotalCapitalDepletionAge(unittest.TestCase):
 #  deliver net_income_achieved >= target_net.  This is the test a
 #  real user cares about: "Can I rely on this number?"
 #
-#  We run this against the real config_active.json AND against a
+#  We run this against a fixed multi-source config AND against a
 #  synthetic config with only DC pots (taxable path).
 # ===================================================================
 class TestGold_SustainableMeansNetMeetsTarget(unittest.TestCase):
@@ -470,8 +501,43 @@ class TestGold_SustainableMeansNetMeetsTarget(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        # Real-world config
-        cls.real_cfg = load_config("config_active.json")
+        # Multi-source config (same as Scenario 6)
+        cls.real_cfg = _cfg(
+            personal={
+                "date_of_birth": "1960-01",
+                "retirement_date": "2028-01",
+                "retirement_age": 68,
+                "end_age": 90,
+                "currency": "GBP",
+            },
+            target_income={"net_annual": 20000, "cpi_rate": 0.02},
+            guaranteed_income=[{
+                "name": "DB Pension",
+                "gross_annual": 12000,
+                "indexation_rate": 0.02,
+                "start_age": 68,
+                "end_age": None,
+                "taxable": True,
+                "values_as_of": "2028-01",
+            }],
+            dc_pots=[{
+                "name": "Main DC",
+                "starting_balance": 150000,
+                "growth_rate": 0.04,
+                "annual_fees": 0.005,
+                "tax_free_portion": 0.25,
+                "allocation": {"mode": "manual", "manual_override": True},
+                "values_as_of": "2028-01",
+            }],
+            tax_free_accounts=[{
+                "name": "ISA",
+                "starting_balance": 50000,
+                "growth_rate": 0.03,
+                "allocation": {"mode": "manual", "manual_override": True},
+                "values_as_of": "2028-01",
+            }],
+            withdrawal_priority=["ISA", "Main DC"],
+        )
         cls.real_r = RetirementEngine(cls.real_cfg).run_projection()
         cls.real_s = cls.real_r["summary"]
 

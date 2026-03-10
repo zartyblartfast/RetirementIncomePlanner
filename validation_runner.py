@@ -295,29 +295,70 @@ def _scenario_05_cpi_compounds():
 
 
 def _scenario_06_baseline_realistic():
-    """Scenario 6: Baseline realistic projection (config_active.json)."""
-    cfg = load_config("config_active.json")
+    """Scenario 6: Realistic multi-source projection (fixed config)."""
+    cfg = _cfg(
+        personal={
+            "date_of_birth": "1960-01",
+            "retirement_date": "2028-01",
+            "retirement_age": 68,
+            "end_age": 90,
+            "currency": "GBP",
+        },
+        target_income={"net_annual": 20000, "cpi_rate": 0.02},
+        guaranteed_income=[{
+            "name": "DB Pension",
+            "gross_annual": 12000,
+            "indexation_rate": 0.02,
+            "start_age": 68,
+            "end_age": None,
+            "taxable": True,
+            "values_as_of": "2028-01",
+        }],
+        dc_pots=[{
+            "name": "Main DC",
+            "starting_balance": 150000,
+            "growth_rate": 0.04,
+            "annual_fees": 0.005,
+            "tax_free_portion": 0.25,
+            "allocation": {"mode": "manual", "manual_override": True},
+            "values_as_of": "2028-01",
+        }],
+        tax_free_accounts=[{
+            "name": "ISA",
+            "starting_balance": 50000,
+            "growth_rate": 0.03,
+            "allocation": {"mode": "manual", "manual_override": True},
+            "values_as_of": "2028-01",
+        }],
+        withdrawal_priority=["ISA", "Main DC"],
+    )
     r = RetirementEngine(cfg).run_projection()
     s = r["summary"]
 
     return {
         "id": 6,
-        "title": "Baseline Realistic Projection",
-        "description": "Full real-world configuration (config_active.json) with multiple income sources, pots, and IoM tax.",
-        "purpose": "Regression check against a known-good baseline. Loose tolerances (±£5,000) to avoid brittleness.",
+        "title": "Realistic Multi-Source Projection",
+        "description": (
+            "DB Pension £12k/yr (2% indexation), DC pot £150k (4% growth, 0.5% fees), "
+            "ISA £50k (3% growth). Target £20k/yr net with 2% CPI. IoM tax."
+        ),
+        "purpose": (
+            "Integration test combining guaranteed income, DC drawdown with tax gross-up, "
+            "ISA withdrawals, growth, fees, CPI, and IoM tax in one realistic scenario."
+        ),
         "hand_calculation": (
-            "Baseline captured 2026-03-09. Sustainable plan with 23 projection years. "
-            "First pot exhausted: Employer DC at ~age 75. "
-            "Year 0 capital ~£308k, Year 5 ~£297k, remaining ~£94k, total tax ~£156k."
+            "Sustainable plan over 23 years. ISA depletes first (~age 74) since it's priority 1. "
+            "Year 0 capital ~£199k (growth applied to £200k starting, minus withdrawals). "
+            "Year 5 capital ~£189k. Remaining capital ~£67k. Total IoM tax ~£25k."
         ),
         "checks": [
             _check_bool("Sustainable", s["sustainable"], True),
             _check("Projection years", s["num_years"], 23, 0, "years"),
-            _check_bool("First pot exhausted", s["depletion_events"][0]["pot"], "Employer DC Pot"),
-            _check("Year 0 capital", r["years"][0]["total_capital"], 307767, 5000),
-            _check("Year 5 capital", r["years"][5]["total_capital"], 296744, 5000),
-            _check("Remaining capital", s["remaining_capital"], 93811, 5000),
-            _check("Total IoM tax", s["total_tax_paid"], 156300, 5000),
+            _check_bool("ISA depletes first", s["depletion_events"][0]["pot"], "ISA"),
+            _check("Year 0 capital", r["years"][0]["total_capital"], 198617, 500),
+            _check("Year 5 capital", r["years"][5]["total_capital"], 188866, 500),
+            _check("Remaining capital", s["remaining_capital"], 67120, 500),
+            _check("Total IoM tax", s["total_tax_paid"], 24586, 500),
         ],
     }
 
