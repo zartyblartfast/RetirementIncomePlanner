@@ -10,6 +10,7 @@ from retirement_engine import RetirementEngine, load_config, load_asset_model, r
 from market_data import fetch_market_data, get_all_pot_intelligence
 from optimiser import Optimiser
 from version import get_version_info
+from validation_runner import run_all_scenarios, ALL_SCENARIOS
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "pension-planner-secret-key-2025")
@@ -590,6 +591,23 @@ def api_projection():
     engine = RetirementEngine(cfg)
     result = engine.run_projection()
     return jsonify(result)
+
+# ------------------------------------------------------------------ #
+#  Validation
+# ------------------------------------------------------------------ #
+@app.route("/validation", methods=["GET", "POST"])
+@login_required
+def validation():
+    from datetime import datetime
+    results = None
+    generated_at = None
+    if request.method == "POST":
+        results = run_all_scenarios()
+        generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    return render_template("validation.html",
+                           results=results,
+                           generated_at=generated_at,
+                           scenario_count=len(ALL_SCENARIOS))
 
 # ------------------------------------------------------------------ #
 #  How It Works

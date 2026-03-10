@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}Validation Report{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col">
+        <h2><i class="bi bi-shield-check"></i> Scenario Validation Tests</h2>
+        <p class="text-muted">
+            Run the engine's gold scenarios to verify calculation correctness.
+            Each scenario includes hand-calculated expected values, plain-English
+            explanations, and pass/fail checks.
+        </p>
+    </div>
+</div>
+
+{% if not results %}
+<!-- Initial state: show the Run button -->
+<div class="text-center my-5">
+    <form method="POST" action="{{ url_for('validation') }}">
+        <button type="submit" class="btn btn-primary btn-lg">
+            <i class="bi bi-play-circle"></i> Run Scenario Validation Tests
+        </button>
+    </form>
+    <p class="text-muted mt-2">Runs {{ scenario_count }} scenarios with {{ "~50+" }} checks against the projection engine.</p>
+</div>
+
+{% else %}
+<!-- Results -->
+
+<!-- Summary bar -->
+<div class="row mb-4">
+    <div class="col-md-8 mx-auto">
+        {% if results.all_passed %}
+        <div class="alert alert-success text-center" role="alert">
+            <h4 class="alert-heading mb-1">
+                <i class="bi bi-check-circle-fill"></i> All Checks Passed
+            </h4>
+            <strong>{{ results.passed_checks }}/{{ results.total_checks }}</strong> checks across
+            <strong>{{ results.scenarios|length }}</strong> scenarios
+        </div>
+        {% else %}
+        <div class="alert alert-danger text-center" role="alert">
+            <h4 class="alert-heading mb-1">
+                <i class="bi bi-x-circle-fill"></i> {{ results.failed_checks }} Check{{ "s" if results.failed_checks != 1 }} Failed
+            </h4>
+            <strong>{{ results.passed_checks }}/{{ results.total_checks }}</strong> checks passed across
+            <strong>{{ results.scenarios|length }}</strong> scenarios
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Action buttons -->
+<div class="row mb-4">
+    <div class="col text-center">
+        <form method="POST" action="{{ url_for('validation') }}" class="d-inline">
+            <button type="submit" class="btn btn-outline-primary me-2">
+                <i class="bi bi-arrow-clockwise"></i> Re-run Tests
+            </button>
+        </form>
+        <button onclick="window.print()" class="btn btn-outline-secondary">
+            <i class="bi bi-file-earmark-pdf"></i> Download PDF Report
+        </button>
+    </div>
+</div>
+
+<!-- Scenario cards -->
+<div class="accordion" id="scenarioAccordion">
+{% for s in results.scenarios %}
+    {% set scenario_passed = s.checks|selectattr("passed", "false")|list|length == 0 %}
+    {% set badge_class = "bg-success" if scenario_passed else "bg-danger" %}
+    {% set icon = "bi-check-circle-fill text-success" if scenario_passed else "bi-x-circle-fill text-danger" %}
+
+    <div class="accordion-item">
+        <h2 class="accordion-header" id="heading{{ s.id }}">
+            <button class="accordion-button {% if scenario_passed %}collapsed{% endif %}"
+                    type="button" data-bs-toggle="collapse"
+                    data-bs-target="#collapse{{ s.id }}"
+                    aria-expanded="{{ 'true' if not scenario_passed else 'false' }}">
+                <i class="bi {{ icon }} me-2"></i>
+                <strong>Scenario {{ s.id }}:</strong>&nbsp;{{ s.title }}
+                <span class="badge {{ badge_class }} ms-2">
+                    {{ s.checks|selectattr("passed")|list|length }}/{{ s.checks|length }}
+                </span>
+            </button>
+        </h2>
+        <div id="collapse{{ s.id }}"
+             class="accordion-collapse collapse {% if not scenario_passed %}show{% endif %}"
+             data-bs-parent="#scenarioAccordion">
+            <div class="accordion-body">
+                <!-- Description -->
+                <div class="mb-3">
+                    <h6 class="text-primary">Setup</h6>
+                    <p>{{ s.description }}</p>
+                </div>
+
+                <!-- Purpose -->
+                <div class="mb-3">
+                    <h6 class="text-primary">What This Tests</h6>
+                    <p>{{ s.purpose }}</p>
+                </div>
+
+                <!-- Hand calculation -->
+                <div class="mb-3">
+                    <h6 class="text-primary">Hand Calculation / Expected Values</h6>
+                    <p class="font-monospace small bg-light p-2 rounded">{{ s.hand_calculation }}</p>
+                </div>
+
+                <!-- Checks table -->
+                <h6 class="text-primary">Checks</h6>
+                <table class="table table-sm table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 30px;"></th>
+                            <th>Check</th>
+                            <th class="text-end">Expected</th>
+                            <th class="text-end">Actual</th>
+                            <th class="text-end">Tolerance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for c in s.checks %}
+                        <tr class="{{ 'table-danger' if not c.passed else '' }}">
+                            <td class="text-center">
+                                {% if c.passed %}
+                                    <i class="bi bi-check-circle-fill text-success"></i>
+                                {% else %}
+                                    <i class="bi bi-x-circle-fill text-danger"></i>
+                                {% endif %}
+                            </td>
+                            <td>{{ c.label }}</td>
+                            <td class="text-end font-monospace">
+                                {% if c.expected is number %}
+                                    {% if c.unit == "£" %}£{% endif %}{{ "{:,.2f}".format(c.expected) }}{% if c.unit and c.unit not in ["£"] %} {{ c.unit }}{% endif %}
+                                {% else %}
+                                    {{ c.expected }}
+                                {% endif %}
+                            </td>
+                            <td class="text-end font-monospace">
+                                {% if c.actual is number %}
+                                    {% if c.unit == "£" %}£{% endif %}{{ "{:,.2f}".format(c.actual) }}{% if c.unit and c.unit not in ["£"] %} {{ c.unit }}{% endif %}
+                                {% else %}
+                                    {{ c.actual }}
+                                {% endif %}
+                            </td>
+                            <td class="text-end font-monospace">
+                                {% if c.delta is not none %}
+                                    &plusmn;{{ "{:,.2f}".format(c.delta) }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+
+                {% if s.error is defined and s.error %}
+                <div class="alert alert-danger mt-2">
+                    <strong>Error:</strong> {{ s.error }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{% endfor %}
+</div>
+
+<!-- Print-specific footer -->
+<div class="d-none d-print-block text-center mt-4 pt-3 border-top">
+    <small class="text-muted">
+        Retirement Income Planner — Validation Report<br>
+        Generated: {{ generated_at }} &middot; Engine version: {{ version_info.version }}
+    </small>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<style>
+    /* Print styles for PDF export */
+    @media print {
+        .navbar, footer, .btn, form { display: none !important; }
+        .accordion-collapse { display: block !important; height: auto !important; }
+        .accordion-button::after { display: none !important; }
+        .accordion-button { pointer-events: none; }
+        .accordion-item { break-inside: avoid; }
+        body { font-size: 11px; }
+        h2 { font-size: 18px; }
+        .alert { border: 2px solid; }
+    }
+</style>
+{% endblock %}

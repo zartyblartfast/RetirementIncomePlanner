@@ -456,5 +456,366 @@ class TestGold_TotalCapitalDepletionAge(unittest.TestCase):
             self.assertLessEqual(depletion_age, max_pot_age)
 
 
+# ===================================================================
+#  Scenario 8: THE TRUST TEST — sustainable means net >= target
+#  If the engine says "sustainable", then every single year must
+#  deliver net_income_achieved >= target_net.  This is the test a
+#  real user cares about: "Can I rely on this number?"
+#
+#  We run this against the real config_active.json AND against a
+#  synthetic config with only DC pots (taxable path).
+# ===================================================================
+class TestGold_SustainableMeansNetMeetsTarget(unittest.TestCase):
+    """THE TRUST TEST: sustainable ⟹ net income ≥ target every year."""
+
+    @classmethod
+    def setUpClass(cls):
+        # Real-world config
+        cls.real_cfg = load_config("config_active.json")
+        cls.real_r = RetirementEngine(cls.real_cfg).run_projection()
+        cls.real_s = cls.real_r["summary"]
+
+        # Synthetic: DC-only, taxable path, plenty of capital
+        cls.synth_cfg = _cfg(
+            personal={
+                "date_of_birth": "1960-01",
+                "retirement_date": "2028-01",
+                "retirement_age": 68,
+                "end_age": 90,
+                "currency": "GBP",
+            },
+            target_income={"net_annual": 20000, "cpi_rate": 0.03},
+            dc_pots=[{
+                "name": "Big DC",
+                "starting_balance": 800000,
+                "growth_rate": 0.04,
+                "annual_fees": 0.005,
+                "tax_free_portion": 0.25,
+                "allocation": {"mode": "manual", "manual_override": True},
+                "values_as_of": "2028-01",
+            }],
+            withdrawal_priority=["Big DC"],
+        )
+        cls.synth_r = RetirementEngine(cls.synth_cfg).run_projection()
+        cls.synth_s = cls.synth_r["summary"]
+
+    def test_real_config_is_sustainable(self):
+        self.assertTrue(self.real_s["sustainable"])
+
+    def test_real_net_meets_target_every_year(self):
+        """Every year of the real config: net_income_achieved >= target_net."""
+        for yr in self.real_r["years"]:
+            self.assertGreaterEqual(
+                yr["net_income_achieved"], yr["target_net"] - 1,
+                f"Age {yr['age']}: net {yr['net_income_achieved']:.2f} "
+                f"< target {yr['target_net']:.2f}")
+
+    def test_synth_is_sustainable(self):
+        self.assertTrue(self.synth_s["sustainable"])
+
+    def test_synth_net_meets_target_every_year(self):
+        """Every year of the synthetic DC config: net >= target."""
+        for yr in self.synth_r["years"]:
+            self.assertGreaterEqual(
+                yr["net_income_achieved"], yr["target_net"] - 1,
+                f"Age {yr['age']}: net {yr['net_income_achieved']:.2f} "
+                f"< target {yr['target_net']:.2f}")
+
+    def test_synth_net_not_wildly_over_target(self):
+        """Net should not massively exceed target (gross-up accuracy)."""
+        for yr in self.synth_r["years"]:
+            overshoot = yr["net_income_achieved"] - yr["target_net"]
+            self.assertLess(
+                overshoot, yr["target_net"] * 0.02,  # < 2% overshoot
+                f"Age {yr['age']}: overshoot £{overshoot:.2f} too large")
+
+
+# ===================================================================
+#  Scenario 9: DC tax gross-up — hand-calculated verification
+#  £500k DC pot, £20k net target, 0 growth, 0 CPI, 25% tax-free.
+#  IoM tax: PA=14500, lower=6500@10%, higher@20%.
+#
+#  Hand calculation (year 1):
+#    Need gross G where G - tax(0.75G) = 20000
+#    Taxable = 0.75G.  If 0.75G is in lower band (< 21000):
+#    Tax = (0.75G - 14500) × 0.10
+#    G - 0.075G + 1450 = 20000 → G = 20054.05
+#    Tax = (15040.54 - 14500) × 0.10 = 54.05
+#    Net = 20054.05 - 54.05 = 20000.00 ✓
+# ===================================================================
+class TestGold_DCTaxGrossUp(unittest.TestCase):
+    """Verify DC gross-up produces correct tax and net income."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cfg = _cfg(
+            personal={
+                "date_of_birth": "1960-01",
+                "retirement_date": "2028-01",
+                "retirement_age": 68,
+                "end_age": 72,
+                "currency": "GBP",
+            },
+            target_income={"net_annual": 20000, "cpi_rate": 0.0},
+            dc_pots=[{
+                "name": "DC",
+                "starting_balance": 500000,
+                "growth_rate": 0.0,
+                "annual_fees": 0.0,
+                "tax_free_portion": 0.25,
+                "allocation": {"mode": "manual", "manual_override": True},
+                "values_as_of": "2028-01",
+            }],
+            withdrawal_priority=["DC"],
+        )
+        cls.r = RetirementEngine(cls.cfg).run_projection()
+        cls.yr0 = cls.r["years"][0]
+
+    def test_net_equals_target(self):
+        self.assertAlmostEqual(
+            self.yr0["net_income_achieved"], 20000, delta=5)
+
+    def test_gross_withdrawal_matches_hand_calc(self):
+        # Hand-calc: G ≈ 20054
+        self.assertAlmostEqual(
+            self.yr0["dc_withdrawal_gross"], 20054, delta=50)
+
+    def test_tax_matches_hand_calc(self):
+        # Hand-calc: tax ≈ 54
+        self.assertAlmostEqual(self.yr0["tax_due"], 54, delta=10)
+
+    def test_taxable_income_correct(self):
+        # Taxable = 0.75 × gross ≈ 15041
+        self.assertAlmostEqual(
+            self.yr0["total_taxable_income"], 15041, delta=50)
+
+    def test_tax_free_portion_correct(self):
+        # Tax-free = 0.25 × gross ≈ 5014
+        self.assertAlmostEqual(
+            self.yr0["dc_tax_free_portion"], 5014, delta=50)
+
+    def test_sustainable(self):
+        self.assertTrue(self.r["summary"]["sustainable"])
+
+
+# ===================================================================
+#  Scenario 10: Growth compounds correctly
+#  £100k ISA, 5% annual growth, 0 withdrawals (target=0), 0 CPI.
+#  Monthly compounding: 100000 × (1.05)^(1/12)^12 = 105000 exactly.
+# ===================================================================
+class TestGold_GrowthCompoundsCorrectly(unittest.TestCase):
+    """Verify investment growth is applied correctly via monthly compounding."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cfg = _cfg(
+            target_income={"net_annual": 0, "cpi_rate": 0.0},
+            tax_free_accounts=[{
+                "name": "ISA",
+                "starting_balance": 100000,
+                "growth_rate": 0.05,
+                "allocation": {"mode": "manual", "manual_override": True},
+                "values_as_of": "2028-01",
+            }],
+            withdrawal_priority=["ISA"],
+        )
+        cls.r = RetirementEngine(cls.cfg).run_projection()
+
+    def test_year1_balance(self):
+        # 100000 × 1.05 = 105000
+        self.assertAlmostEqual(
+            self.r["years"][0]["total_capital"], 105000, delta=5)
+
+    def test_year2_balance(self):
+        # 105000 × 1.05 = 110250
+        self.assertAlmostEqual(
+            self.r["years"][1]["total_capital"], 110250, delta=10)
+
+    def test_year5_balance(self):
+        # 100000 × 1.05^5 = 127628.16
+        self.assertAlmostEqual(
+            self.r["years"][4]["total_capital"], 127628, delta=20)
+
+    def test_growth_pnl_year1(self):
+        pnl = self.r["years"][0]["pot_pnl"]["ISA"]
+        self.assertAlmostEqual(pnl["growth"], 5000, delta=10)
+
+
+# ===================================================================
+#  Scenario 11: Fees reduce balance correctly
+#  £100k DC pot, 0 growth, 1% annual fee, target=0 (no withdrawals).
+#  After 1 year: 100000 × (1 - monthly_fee)^12
+#  where monthly_fee = (1.01)^(1/12) - 1 ≈ 0.000830.
+#  Expected: ~£99,008 (slightly more than 1% due to compounding).
+# ===================================================================
+class TestGold_FeesReduceBalance(unittest.TestCase):
+    """Verify annual fees are deducted correctly via monthly compounding."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cfg = _cfg(
+            target_income={"net_annual": 0, "cpi_rate": 0.0},
+            dc_pots=[{
+                "name": "DC",
+                "starting_balance": 100000,
+                "growth_rate": 0.0,
+                "annual_fees": 0.01,
+                "tax_free_portion": 0.25,
+                "allocation": {"mode": "manual", "manual_override": True},
+                "values_as_of": "2028-01",
+            }],
+            withdrawal_priority=["DC"],
+        )
+        cls.r = RetirementEngine(cls.cfg).run_projection()
+
+    def test_year1_balance_after_fees(self):
+        # Slightly more than 1% deducted due to monthly compounding
+        bal = self.r["years"][0]["total_capital"]
+        self.assertAlmostEqual(bal, 99008, delta=50)
+        self.assertLess(bal, 99100)   # clearly less than 99.1k
+        self.assertGreater(bal, 98900)  # but not as much as 1.1%
+
+    def test_fees_pnl_year1(self):
+        pnl = self.r["years"][0]["pot_pnl"]["DC"]
+        self.assertAlmostEqual(pnl["fees"], 992, delta=50)
+        self.assertAlmostEqual(pnl["growth"], 0, delta=1)
+
+
+# ===================================================================
+#  Scenario 12: Shortfall reporting
+#  Small pot (£5k ISA), large target (£20k/yr), end_age=75.
+#  Sustainable must be False.  Shortfall years must exist.
+#  After depletion, net_income_achieved should be 0.
+# ===================================================================
+class TestGold_ShortfallReporting(unittest.TestCase):
+    """When capital runs out, shortfall is detected and reported."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cfg = _cfg(
+            personal={
+                "date_of_birth": "1960-01",
+                "retirement_date": "2028-01",
+                "retirement_age": 68,
+                "end_age": 75,
+                "currency": "GBP",
+            },
+            target_income={"net_annual": 20000, "cpi_rate": 0.0},
+            tax_free_accounts=[{
+                "name": "ISA",
+                "starting_balance": 5000,
+                "growth_rate": 0.0,
+                "allocation": {"mode": "manual", "manual_override": True},
+                "values_as_of": "2028-01",
+            }],
+            withdrawal_priority=["ISA"],
+        )
+        cls.r = RetirementEngine(cls.cfg).run_projection()
+        cls.s = cls.r["summary"]
+
+    def test_not_sustainable(self):
+        self.assertFalse(self.s["sustainable"])
+
+    def test_first_shortfall_age_exists(self):
+        self.assertIsNotNone(self.s["first_shortfall_age"])
+
+    def test_shortfall_years_have_flag(self):
+        shortfall_years = [yr for yr in self.r["years"] if yr["shortfall"]]
+        self.assertGreater(len(shortfall_years), 0)
+
+    def test_post_depletion_net_is_zero(self):
+        """Years AFTER capital is gone (no guaranteed income) → net = 0."""
+        depleted = False
+        for yr in self.r["years"]:
+            if depleted:
+                # Capital was already 0 at start of this year
+                self.assertAlmostEqual(yr["net_income_achieved"], 0, delta=1,
+                    msg=f"Age {yr['age']}: expected 0 net after depletion")
+            if yr["total_capital"] <= 0.01:
+                depleted = True
+
+    def test_year1_not_shortfall(self):
+        """Year 1 should provide some income (ISA has £5k)."""
+        yr0 = self.r["years"][0]
+        self.assertGreater(yr0["net_income_achieved"], 0)
+
+
+# ===================================================================
+#  Scenario 13: Delayed guaranteed income changes drawdown
+#  Guaranteed £20k/yr starts at age 70, retirement at 68.
+#  Target = £20k net.  DC pot £200k with 0 growth.
+#  Ages 68-69: DC must provide full income (no guaranteed).
+#  Ages 70+: Guaranteed covers most/all, DC drawdown drops.
+# ===================================================================
+class TestGold_DelayedGuaranteedIncome(unittest.TestCase):
+    """State pension starting mid-projection: DC drawdown higher before it kicks in."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cfg = _cfg(
+            personal={
+                "date_of_birth": "1960-01",
+                "retirement_date": "2028-01",
+                "retirement_age": 68,
+                "end_age": 78,
+                "currency": "GBP",
+            },
+            target_income={"net_annual": 20000, "cpi_rate": 0.0},
+            guaranteed_income=[{
+                "name": "State Pension",
+                "gross_annual": 20000,
+                "indexation_rate": 0.0,
+                "start_age": 70,
+                "end_age": None,
+                "taxable": True,
+                "values_as_of": "2028-01",
+            }],
+            dc_pots=[{
+                "name": "DC",
+                "starting_balance": 200000,
+                "growth_rate": 0.0,
+                "annual_fees": 0.0,
+                "tax_free_portion": 0.25,
+                "allocation": {"mode": "manual", "manual_override": True},
+                "values_as_of": "2028-01",
+            }],
+            withdrawal_priority=["DC"],
+        )
+        cls.r = RetirementEngine(cls.cfg).run_projection()
+
+    def test_net_meets_target_every_year(self):
+        """Even with delayed guaranteed, net should meet target every year."""
+        for yr in self.r["years"]:
+            if not yr["shortfall"]:
+                self.assertGreaterEqual(
+                    yr["net_income_achieved"], yr["target_net"] - 1,
+                    f"Age {yr['age']}: net {yr['net_income_achieved']:.2f}")
+
+    def test_dc_drawdown_higher_before_guaranteed(self):
+        """Before age 70, DC must provide more since no guaranteed income."""
+        yr_68 = self.r["years"][0]  # age 68
+        yr_70 = self.r["years"][2]  # age 70
+        self.assertGreater(
+            yr_68["dc_withdrawal_gross"], yr_70["dc_withdrawal_gross"],
+            "DC drawdown should be higher before guaranteed income starts")
+
+    def test_no_guaranteed_before_age_70(self):
+        yr_68 = self.r["years"][0]
+        self.assertAlmostEqual(yr_68["guaranteed_total"], 0, delta=1)
+
+    def test_guaranteed_active_at_age_70(self):
+        yr_70 = self.r["years"][2]
+        self.assertAlmostEqual(yr_70["guaranteed_total"], 20000, delta=100)
+
+    def test_dc_drawdown_drops_significantly(self):
+        """DC drawdown at age 70+ should be much less than at 68."""
+        yr_68 = self.r["years"][0]
+        yr_72 = self.r["years"][4]  # well after guaranteed starts
+        self.assertLess(
+            yr_72["dc_withdrawal_gross"],
+            yr_68["dc_withdrawal_gross"] * 0.5,
+            "DC drawdown should drop by at least 50% once guaranteed covers target")
+
+
 if __name__ == "__main__":
     unittest.main()
