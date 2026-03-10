@@ -105,7 +105,7 @@
                         <p class="mb-1 {% if sc.result.summary.sustainable %}text-success{% else %}text-danger{% endif %}">
                             {% if sc.result.summary.sustainable %}Sustainable{% else %}Shortfall at {{ sc.result.summary.first_shortfall_age }}{% endif %}
                         </p>
-                        <p class="mb-0">Capital: &pound;{{ "{:,.0f}".format(sc.result.summary.remaining_capital) }}</p>
+                        <p class="mb-0">Capital at {{ sc.result.summary.end_age }}: &pound;{{ "{:,.0f}".format(sc.result.summary.remaining_capital) }}</p>
                     </div>
                     <div class="card-footer text-end">
                         <a href="{{ url_for('delete_scenario', name=sc.name) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete {{ sc.name }}?');"><i class="bi bi-trash"></i> Delete</a>

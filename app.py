@@ -602,6 +602,17 @@ def optimise():
     results = opt.run_all()
     return render_template("optimise.html", config=cfg, results=results)
 
+@app.route("/apply_priority", methods=["POST"])
+@login_required
+def apply_priority():
+    order = request.form.get("priority_order", "")
+    if order:
+        cfg = get_config()
+        cfg["withdrawal_priority"] = [x.strip() for x in order.split(",") if x.strip()]
+        save_session_config(cfg)
+        flash("Withdrawal priority updated to recommended order.", "success")
+    return redirect(url_for("optimise"))
+
 # ------------------------------------------------------------------ #
 #  API endpoint for charts
 # ------------------------------------------------------------------ #
