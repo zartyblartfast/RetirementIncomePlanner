@@ -536,9 +536,30 @@ def compare():
     if request.method == "POST":
         cfg = get_config()
         name = request.form.get("scenario_name", "Unnamed")
-        engine = RetirementEngine(cfg)
-        result = engine.run_projection()
-        scenario = {"name": name, "config": cfg, "result": result}
+        # Run extended projection (up to 120) so the compare chart can
+        # show capital trajectories beyond the plan end age.
+        import copy as _copy
+        ext_cfg = _copy.deepcopy(cfg)
+        plan_end_age = cfg["personal"]["end_age"]
+        ext_cfg["personal"]["end_age"] = min(120, max(plan_end_age, 120))
+        engine = RetirementEngine(ext_cfg)
+        ext_result = engine.run_projection()
+        # Trim: find depletion, then cap at depletion+2 or plan_end+5, max 120
+        DEPLETION_EPSILON = 1.0
+        dep_age = None
+        for yr in ext_result["years"]:
+            if yr["total_capital"] <= DEPLETION_EPSILON:
+                dep_age = yr["age"]
+                break
+        if dep_age:
+            chart_end = min(120, max(plan_end_age + 5, dep_age + 2))
+        else:
+            chart_end = min(120, plan_end_age + 5)
+        ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= chart_end]
+        # Also run the normal projection for the summary stats
+        result = RetirementEngine(cfg).run_projection()
+        scenario = {"name": name, "config": cfg, "result": result,
+                    "ext_result": ext_result}
         path = os.path.join(SCENARIO_DIR, f"{name.replace(' ', '_')}.json")
         with open(path, "w") as f:
             json.dump(scenario, f, indent=2, default=str)
