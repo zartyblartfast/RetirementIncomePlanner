@@ -6,8 +6,8 @@ After=network.target
 User=root
 Group=root
 WorkingDirectory=/opt/pensionplanner
+EnvironmentFile=/opt/pensionplanner/.env
 Environment="PATH=/opt/pensionplanner/venv/bin"
-Environment="FLASK_SECRET_KEY=rp-v1.1-prod-7f3a9c2e1d"
 ExecStart=/opt/pensionplanner/venv/bin/gunicorn --workers 2 --bind 127.0.0.1:8001 app:app
 Restart=always
 RestartSec=5

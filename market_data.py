@@ -12,12 +12,13 @@ Usage:
         intelligence = get_all_pot_intelligence(config, api_data)
 """
 
+import os
 import requests
 import logging
 
 logger = logging.getLogger(__name__)
 
-API_URL = "https://marketdata.countdays.co.uk/api/v1/reference-data"
+API_URL = os.environ.get("MARKET_DATA_API_URL", "https://marketdata.countdays.co.uk/api/v1/reference-data")
 API_TIMEOUT = 10  # seconds
 
 

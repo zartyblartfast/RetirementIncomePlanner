@@ -21,9 +21,11 @@ ASSET_MODEL = load_asset_model()
 # ------------------------------------------------------------------ #
 #  Auth
 # ------------------------------------------------------------------ #
-USERNAME = "PensionPlanner"
-SALT = "iom_pension_2025"
-PASSWORD_HASH = hashlib.sha256(f"planner123!{SALT}".encode()).hexdigest()
+USERNAME = os.environ.get("APP_USERNAME", "PensionPlanner")
+SALT = os.environ.get("APP_SALT", "iom_pension_2025")
+_password = os.environ.get("APP_PASSWORD", "planner123!")
+PASSWORD_HASH = hashlib.sha256(f"{_password}{SALT}".encode()).hexdigest()
+del _password  # Don't keep plaintext in memory
 
 def login_required(f):
     @functools.wraps(f)
