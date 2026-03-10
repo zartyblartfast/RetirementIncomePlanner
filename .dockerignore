@@ -1,0 +1,30 @@
+# Virtual environment
+venv/
+__pycache__/
+*.pyc
+
+# Git
+.git/
+.gitignore
+
+# Environment secrets (injected at runtime)
+.env
+
+# Runtime / persistent data (mounted as volumes)
+scenarios/
+output/
+config_active.json
+
+# Agent Zero project metadata
+.a0proj/
+
+# Legacy deployment files (not needed in container)
+deploy.sh
+pensionplanner.service
+pensionplanner_nginx.conf
+
+# Documentation source (only HTML served)
+HOW_IT_WORKS.md
+TODO.md
+V1_SPEC.md
+README.md

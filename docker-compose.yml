@@ -1,0 +1,26 @@
+# Retirement Income Planner — Docker Compose
+# Usage:  docker compose up -d
+# Logs:   docker compose logs -f planner
+
+services:
+  planner:
+    build: .
+    container_name: pension-planner
+    restart: unless-stopped
+    ports:
+      - "8001:8000"          # host:container — matches current VPS port mapping
+    env_file:
+      - .env                  # all secrets & config loaded here
+    volumes:
+      - planner-scenarios:/app/scenarios      # saved scenarios persist across rebuilds
+      - planner-config:/app/output            # CSV/chart output
+      - ./config_active.json:/app/config_active.json  # active config persists
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/login"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  planner-scenarios:
+  planner-config:
