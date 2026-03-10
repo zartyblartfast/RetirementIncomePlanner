@@ -16,12 +16,13 @@ jobs:
           password: ${{ secrets.VPS_PASSWORD }}
           script: |
             cd /opt/pensionplanner
-            # Preserve user data before pulling (safe for transition and future deploys)
+            # Preserve user data before pulling
             [ -f config_active.json ] && cp config_active.json /tmp/config_active_backup.json || true
             [ -d scenarios ] && cp -r scenarios /tmp/scenarios_backup || true
             git fetch origin main --tags
-            git pull origin main --ff-only
-            # Restore user config if removed during tracking change
+            # Try clean ff-only; fall back to hard reset if working tree is dirty (e.g. transition)
+            git pull origin main --ff-only || git reset --hard origin/main
+            # Restore user data (may have been removed during tracking change or hard reset)
             [ ! -f config_active.json ] && [ -f /tmp/config_active_backup.json ] && cp /tmp/config_active_backup.json config_active.json || true
             [ ! -d scenarios ] && [ -d /tmp/scenarios_backup ] && cp -r /tmp/scenarios_backup scenarios || true
             # Write VERSION file so the app can display version + datetime
