@@ -35,7 +35,7 @@
 | App | Port | URL | Path (legacy) | Docker Status |
 |-----|------|-----|---------------|---------------|
 | Pension Planner | 8001 | planner.countdays.co.uk | /opt/pensionplanner/ | ✅ Dockerfile ready |
-| Market Data API | 8000 | marketdata.countdays.co.uk | /opt/retirement-api/ | ⏳ Pending |
+| Market Data API | 8000 | marketdata.countdays.co.uk | /opt/retirement-api/ | ✅ Dockerfile ready |
 | Day Tracker | 8002 | countdays.co.uk | /opt/daytracker/ | ✅ Already Dockerized |
 
 ---
@@ -105,8 +105,8 @@ docker inspect --format='{{.State.Health.Status}}' pension-planner
 - [x] Pension Planner: Dockerfile created
 - [x] Pension Planner: .dockerignore created
 - [x] Pension Planner: docker-compose.yml created
-- [ ] Market Data API: Dockerfile created
-- [ ] Market Data API: docker-compose.yml created
+- [x] Market Data API: Dockerfile created
+- [x] Market Data API: docker-compose.yml created
 - [ ] Verify Docker builds on VPS
 - [ ] Test containers locally before Coolify
 
