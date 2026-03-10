@@ -93,12 +93,14 @@
 <div class="card mb-4">
     <div class="card-header"><i class="bi bi-collection"></i> Saved Scenarios</div>
     <div class="card-body">
+        {% set chart_colours = ['#0d6efd', '#dc3545', '#198754', '#fd7e14', '#6f42c1', '#20c997'] %}
         <div class="row g-3">
             {% for sc in scenarios %}
+            {% set sc_colour = chart_colours[loop.index0 % chart_colours|length] %}
             <div class="col-md-4">
-                <div class="card h-100">
+                <div class="card h-100" style="border: 2px solid {{ sc_colour }};">
                     <div class="card-body">
-                        <h5>{{ sc.name }}</h5>
+                        <h5 style="color: {{ sc_colour }};">{{ sc.name }}</h5>
                         <p class="mb-1">Target: &pound;{{ "{:,.0f}".format(sc.config.target_income.net_annual) }}</p>
                         <p class="mb-1 {% if sc.result.summary.sustainable %}text-success{% else %}text-danger{% endif %}">
                             {% if sc.result.summary.sustainable %}Sustainable{% else %}Shortfall at {{ sc.result.summary.first_shortfall_age }}{% endif %}
