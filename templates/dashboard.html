@@ -130,11 +130,11 @@
                     <span>Assumed: <strong>{{ market_intel.macro.assumed_cpi_pct }}%</strong></span>
                     {% set cpi_diff = (market_intel.macro.uk_cpi_pct or 0) - market_intel.macro.assumed_cpi_pct %}
                     {% if cpi_diff <= 0 %}
-                        <span class="badge bg-success">&#x2714;</span>
+                        <span class="badge bg-success"><i class="bi bi-check-lg"></i></span>
                     {% elif cpi_diff <= 1.0 %}
-                        <span class="badge bg-warning text-dark">&#x26A0;</span>
+                        <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle-fill"></i></span>
                     {% else %}
-                        <span class="badge bg-danger">&#x2718;</span>
+                        <span class="badge bg-danger"><i class="bi bi-x-lg"></i></span>
                     {% endif %}
                 </div>
             </div>
