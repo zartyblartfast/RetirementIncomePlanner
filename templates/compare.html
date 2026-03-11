@@ -418,7 +418,7 @@ function renderIncomeBreakdown(monthlyRows, scenarioLabel) {
                 const detail = isGuaranteed ? (m.guaranteed_detail || {}) : (m.withdrawal_detail || {});
                 return detail[src] || 0;
             }),
-            backgroundColor: colour + 'aa',
+            backgroundColor: colour + '55',
             borderColor: colour,
             borderWidth: 1,
             fill: true,
@@ -444,7 +444,17 @@ function renderIncomeBreakdown(monthlyRows, scenarioLabel) {
                 }
             },
             scales: {
-                x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 30 } },
+                x: {
+                    ticks: {
+                        maxRotation: 0,
+                        autoSkip: false,
+                        callback: function(val, idx) {
+                            // Show label only for the first month of each year (where label is non-empty)
+                            const lbl = this.getLabelForValue(val);
+                            return lbl || null;
+                        }
+                    }
+                },
                 y: {
                     stacked: true,
                     ticks: { callback: v => '\u00a3' + v.toLocaleString() }
