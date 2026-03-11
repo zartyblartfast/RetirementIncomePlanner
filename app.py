@@ -639,7 +639,7 @@ def compare():
         }
         scenarios.insert(0, current_sc)
 
-    return render_template("compare.html", scenarios=scenarios)
+    return render_template("compare.html", scenarios=scenarios, current_config=cfg)
 
 @app.route("/delete_scenario/<name>")
 @login_required
@@ -649,6 +649,56 @@ def delete_scenario(name):
         os.remove(path)
         flash(f"Scenario '{name}' deleted.", "warning")
     return redirect(url_for("compare"))
+
+# ------------------------------------------------------------------ #
+#  What If Sandbox — ephemeral projection (never mutates session config)
+# ------------------------------------------------------------------ #
+@app.route("/whatif_project", methods=["POST"])
+@login_required
+def whatif_project():
+    """Run a projection with sandbox overrides and return JSON chart data.
+
+    Accepts JSON body with optional keys:
+        target_income (float), cpi_rate (float), retirement_age (int)
+    Returns JSON with years[] and summary for the sandbox projection.
+    """
+    import copy as _copy
+    data = request.get_json(silent=True) or {}
+    cfg = _copy.deepcopy(get_config())
+
+    # Apply sandbox overrides
+    if "target_income" in data:
+        cfg["target_income"]["net_annual"] = float(data["target_income"])
+    if "cpi_rate" in data:
+        cfg["target_income"]["cpi_rate"] = float(data["cpi_rate"])
+    if "retirement_age" in data:
+        cfg["personal"]["retirement_age"] = int(data["retirement_age"])
+
+    # Run extended projection for chart
+    plan_end_age = cfg["personal"]["end_age"]
+    ext_cfg = _copy.deepcopy(cfg)
+    ext_cfg["personal"]["end_age"] = min(120, max(plan_end_age, 120))
+    ext_result = RetirementEngine(ext_cfg).run_projection()
+
+    DEPLETION_EPSILON = 1.0
+    dep_age = None
+    for yr in ext_result["years"]:
+        if yr["total_capital"] <= DEPLETION_EPSILON:
+            dep_age = yr["age"]
+            break
+    if dep_age:
+        chart_end = min(120, max(plan_end_age, dep_age))
+    else:
+        chart_end = min(120, plan_end_age + 5)
+    ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= chart_end]
+
+    # Normal projection for summary
+    result = RetirementEngine(cfg).run_projection()
+
+    return jsonify({
+        "years": ext_result["years"],
+        "summary": result["summary"],
+    })
 
 # ------------------------------------------------------------------ #
 #  Optimiser

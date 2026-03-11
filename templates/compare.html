@@ -19,6 +19,36 @@
     </div>
 </div>
 
+<!-- What If Sandbox -->
+<div class="card mb-4 border-warning">
+    <div class="card-header bg-warning bg-opacity-25 d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-sliders"></i> <strong>What If Sandbox</strong></span>
+        <small class="text-muted">Adjust values to see an instant projection — your saved settings are not affected</small>
+    </div>
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Target Net Income (&pound;)</label>
+                <input type="number" class="form-control" id="sb-income" value="{{ current_config.target_income.net_annual }}" step="500">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">CPI Rate</label>
+                <input type="number" class="form-control" id="sb-cpi" value="{{ current_config.target_income.cpi_rate }}" step="0.005" min="0" max="0.2">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Retirement Age</label>
+                <input type="number" class="form-control" id="sb-retire" value="{{ current_config.personal.retirement_age }}" step="1" min="50" max="80">
+            </div>
+            <div class="col-md-2">
+                <button type="button" class="btn btn-warning w-100" id="sb-run"><i class="bi bi-lightning"></i> Project</button>
+            </div>
+            <div class="col-md-3">
+                <div id="sb-summary" class="small text-muted"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% if scenarios | length >= 2 %}
 <!-- Side-by-Side Summary -->
 <div class="card mb-4">
@@ -95,15 +125,20 @@
     </div>
 </div>
 
-<!-- Capital Trajectory Chart -->
+{% endif %}
+
+<!-- Capital Trajectory Chart (always shown when scenarios exist) -->
+{% if scenarios | length >= 1 %}
 <div class="card mb-4">
     <div class="card-header"><i class="bi bi-graph-up"></i> Capital Trajectory</div>
     <div class="card-body">
         <canvas id="compareChart" height="100"></canvas>
     </div>
 </div>
-{% elif scenarios | length == 1 %}
-<div class="alert alert-info"><i class="bi bi-info-circle"></i> Save a scenario to see a side-by-side comparison with your current settings.</div>
+{% endif %}
+
+{% if scenarios | length == 1 %}
+<div class="alert alert-info"><i class="bi bi-info-circle"></i> Save a scenario to see a side-by-side summary table.</div>
 {% endif %}
 
 <!-- Scenarios -->
@@ -150,10 +185,11 @@
 {% endblock %}
 
 {% block scripts %}
-{% if scenarios | length >= 2 %}
+{% if scenarios | length >= 1 %}
 <script>
 const scenarios = {{ scenarios | tojson }};
 const colours = ['#0d6efd', '#dc3545', '#198754', '#fd7e14', '#6f42c1', '#20c997'];
+const SANDBOX_COLOUR = '#ff6f00';
 
 // Use ext_result (extended projection) when available, fall back to result
 let allAges = [];
@@ -221,8 +257,10 @@ function highlightScenario(idx) {
         }
     });
 
-    // Chart lines
+    // Chart lines (skip sandbox dataset at end)
+    const scenarioCount = scenarios.length;
     chart.data.datasets.forEach((ds, i) => {
+        if (i >= scenarioCount) return;
         if (selectedIdx === null) {
             ds.borderWidth = origStyles[i].borderWidth;
             ds.borderColor = origStyles[i].borderColor;
@@ -254,7 +292,6 @@ function highlightScenario(idx) {
             cell.style.opacity = '0.5';
         }
     });
-    // Reset opacity on deselect
     if (selectedIdx === null) {
         document.querySelectorAll('[data-sc-col]').forEach(cell => {
             cell.style.opacity = '';
@@ -266,6 +303,90 @@ document.querySelectorAll('.sc-card').forEach(card => {
     card.addEventListener('click', e => {
         if (e.target.closest('a, button, form')) return;
         highlightScenario(parseInt(card.dataset.scIndex));
+    });
+});
+
+// --- What If Sandbox ---
+let sbDatasetIndex = null;
+
+function runSandbox() {
+    const income = parseFloat(document.getElementById('sb-income').value);
+    const cpi = parseFloat(document.getElementById('sb-cpi').value);
+    const retire = parseInt(document.getElementById('sb-retire').value);
+    const summaryEl = document.getElementById('sb-summary');
+    summaryEl.innerHTML = '<i class="bi bi-hourglass-split"></i> Projecting...';
+
+    fetch('{{ url_for("whatif_project") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_income: income, cpi_rate: cpi, retirement_age: retire })
+    })
+    .then(r => r.json())
+    .then(data => {
+        // Extend allAges if sandbox projection has new ages
+        const sbYears = data.years || [];
+        sbYears.forEach(y => {
+            if (!allAges.includes(y.age)) {
+                allAges.push(y.age);
+                allAges.sort((a, b) => a - b);
+            }
+        });
+        chart.data.labels = allAges;
+
+        // Rebuild scenario datasets to match new allAges length
+        scenarios.forEach((sc, i) => {
+            const years = (sc.ext_result && sc.ext_result.years) ? sc.ext_result.years : sc.result.years;
+            chart.data.datasets[i].data = allAges.map(age => {
+                const yr = years.find(y => y.age === age);
+                return yr ? yr.total_capital : null;
+            });
+        });
+
+        // Build sandbox dataset
+        const sbData = allAges.map(age => {
+            const yr = sbYears.find(y => y.age === age);
+            return yr ? yr.total_capital : null;
+        });
+
+        const sbDataset = {
+            label: '\u2728 What If',
+            data: sbData,
+            borderColor: SANDBOX_COLOUR,
+            backgroundColor: SANDBOX_COLOUR + '33',
+            borderWidth: 3,
+            borderDash: [12, 4],
+            tension: 0.3,
+            fill: false,
+            pointRadius: 0,
+        };
+
+        // Add or replace sandbox dataset
+        if (sbDatasetIndex !== null) {
+            chart.data.datasets[sbDatasetIndex] = sbDataset;
+        } else {
+            chart.data.datasets.push(sbDataset);
+            sbDatasetIndex = chart.data.datasets.length - 1;
+        }
+        chart.update();
+
+        // Update summary text
+        const s = data.summary;
+        const sust = s.sustainable
+            ? '<span class="text-success"><i class="bi bi-check-circle"></i> Sustainable</span>'
+            : '<span class="text-danger"><i class="bi bi-x-circle"></i> Shortfall at ' + s.first_shortfall_age + '</span>';
+        summaryEl.innerHTML = sust + ' &middot; Capital at ' + s.end_age + ': &pound;' + Math.round(s.remaining_capital).toLocaleString();
+    })
+    .catch(err => {
+        summaryEl.innerHTML = '<span class="text-danger">Error: ' + err.message + '</span>';
+    });
+}
+
+document.getElementById('sb-run').addEventListener('click', runSandbox);
+
+// Also run on Enter key in any sandbox input
+['sb-income', 'sb-cpi', 'sb-retire'].forEach(id => {
+    document.getElementById(id).addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); runSandbox(); }
     });
 });
 </script>
