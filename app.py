@@ -9,6 +9,7 @@ from flask import (Flask, render_template, request, redirect, url_for,
 from retirement_engine import RetirementEngine, load_config, load_asset_model, resolve_growth_rate, resolve_growth_provenance
 from market_data import fetch_market_data, get_all_pot_intelligence
 from optimiser import Optimiser
+from drawdown_strategies import normalize_config, STRATEGIES, STRATEGY_IDS, get_strategy_display_name
 from version import get_version_info
 from validation_runner import run_all_scenarios, ALL_SCENARIOS
 
@@ -76,6 +77,7 @@ def get_config():
         cfg = load_config(ACTIVE_CONFIG_PATH)
     else:
         cfg = load_config(CONFIG_PATH)
+    normalize_config(cfg)
     return cfg
 
 def save_session_config(cfg):
