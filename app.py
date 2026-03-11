@@ -722,12 +722,13 @@ def whatif_project():
         chart_end = min(120, dep_age)
         ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= chart_end]
 
-    # Normal projection for summary
-    result = RetirementEngine(cfg).run_projection()
+    # Normal projection for summary + monthly income breakdown
+    result = RetirementEngine(cfg).run_projection(include_monthly=True)
 
     return jsonify({
         "years": ext_result["years"],
         "summary": result["summary"],
+        "monthly_rows": result.get("monthly_rows", []),
     })
 
 @app.route("/whatif_save", methods=["POST"])
@@ -781,6 +782,26 @@ def whatif_save():
         json.dump(scenario, f, indent=2, default=str)
 
     return jsonify({"ok": True, "name": name})
+
+# ------------------------------------------------------------------ #
+#  Scenario monthly income data (for Income Breakdown chart)
+# ------------------------------------------------------------------ #
+@app.route("/scenario_monthly/<name>")
+@login_required
+def scenario_monthly(name):
+    """Return monthly income breakdown for a saved or current scenario."""
+    import copy as _copy
+    if name == "Current":
+        cfg = _copy.deepcopy(get_config())
+    else:
+        path = os.path.join(SCENARIO_DIR, f"{name.replace(' ', '_')}.json")
+        if not os.path.exists(path):
+            return jsonify({"error": "Scenario not found"}), 404
+        with open(path) as f:
+            sc = json.load(f)
+        cfg = sc["config"]
+    result = RetirementEngine(cfg).run_projection(include_monthly=True)
+    return jsonify({"monthly_rows": result.get("monthly_rows", [])})
 
 # ------------------------------------------------------------------ #
 #  Optimiser

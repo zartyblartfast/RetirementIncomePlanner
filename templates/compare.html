@@ -182,6 +182,17 @@
 </div>
 {% endif %}
 
+<!-- Income Breakdown Chart (single selected scenario) -->
+{% if scenarios | length >= 1 %}
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-bar-chart-line"></i> Income Breakdown <small class="text-muted ms-2" id="incomeChartLabel">(select a scenario)</small></div>
+    <div class="card-body">
+        <canvas id="incomeBreakdownChart" height="100"></canvas>
+        <div id="incomeChartSpinner" class="text-center py-3 d-none"><div class="spinner-border spinner-border-sm text-secondary"></div> Loading…</div>
+    </div>
+</div>
+{% endif %}
+
 {% if scenarios | length == 1 %}
 <div class="alert alert-info"><i class="bi bi-info-circle"></i> Save a scenario to see a side-by-side summary table.</div>
 {% endif %}
@@ -347,9 +358,119 @@ function highlightScenario(idx) {
 document.querySelectorAll('.sc-card').forEach(card => {
     card.addEventListener('click', e => {
         if (e.target.closest('a, button, form')) return;
-        highlightScenario(parseInt(card.dataset.scIndex));
+        const idx = parseInt(card.dataset.scIndex);
+        highlightScenario(idx);
+        // Load income breakdown for selected scenario
+        if (selectedIdx !== null) {
+            const sc = scenarios[selectedIdx];
+            fetchAndRenderIncome(sc.name, sc.name);
+        }
     });
 });
+
+// --- Income Breakdown Stacked Area Chart ---
+const INCOME_COLOURS = {
+    'UK State Pension': '#2563eb',
+    'BP Pension (DB)': '#7c3aed',
+    'Employer DC Pot': '#dc2626',
+    'Consolidated DC Pot': '#ea580c',
+    'ISA': '#16a34a',
+};
+const INCOME_COLOUR_FALLBACK = ['#0891b2', '#ca8a04', '#be185d', '#4f46e5', '#059669'];
+let incomeChart = null;
+
+function renderIncomeBreakdown(monthlyRows, scenarioLabel) {
+    const canvas = document.getElementById('incomeBreakdownChart');
+    const label = document.getElementById('incomeChartLabel');
+    const spinner = document.getElementById('incomeChartSpinner');
+    spinner.classList.add('d-none');
+
+    if (!monthlyRows || monthlyRows.length === 0) {
+        if (incomeChart) { incomeChart.destroy(); incomeChart = null; }
+        label.textContent = '(no data)';
+        return;
+    }
+    label.textContent = scenarioLabel;
+
+    // Collect all unique source names across all months
+    const guaranteedNames = new Set();
+    const withdrawalNames = new Set();
+    monthlyRows.forEach(m => {
+        Object.keys(m.guaranteed_detail || {}).forEach(k => guaranteedNames.add(k));
+        Object.keys(m.withdrawal_detail || {}).forEach(k => withdrawalNames.add(k));
+    });
+    const allSources = [...guaranteedNames, ...withdrawalNames];
+
+    // Build labels: "Age Y.M"
+    const labels = monthlyRows.map(m => {
+        const mo = m.month_in_year;
+        return mo === 1 ? String(m.age) : '';
+    });
+
+    // Build one dataset per source (stacked area)
+    let colIdx = 0;
+    const datasets = allSources.map(src => {
+        const colour = INCOME_COLOURS[src] || INCOME_COLOUR_FALLBACK[colIdx++ % INCOME_COLOUR_FALLBACK.length];
+        const isGuaranteed = guaranteedNames.has(src);
+        return {
+            label: src,
+            data: monthlyRows.map(m => {
+                const detail = isGuaranteed ? (m.guaranteed_detail || {}) : (m.withdrawal_detail || {});
+                return detail[src] || 0;
+            }),
+            backgroundColor: colour + 'aa',
+            borderColor: colour,
+            borderWidth: 1,
+            fill: true,
+            tension: 0.2,
+            pointRadius: 0,
+        };
+    });
+
+    if (incomeChart) incomeChart.destroy();
+    incomeChart = new Chart(canvas, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+            responsive: true,
+            plugins: {
+                title: { display: true, text: 'Monthly Income by Source — ' + scenarioLabel },
+                tooltip: {
+                    mode: 'index',
+                    callbacks: {
+                        label: ctx => ctx.dataset.label + ': \u00a3' + ctx.parsed.y.toLocaleString(undefined, {maximumFractionDigits: 0}),
+                        footer: items => 'Total: \u00a3' + items.reduce((s, i) => s + i.parsed.y, 0).toLocaleString(undefined, {maximumFractionDigits: 0})
+                    }
+                }
+            },
+            scales: {
+                x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 30 } },
+                y: {
+                    stacked: true,
+                    ticks: { callback: v => '\u00a3' + v.toLocaleString() }
+                }
+            },
+            interaction: { mode: 'index', intersect: false }
+        }
+    });
+}
+
+function fetchAndRenderIncome(scenarioName, label) {
+    const spinner = document.getElementById('incomeChartSpinner');
+    spinner.classList.remove('d-none');
+    fetch('/scenario_monthly/' + encodeURIComponent(scenarioName))
+        .then(r => r.json())
+        .then(data => renderIncomeBreakdown(data.monthly_rows, label))
+        .catch(() => {
+            spinner.classList.add('d-none');
+            document.getElementById('incomeChartLabel').textContent = '(error loading data)';
+        });
+}
+
+// Auto-load income breakdown for first scenario on page load
+if (scenarios.length > 0) {
+    fetchAndRenderIncome(scenarios[0].name, scenarios[0].name);
+}
 
 // --- What If Sandbox ---
 function sbShowStrategyParams() {
@@ -448,6 +569,11 @@ function runSandbox() {
         summaryEl.innerHTML = '<small>' + sust + ' &middot; Capital at ' + s.end_age + ': &pound;' + Math.round(s.remaining_capital).toLocaleString() + '</small>';
 
         document.getElementById('sb-save-row').style.display = '';
+
+        // Render income breakdown from sandbox monthly data
+        if (data.monthly_rows) {
+            renderIncomeBreakdown(data.monthly_rows, '\u2728 What If');
+        }
     })
     .catch(err => {
         summaryEl.innerHTML = '<small class="text-danger">Error: ' + err.message + '</small>';
