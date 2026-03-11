@@ -577,9 +577,68 @@ def compare():
                     continue
                 if "name" not in sc:
                     sc["name"] = fname.replace(".json", "")
+                sc["is_current"] = False
+                sc["is_unsaved"] = False
                 scenarios.append(sc)
             except (json.JSONDecodeError, KeyError):
                 continue
+
+    # Always inject the current config as a "Current" scenario.
+    # If a saved scenario matches the current config fingerprint,
+    # mark it as current instead of adding a duplicate.
+    cfg = get_config()
+    def _config_fingerprint(c):
+        """Hash key config fields to detect matching scenarios."""
+        import hashlib as _hl
+        parts = [
+            str(c.get("target_income", {}).get("net_annual", "")),
+            str(c.get("target_income", {}).get("cpi_rate", "")),
+            str(c.get("personal", {}).get("end_age", "")),
+            str(c.get("withdrawal_priority", [])),
+        ]
+        for pot in c.get("dc_pots", []):
+            parts.append(f"{pot['name']}:{pot['starting_balance']}")
+        for acc in c.get("tax_free_accounts", []):
+            parts.append(f"{acc['name']}:{acc['starting_balance']}")
+        return _hl.md5("|".join(parts).encode()).hexdigest()
+
+    current_fp = _config_fingerprint(cfg)
+    matched = False
+    for sc in scenarios:
+        if _config_fingerprint(sc.get("config", {})) == current_fp:
+            sc["is_current"] = True
+            matched = True
+
+    if not matched:
+        import copy as _copy
+        # Run extended projection for chart
+        ext_cfg = _copy.deepcopy(cfg)
+        plan_end_age = cfg["personal"]["end_age"]
+        ext_cfg["personal"]["end_age"] = min(120, max(plan_end_age, 120))
+        ext_result = RetirementEngine(ext_cfg).run_projection()
+        DEPLETION_EPSILON = 1.0
+        dep_age = None
+        for yr in ext_result["years"]:
+            if yr["total_capital"] <= DEPLETION_EPSILON:
+                dep_age = yr["age"]
+                break
+        if dep_age:
+            chart_end = min(120, max(plan_end_age, dep_age))
+        else:
+            chart_end = min(120, plan_end_age + 5)
+        ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= chart_end]
+        # Normal projection for summary
+        result = RetirementEngine(cfg).run_projection()
+        current_sc = {
+            "name": "Current",
+            "config": cfg,
+            "result": result,
+            "ext_result": ext_result,
+            "is_current": True,
+            "is_unsaved": True,
+        }
+        scenarios.insert(0, current_sc)
+
     return render_template("compare.html", scenarios=scenarios)
 
 @app.route("/delete_scenario/<name>")

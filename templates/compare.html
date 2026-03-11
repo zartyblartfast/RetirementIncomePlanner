@@ -29,7 +29,7 @@
                 <tr>
                     <th>Metric</th>
                     {% for sc in scenarios %}
-                    <th>{{ sc.name }}</th>
+                    <th{% if sc.is_current %} class="text-info"{% endif %}>{{ sc.name }}{% if sc.is_current %} <i class="bi bi-geo-alt-fill"></i>{% endif %}</th>
                     {% endfor %}
                 </tr>
             </thead>
@@ -85,22 +85,22 @@
     </div>
 </div>
 {% elif scenarios | length == 1 %}
-<div class="alert alert-info"><i class="bi bi-info-circle"></i> Save at least <strong>two</strong> scenarios to see a comparison.</div>
+<div class="alert alert-info"><i class="bi bi-info-circle"></i> Save a scenario to compare it against your current settings.</div>
 {% endif %}
 
-<!-- Saved Scenarios -->
+<!-- Scenarios -->
 {% if scenarios %}
 <div class="card mb-4">
-    <div class="card-header"><i class="bi bi-collection"></i> Saved Scenarios</div>
+    <div class="card-header"><i class="bi bi-collection"></i> Scenarios</div>
     <div class="card-body">
         {% set chart_colours = ['#0d6efd', '#dc3545', '#198754', '#fd7e14', '#6f42c1', '#20c997'] %}
         <div class="row g-3">
             {% for sc in scenarios %}
             {% set sc_colour = chart_colours[loop.index0 % chart_colours|length] %}
             <div class="col-md-4">
-                <div class="card h-100" style="border: 2px solid {{ sc_colour }};">
+                <div class="card h-100" style="border: 2px {{ 'dashed' if sc.is_current else 'solid' }} {{ sc_colour }};">
                     <div class="card-body">
-                        <h5 style="color: {{ sc_colour }};">{{ sc.name }}</h5>
+                        <h5 style="color: {{ sc_colour }};">{{ sc.name }}{% if sc.is_current %} <i class="bi bi-geo-alt-fill" title="Matches current settings"></i>{% endif %}</h5>
                         <p class="mb-1">Target: &pound;{{ "{:,.0f}".format(sc.config.target_income.net_annual) }}</p>
                         <p class="mb-1 {% if sc.result.summary.sustainable %}text-success{% else %}text-danger{% endif %}">
                             {% if sc.result.summary.sustainable %}Sustainable{% else %}Shortfall at {{ sc.result.summary.first_shortfall_age }}{% endif %}
@@ -108,7 +108,14 @@
                         <p class="mb-0">Capital at {{ sc.result.summary.end_age }}: &pound;{{ "{:,.0f}".format(sc.result.summary.remaining_capital) }}</p>
                     </div>
                     <div class="card-footer text-end">
+                        {% if sc.is_unsaved %}
+                        <form method="post" class="d-inline">
+                            <input type="hidden" name="scenario_name" value="Current">
+                            <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-save"></i> Save as scenario</button>
+                        </form>
+                        {% else %}
                         <a href="{{ url_for('delete_scenario', name=sc.name) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete {{ sc.name }}?');"><i class="bi bi-trash"></i> Delete</a>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -140,14 +147,16 @@ allAges.sort((a, b) => a - b);
 
 const datasets = scenarios.map((sc, i) => {
     const years = (sc.ext_result && sc.ext_result.years) ? sc.ext_result.years : sc.result.years;
+    const isCurrent = sc.is_current || false;
     return {
-        label: sc.name,
+        label: sc.name + (isCurrent ? ' \u25C9' : ''),
         data: allAges.map(age => {
             const yr = years.find(y => y.age === age);
             return yr ? yr.total_capital : null;
         }),
         borderColor: colours[i % colours.length],
         backgroundColor: colours[i % colours.length] + '33',
+        borderDash: isCurrent ? [8, 4] : [],
         tension: 0.3,
         fill: false,
     };
