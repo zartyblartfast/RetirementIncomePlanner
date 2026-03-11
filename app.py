@@ -720,9 +720,7 @@ def whatif_project():
             break
     if dep_age:
         chart_end = min(120, dep_age)
-    else:
-        chart_end = min(120, plan_end_age + 5)
-    ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= chart_end]
+        ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= chart_end]
 
     # Normal projection for summary
     result = RetirementEngine(cfg).run_projection()
@@ -774,9 +772,7 @@ def whatif_save():
             break
     if dep_age:
         chart_end = min(120, dep_age)
-    else:
-        chart_end = min(120, plan_end_age + 5)
-    ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= chart_end]
+        ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= chart_end]
 
     result = RetirementEngine(cfg).run_projection()
     scenario = {"name": name, "config": cfg, "result": result, "ext_result": ext_result}
