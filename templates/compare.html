@@ -41,6 +41,24 @@
                     {% endfor %}
                 </tr>
                 <tr>
+                    <td><strong>Retirement Age</strong></td>
+                    {% for sc in scenarios %}
+                    <td>{{ sc.config.personal.retirement_age }}</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td><strong>Inflation (CPI)</strong></td>
+                    {% for sc in scenarios %}
+                    <td>{{ "{:.1%}".format(sc.config.target_income.cpi_rate) }}</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td><strong>Drawdown Strategy</strong></td>
+                    {% for sc in scenarios %}
+                    <td><small class="text-muted">{{ sc.config.withdrawal_priority | join(' → ') }}</small></td>
+                    {% endfor %}
+                </tr>
+                <tr>
                     <td><strong>Sustainable?</strong></td>
                     {% for sc in scenarios %}
                     <td class="{% if sc.result.summary.sustainable %}text-success{% else %}text-danger{% endif %}">
@@ -102,10 +120,12 @@
                     <div class="card-body">
                         <h5 style="color: {{ sc_colour }};">{{ sc.name }}{% if sc.is_current %} <i class="bi bi-geo-alt-fill" title="Matches current settings"></i>{% endif %}</h5>
                         <p class="mb-1">Target: &pound;{{ "{:,.0f}".format(sc.config.target_income.net_annual) }}</p>
+                        <p class="mb-1 text-muted small">Retire {{ sc.config.personal.retirement_age }} &middot; CPI {{ "{:.1%}".format(sc.config.target_income.cpi_rate) }}</p>
                         <p class="mb-1 {% if sc.result.summary.sustainable %}text-success{% else %}text-danger{% endif %}">
                             {% if sc.result.summary.sustainable %}Sustainable{% else %}Shortfall at {{ sc.result.summary.first_shortfall_age }}{% endif %}
                         </p>
-                        <p class="mb-0">Capital at {{ sc.result.summary.end_age }}: &pound;{{ "{:,.0f}".format(sc.result.summary.remaining_capital) }}</p>
+                        <p class="mb-1">Capital at {{ sc.result.summary.end_age }}: &pound;{{ "{:,.0f}".format(sc.result.summary.remaining_capital) }}</p>
+                        <p class="mb-0 small text-muted">{{ sc.config.withdrawal_priority | join(' → ') }}</p>
                     </div>
                     <div class="card-footer text-end">
                         {% if sc.is_unsaved %}
