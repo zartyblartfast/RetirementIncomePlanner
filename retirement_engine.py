@@ -810,6 +810,11 @@ class RetirementEngine:
                 monthly_dc_target = planned_dc_gross / 12.0
                 monthly_tf_target = planned_tf / 12.0
 
+            # Per-month income tracking (for monthly output rows)
+            monthly_guaranteed_detail = {}
+            monthly_withdrawal_detail = {}
+            monthly_gross_income = 0.0
+
             # ---- Step 1: Monthly growth and fees ---- #
             for name in list(dc_balances):
                 bal = dc_balances[name]
@@ -834,6 +839,8 @@ class RetirementEngine:
                 if active:
                     amt = gi["monthly"]
                     current_agg["guaranteed_gross"] += amt
+                    monthly_guaranteed_detail[gi["name"]] = amt
+                    monthly_gross_income += amt
                     if gi["taxable"]:
                         current_agg["guaranteed_taxable"] += amt
                         taxable_ytd += amt
@@ -872,6 +879,8 @@ class RetirementEngine:
                         current_agg["withdrawal_detail"][source_name] = (
                             current_agg["withdrawal_detail"].get(source_name, 0) + actual)
                         current_agg["pnl"][source_name]["withdrawal"] += actual
+                        monthly_withdrawal_detail[source_name] = actual
+                        monthly_gross_income += actual
                         remaining_dc -= actual
 
                 elif source_name in tf_balances and remaining_tf > 0:
@@ -891,6 +900,8 @@ class RetirementEngine:
                         current_agg["withdrawal_detail"][source_name] = (
                             current_agg["withdrawal_detail"].get(source_name, 0) + actual)
                         current_agg["pnl"][source_name]["withdrawal"] += actual
+                        monthly_withdrawal_detail[source_name] = actual
+                        monthly_gross_income += actual
                         remaining_tf -= actual
 
             # ---- Step 4: Depletion detection ---- #
@@ -924,7 +935,7 @@ class RetirementEngine:
                 monthly_target *= (1 + monthly_cpi)
             current_agg["months_counted"] += 1
 
-            # ---- Step 6: Collect monthly debug row ---- #
+            # ---- Step 6: Collect monthly row ---- #
             if monthly_rows is not None:
                 month_in_year = (abs_m - anchor_abs) % 12 + 1
                 monthly_rows.append({
@@ -933,14 +944,11 @@ class RetirementEngine:
                     "age": year_age,
                     "month_in_year": month_in_year,
                     "target_monthly": round(monthly_target / (1 + monthly_cpi), 2),
-                    "guaranteed_this_month": round(
-                        sum(gi["monthly"] for gi in guaranteed
-                            if abs_m >= gi["start_abs"]
-                            and (gi["end_abs"] is None or abs_m <= gi["end_abs"])), 2),
-                    "dc_drawdown_this_month": round(
-                        monthly_dc_target - remaining_dc, 2),
-                    "tf_drawdown_this_month": round(
-                        monthly_tf_target - remaining_tf, 2),
+                    "guaranteed_detail": {k: round(v, 2) for k, v in monthly_guaranteed_detail.items()},
+                    "guaranteed_total": round(sum(monthly_guaranteed_detail.values()), 2),
+                    "withdrawal_detail": {k: round(v, 2) for k, v in monthly_withdrawal_detail.items()},
+                    "withdrawal_total": round(sum(monthly_withdrawal_detail.values()), 2),
+                    "gross_income": round(monthly_gross_income, 2),
                     "dc_balances": {n: round(b, 2) for n, b in dc_balances.items()},
                     "tf_balances": {n: round(b, 2) for n, b in tf_balances.items()},
                     "total_capital": round(

@@ -668,8 +668,9 @@ class TestMonthlyDebugOutput(unittest.TestCase):
         result = RetirementEngine(self.cfg).run_projection(include_monthly=True)
         expected = {
             "year", "month", "age", "month_in_year", "target_monthly",
-            "guaranteed_this_month", "dc_drawdown_this_month",
-            "tf_drawdown_this_month", "dc_balances", "tf_balances",
+            "guaranteed_detail", "guaranteed_total",
+            "withdrawal_detail", "withdrawal_total", "gross_income",
+            "dc_balances", "tf_balances",
             "total_capital", "depleted_this_month",
         }
         self.assertTrue(expected.issubset(set(result["monthly_rows"][0].keys())))
