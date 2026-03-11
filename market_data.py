@@ -285,8 +285,8 @@ def get_all_pot_intelligence(config, market_data):
         "uk_cpi_pct": round(market_data["uk_cpi"] * 100, 2) if market_data.get("uk_cpi") is not None else None,
         "uk_sonia": market_data.get("uk_sonia"),
         "uk_sonia_pct": round(market_data["uk_sonia"] * 100, 2) if market_data.get("uk_sonia") is not None else None,
-        "assumed_cpi": config.get("cpi_rate", 0.025),
-        "assumed_cpi_pct": round(config.get("cpi_rate", 0.025) * 100, 2),
+        "assumed_cpi": config.get("target_income", {}).get("cpi_rate", config.get("cpi_rate", 0.025)),
+        "assumed_cpi_pct": round(config.get("target_income", {}).get("cpi_rate", config.get("cpi_rate", 0.025)) * 100, 2),
     }
 
     return {
