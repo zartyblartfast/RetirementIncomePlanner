@@ -29,7 +29,7 @@
                 <tr>
                     <th>Metric</th>
                     {% for sc in scenarios %}
-                    <th{% if sc.is_current %} class="text-info"{% endif %}>{{ sc.name }}{% if sc.is_current %} <i class="bi bi-geo-alt-fill"></i>{% endif %}</th>
+                    <th data-sc-col="{{ loop.index0 }}"{% if sc.is_current %} class="text-info"{% endif %}>{{ sc.name }}{% if sc.is_current %} <i class="bi bi-geo-alt-fill"></i>{% endif %}</th>
                     {% endfor %}
                 </tr>
             </thead>
@@ -37,31 +37,31 @@
                 <tr>
                     <td><strong>Target Income</strong></td>
                     {% for sc in scenarios %}
-                    <td>&pound;{{ "{:,.0f}".format(sc.config.target_income.net_annual) }}</td>
+                    <td data-sc-col="{{ loop.index0 }}">&pound;{{ "{:,.0f}".format(sc.config.target_income.net_annual) }}</td>
                     {% endfor %}
                 </tr>
                 <tr>
                     <td><strong>Retirement Age</strong></td>
                     {% for sc in scenarios %}
-                    <td>{{ sc.config.personal.retirement_age }}</td>
+                    <td data-sc-col="{{ loop.index0 }}">{{ sc.config.personal.retirement_age }}</td>
                     {% endfor %}
                 </tr>
                 <tr>
                     <td><strong>Inflation (CPI)</strong></td>
                     {% for sc in scenarios %}
-                    <td>{{ "{:.1%}".format(sc.config.target_income.cpi_rate) }}</td>
+                    <td data-sc-col="{{ loop.index0 }}">{{ "{:.1%}".format(sc.config.target_income.cpi_rate) }}</td>
                     {% endfor %}
                 </tr>
                 <tr>
                     <td><strong>Drawdown Strategy</strong></td>
                     {% for sc in scenarios %}
-                    <td><small class="text-muted">{{ sc.config.withdrawal_priority | join(' → ') }}</small></td>
+                    <td data-sc-col="{{ loop.index0 }}"><small class="text-muted">{{ sc.config.withdrawal_priority | join(' → ') }}</small></td>
                     {% endfor %}
                 </tr>
                 <tr>
                     <td><strong>Sustainable?</strong></td>
                     {% for sc in scenarios %}
-                    <td class="{% if sc.result.summary.sustainable %}text-success{% else %}text-danger{% endif %}">
+                    <td data-sc-col="{{ loop.index0 }}" class="{% if sc.result.summary.sustainable %}text-success{% else %}text-danger{% endif %}">
                         {% if sc.result.summary.sustainable %}<i class="bi bi-check-circle"></i> Yes{% else %}<i class="bi bi-x-circle"></i> No (age {{ sc.result.summary.first_shortfall_age }}){% endif %}
                     </td>
                     {% endfor %}
@@ -69,25 +69,25 @@
                 <tr>
                     <td><strong>Remaining Capital</strong></td>
                     {% for sc in scenarios %}
-                    <td>&pound;{{ "{:,.0f}".format(sc.result.summary.remaining_capital) }}</td>
+                    <td data-sc-col="{{ loop.index0 }}">&pound;{{ "{:,.0f}".format(sc.result.summary.remaining_capital) }}</td>
                     {% endfor %}
                 </tr>
                 <tr>
                     <td><strong>Total IoM Tax</strong></td>
                     {% for sc in scenarios %}
-                    <td>&pound;{{ "{:,.0f}".format(sc.result.summary.total_tax_paid) }}</td>
+                    <td data-sc-col="{{ loop.index0 }}">&pound;{{ "{:,.0f}".format(sc.result.summary.total_tax_paid) }}</td>
                     {% endfor %}
                 </tr>
                 <tr>
                     <td><strong>UK Tax Saving</strong></td>
                     {% for sc in scenarios %}
-                    <td class="text-success">&pound;{{ "{:,.0f}".format(sc.result.summary.uk_tax_saving) }}</td>
+                    <td data-sc-col="{{ loop.index0 }}" class="text-success">&pound;{{ "{:,.0f}".format(sc.result.summary.uk_tax_saving) }}</td>
                     {% endfor %}
                 </tr>
                 <tr>
                     <td><strong>End Age</strong></td>
                     {% for sc in scenarios %}
-                    <td>{{ sc.result.summary.end_age }}</td>
+                    <td data-sc-col="{{ loop.index0 }}">{{ sc.result.summary.end_age }}</td>
                     {% endfor %}
                 </tr>
             </tbody>
@@ -116,7 +116,7 @@
             {% for sc in scenarios %}
             {% set sc_colour = chart_colours[loop.index0 % chart_colours|length] %}
             <div class="col-md-4">
-                <div class="card h-100" style="border: 2px {{ 'dashed' if sc.is_current else 'solid' }} {{ sc_colour }};">
+                <div class="card h-100 sc-card" data-sc-index="{{ loop.index0 }}" style="border: 2px {{ 'dashed' if sc.is_current else 'solid' }} {{ sc_colour }}; cursor: pointer; transition: opacity 0.2s, transform 0.2s;">
                     <div class="card-body">
                         <h5 style="color: {{ sc_colour }};">{{ sc.name }}{% if sc.is_current %} <i class="bi bi-geo-alt-fill" title="Matches current settings"></i>{% endif %}</h5>
                         <p class="mb-1">Target: &pound;{{ "{:,.0f}".format(sc.config.target_income.net_annual) }}</p>
@@ -182,7 +182,7 @@ const datasets = scenarios.map((sc, i) => {
     };
 });
 
-new Chart(document.getElementById('compareChart'), {
+const chart = new Chart(document.getElementById('compareChart'), {
     type: 'line',
     data: { labels: allAges, datasets: datasets },
     options: {
@@ -192,6 +192,81 @@ new Chart(document.getElementById('compareChart'), {
             y: { ticks: { callback: v => '\u00a3' + v.toLocaleString() } }
         }
     }
+});
+
+// --- Click-to-highlight interaction ---
+const origStyles = datasets.map(ds => ({
+    borderWidth: ds.borderWidth || 2,
+    borderColor: ds.borderColor,
+    backgroundColor: ds.backgroundColor,
+}));
+let selectedIdx = null;
+
+function highlightScenario(idx) {
+    const isDeselect = (idx === selectedIdx);
+    selectedIdx = isDeselect ? null : idx;
+
+    // Cards
+    document.querySelectorAll('.sc-card').forEach(card => {
+        const ci = parseInt(card.dataset.scIndex);
+        if (selectedIdx === null) {
+            card.style.opacity = '1';
+            card.style.transform = 'scale(1)';
+        } else if (ci === selectedIdx) {
+            card.style.opacity = '1';
+            card.style.transform = 'scale(1.03)';
+        } else {
+            card.style.opacity = '0.4';
+            card.style.transform = 'scale(1)';
+        }
+    });
+
+    // Chart lines
+    chart.data.datasets.forEach((ds, i) => {
+        if (selectedIdx === null) {
+            ds.borderWidth = origStyles[i].borderWidth;
+            ds.borderColor = origStyles[i].borderColor;
+            ds.backgroundColor = origStyles[i].backgroundColor;
+        } else if (i === selectedIdx) {
+            ds.borderWidth = 4;
+            ds.borderColor = origStyles[i].borderColor;
+            ds.backgroundColor = origStyles[i].backgroundColor;
+        } else {
+            ds.borderWidth = 1;
+            ds.borderColor = origStyles[i].borderColor + '40';
+            ds.backgroundColor = origStyles[i].backgroundColor.replace('33', '10');
+        }
+    });
+    chart.update();
+
+    // Table column highlight
+    document.querySelectorAll('[data-sc-col]').forEach(cell => {
+        const ci = parseInt(cell.dataset.scCol);
+        if (selectedIdx === null) {
+            cell.style.backgroundColor = '';
+            cell.style.fontWeight = '';
+        } else if (ci === selectedIdx) {
+            cell.style.backgroundColor = colours[ci % colours.length] + '18';
+            cell.style.fontWeight = 'bold';
+        } else {
+            cell.style.backgroundColor = '';
+            cell.style.fontWeight = '';
+            cell.style.opacity = '0.5';
+        }
+    });
+    // Reset opacity on deselect
+    if (selectedIdx === null) {
+        document.querySelectorAll('[data-sc-col]').forEach(cell => {
+            cell.style.opacity = '';
+        });
+    }
+}
+
+document.querySelectorAll('.sc-card').forEach(card => {
+    card.addEventListener('click', e => {
+        if (e.target.closest('a, button, form')) return;
+        highlightScenario(parseInt(card.dataset.scIndex));
+    });
 });
 </script>
 {% endif %}
