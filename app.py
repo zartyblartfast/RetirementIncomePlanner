@@ -657,7 +657,8 @@ def compare():
         }
         scenarios.insert(0, current_sc)
 
-    return render_template("compare.html", scenarios=scenarios, current_config=cfg)
+    return render_template("compare.html", scenarios=scenarios, current_config=cfg,
+                           strategies=STRATEGIES, strategy_ids=STRATEGY_IDS)
 
 @app.route("/delete_scenario/<name>")
 @login_required
@@ -677,7 +678,8 @@ def whatif_project():
     """Run a projection with sandbox overrides and return JSON chart data.
 
     Accepts JSON body with optional keys:
-        target_income (float), cpi_rate (float), retirement_age (int)
+        drawdown_strategy, drawdown_strategy_params, withdrawal_priority,
+        cpi_rate, retirement_age
     Returns JSON with years[] and summary for the sandbox projection.
     """
     import copy as _copy
@@ -685,8 +687,14 @@ def whatif_project():
     cfg = _copy.deepcopy(get_config())
 
     # Apply sandbox overrides
-    if "target_income" in data:
-        cfg["target_income"]["net_annual"] = float(data["target_income"])
+    if "drawdown_strategy" in data:
+        cfg["drawdown_strategy"] = data["drawdown_strategy"]
+    if "drawdown_strategy_params" in data:
+        cfg["drawdown_strategy_params"] = {
+            k: float(v) for k, v in data["drawdown_strategy_params"].items()
+        }
+    if "withdrawal_priority" in data:
+        cfg["withdrawal_priority"] = data["withdrawal_priority"]
     if "cpi_rate" in data:
         cfg["target_income"]["cpi_rate"] = float(data["cpi_rate"])
     if "retirement_age" in data:
@@ -724,7 +732,8 @@ def whatif_save():
     """Save a What If sandbox projection as a named scenario.
 
     Accepts JSON body with:
-        name (str), target_income (float), cpi_rate (float), retirement_age (int)
+        name (str), drawdown_strategy, drawdown_strategy_params,
+        withdrawal_priority, cpi_rate, retirement_age
     """
     import copy as _copy
     data = request.get_json(silent=True) or {}
@@ -733,8 +742,14 @@ def whatif_save():
         return jsonify({"error": "Name is required"}), 400
 
     cfg = _copy.deepcopy(get_config())
-    if "target_income" in data:
-        cfg["target_income"]["net_annual"] = float(data["target_income"])
+    if "drawdown_strategy" in data:
+        cfg["drawdown_strategy"] = data["drawdown_strategy"]
+    if "drawdown_strategy_params" in data:
+        cfg["drawdown_strategy_params"] = {
+            k: float(v) for k, v in data["drawdown_strategy_params"].items()
+        }
+    if "withdrawal_priority" in data:
+        cfg["withdrawal_priority"] = data["withdrawal_priority"]
     if "cpi_rate" in data:
         cfg["target_income"]["cpi_rate"] = float(data["cpi_rate"])
     if "retirement_age" in data:

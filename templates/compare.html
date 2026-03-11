@@ -28,8 +28,21 @@
     <div class="card-body">
         <div class="row g-3 align-items-end">
             <div class="col-md-3">
-                <label class="form-label">Target Net Income (&pound;)</label>
-                <input type="number" class="form-control" id="sb-income" value="{{ current_config.target_income.net_annual }}" step="500">
+                <label class="form-label">Drawdown Strategy</label>
+                <select class="form-select" id="sb-strategy" onchange="sbShowStrategyParams()">
+                    {% for sid in strategy_ids %}
+                    <option value="{{ sid }}" {% if current_config.drawdown_strategy == sid %}selected{% endif %}>{{ strategies[sid].display_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Drawdown Order</label>
+                <select class="form-select" id="sb-order">
+                    {% for source in current_config.withdrawal_priority %}
+                    <option value="{{ source }}">{{ loop.index }}. {{ source }}</option>
+                    {% endfor %}
+                </select>
+                <input type="hidden" id="sb-order-val" value="{{ current_config.withdrawal_priority | join(',') }}">
             </div>
             <div class="col-md-2">
                 <label class="form-label">CPI Rate</label>
@@ -42,10 +55,23 @@
             <div class="col-md-2">
                 <button type="button" class="btn btn-warning w-100" id="sb-run"><i class="bi bi-lightning"></i> See Impact</button>
             </div>
-            <div class="col-md-3">
-                <div id="sb-summary" class="small text-muted"></div>
+        </div>
+        <!-- Strategy-specific parameter fields -->
+        {% for sid in strategy_ids %}
+        <div class="sb-strategy-params mt-2" id="sb-params-{{ sid }}" style="display:none;">
+            <div class="row g-3 align-items-end">
+                {% for p in strategies[sid].params %}
+                <div class="col-md-2">
+                    <label class="form-label small">{{ p.label }}</label>
+                    <input type="number" class="form-control form-control-sm sb-sp" data-key="{{ p.key }}"
+                           value="{{ current_config.drawdown_strategy_params.get(p.key, p.default) if current_config.drawdown_strategy == sid else p.default }}"
+                           step="{{ p.step }}">
+                </div>
+                {% endfor %}
             </div>
         </div>
+        {% endfor %}
+        <div class="mt-2" id="sb-summary"></div>
         <!-- Save What If as Scenario (hidden until projection runs) -->
         <div class="row g-3 align-items-end mt-2" id="sb-save-row" style="display:none;">
             <div class="col-md-7">
@@ -320,19 +346,47 @@ document.querySelectorAll('.sc-card').forEach(card => {
 });
 
 // --- What If Sandbox ---
+function sbShowStrategyParams() {
+    const sel = document.getElementById('sb-strategy').value;
+    document.querySelectorAll('.sb-strategy-params').forEach(el => { el.style.display = 'none'; });
+    const panel = document.getElementById('sb-params-' + sel);
+    if (panel) panel.style.display = '';
+}
+sbShowStrategyParams();
+
+function getSandboxPayload() {
+    const strategy = document.getElementById('sb-strategy').value;
+    const order = document.getElementById('sb-order-val').value;
+    const cpi = parseFloat(document.getElementById('sb-cpi').value);
+    const retire = parseInt(document.getElementById('sb-retire').value);
+    // Collect strategy-specific params from the visible panel
+    const params = {};
+    const panel = document.getElementById('sb-params-' + strategy);
+    if (panel) {
+        panel.querySelectorAll('.sb-sp').forEach(inp => {
+            params[inp.dataset.key] = parseFloat(inp.value);
+        });
+    }
+    return {
+        drawdown_strategy: strategy,
+        drawdown_strategy_params: params,
+        withdrawal_priority: order.split(',').map(s => s.trim()),
+        cpi_rate: cpi,
+        retirement_age: retire
+    };
+}
+
 let sbDatasetIndex = null;
 
 function runSandbox() {
-    const income = parseFloat(document.getElementById('sb-income').value);
-    const cpi = parseFloat(document.getElementById('sb-cpi').value);
-    const retire = parseInt(document.getElementById('sb-retire').value);
+    const payload = getSandboxPayload();
     const summaryEl = document.getElementById('sb-summary');
-    summaryEl.innerHTML = '<i class="bi bi-hourglass-split"></i> Projecting...';
+    summaryEl.innerHTML = '<small class="text-muted"><i class="bi bi-hourglass-split"></i> Projecting...</small>';
 
     fetch('{{ url_for("whatif_project") }}', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target_income: income, cpi_rate: cpi, retirement_age: retire })
+        body: JSON.stringify(payload)
     })
     .then(r => r.json())
     .then(data => {
@@ -373,7 +427,6 @@ function runSandbox() {
             pointRadius: 0,
         };
 
-        // Add or replace sandbox dataset
         if (sbDatasetIndex !== null) {
             chart.data.datasets[sbDatasetIndex] = sbDataset;
         } else {
@@ -382,26 +435,24 @@ function runSandbox() {
         }
         chart.update();
 
-        // Update summary text
         const s = data.summary;
         const sust = s.sustainable
             ? '<span class="text-success"><i class="bi bi-check-circle"></i> Sustainable</span>'
             : '<span class="text-danger"><i class="bi bi-x-circle"></i> Shortfall at ' + s.first_shortfall_age + '</span>';
-        summaryEl.innerHTML = sust + ' &middot; Capital at ' + s.end_age + ': &pound;' + Math.round(s.remaining_capital).toLocaleString();
+        summaryEl.innerHTML = '<small>' + sust + ' &middot; Capital at ' + s.end_age + ': &pound;' + Math.round(s.remaining_capital).toLocaleString() + '</small>';
 
-        // Show the save row
         document.getElementById('sb-save-row').style.display = '';
     })
     .catch(err => {
-        summaryEl.innerHTML = '<span class="text-danger">Error: ' + err.message + '</span>';
+        summaryEl.innerHTML = '<small class="text-danger">Error: ' + err.message + '</small>';
     });
 }
 
 document.getElementById('sb-run').addEventListener('click', runSandbox);
 
-// Also run on Enter key in any sandbox input
-['sb-income', 'sb-cpi', 'sb-retire'].forEach(id => {
-    document.getElementById(id).addEventListener('keydown', e => {
+// Run on Enter key in sandbox inputs
+document.querySelectorAll('#sb-cpi, #sb-retire, .sb-sp').forEach(el => {
+    el.addEventListener('keydown', e => {
         if (e.key === 'Enter') { e.preventDefault(); runSandbox(); }
     });
 });
@@ -410,9 +461,8 @@ document.getElementById('sb-run').addEventListener('click', runSandbox);
 document.getElementById('sb-save-btn').addEventListener('click', () => {
     const name = document.getElementById('sb-save-name').value.trim();
     if (!name) { alert('Please enter a name for the scenario.'); return; }
-    const income = parseFloat(document.getElementById('sb-income').value);
-    const cpi = parseFloat(document.getElementById('sb-cpi').value);
-    const retire = parseInt(document.getElementById('sb-retire').value);
+    const payload = getSandboxPayload();
+    payload.name = name;
     const btn = document.getElementById('sb-save-btn');
     btn.disabled = true;
     btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Saving...';
@@ -420,7 +470,7 @@ document.getElementById('sb-save-btn').addEventListener('click', () => {
     fetch('{{ url_for("whatif_save") }}', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name, target_income: income, cpi_rate: cpi, retirement_age: retire })
+        body: JSON.stringify(payload)
     })
     .then(r => r.json())
     .then(data => {
