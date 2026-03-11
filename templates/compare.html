@@ -38,11 +38,11 @@
             <div class="col-md-3">
                 <label class="form-label">Drawdown Order</label>
                 <select class="form-select" id="sb-order">
-                    {% for source in current_config.withdrawal_priority %}
-                    <option value="{{ source }}">{{ loop.index }}. {{ source }}</option>
+                    {% for perm in order_permutations %}
+                    {% set perm_val = perm | join(',') %}
+                    <option value="{{ perm_val }}" {% if perm_val == current_config.withdrawal_priority | join(',') %}selected{% endif %}>{{ perm | join(' → ') }}</option>
                     {% endfor %}
                 </select>
-                <input type="hidden" id="sb-order-val" value="{{ current_config.withdrawal_priority | join(',') }}">
             </div>
             <div class="col-md-2">
                 <label class="form-label">CPI Rate</label>
@@ -362,7 +362,7 @@ sbShowStrategyParams();
 
 function getSandboxPayload() {
     const strategy = document.getElementById('sb-strategy').value;
-    const order = document.getElementById('sb-order-val').value;
+    const order = document.getElementById('sb-order').value;
     const cpi = parseFloat(document.getElementById('sb-cpi').value);
     const retire = parseInt(document.getElementById('sb-retire').value);
     // Collect strategy-specific params from the visible panel

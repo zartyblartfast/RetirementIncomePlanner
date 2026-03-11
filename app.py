@@ -657,8 +657,14 @@ def compare():
         }
         scenarios.insert(0, current_sc)
 
+    # Build all permutations of withdrawal priority for What If order dropdown
+    from itertools import permutations as _perms
+    wp_list = cfg.get("withdrawal_priority", [])
+    order_perms = [list(p) for p in _perms(wp_list)]
+
     return render_template("compare.html", scenarios=scenarios, current_config=cfg,
-                           strategies=STRATEGIES, strategy_ids=STRATEGY_IDS)
+                           strategies=STRATEGIES, strategy_ids=STRATEGY_IDS,
+                           order_permutations=order_perms)
 
 @app.route("/delete_scenario/<name>")
 @login_required
