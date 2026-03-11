@@ -391,11 +391,11 @@ class TestGold_BaselineRealistic(unittest.TestCase):
 
     def test_remaining_capital(self):
         self.assertAlmostEqual(
-            self.s["remaining_capital"], 63271, delta=500)
+            self.s["remaining_capital"], 62922, delta=500)
 
     def test_total_tax(self):
         self.assertAlmostEqual(
-            self.s["total_tax_paid"], 25000, delta=500)
+            self.s["total_tax_paid"], 24994, delta=500)
 
     def test_yr0_guaranteed_income_positive(self):
         self.assertGreater(self.r["years"][0]["guaranteed_total"], 0)

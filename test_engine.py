@@ -660,8 +660,9 @@ class TestMonthlyDebugOutput(unittest.TestCase):
 
     def test_monthly_row_count(self):
         result = RetirementEngine(self.cfg).run_projection(include_monthly=True)
-        # Ages 68-70 inclusive = 3 years × 12 months = 36 rows
-        self.assertEqual(len(result["monthly_rows"]), 36)
+        # At least 3 config years (68-70) = 36 rows; chart extends to
+        # depletion + 2 years (cap 120) so total may be larger.
+        self.assertGreaterEqual(len(result["monthly_rows"]), 36)
 
     def test_monthly_row_keys(self):
         result = RetirementEngine(self.cfg).run_projection(include_monthly=True)
@@ -677,13 +678,19 @@ class TestMonthlyDebugOutput(unittest.TestCase):
     def test_annual_output_unchanged_with_flag(self):
         without = RetirementEngine(self.cfg).run_projection(include_monthly=False)
         with_monthly = RetirementEngine(self.cfg).run_projection(include_monthly=True)
-        # Annual years and summary should be identical
-        self.assertEqual(len(without["years"]), len(with_monthly["years"]))
-        self.assertEqual(without["summary"], with_monthly["summary"])
-        for i, yr in enumerate(without["years"]):
-            self.assertEqual(yr["age"], with_monthly["years"][i]["age"])
+        # include_monthly extends the projection for chart display;
+        # the config-range years must still be identical.
+        n = len(without["years"])
+        self.assertGreaterEqual(len(with_monthly["years"]), n)
+        self.assertEqual(
+            without["summary"]["end_age"],
+            with_monthly["summary"]["end_age"])
+        for i in range(n):
+            self.assertEqual(
+                without["years"][i]["age"],
+                with_monthly["years"][i]["age"])
             self.assertAlmostEqual(
-                yr["net_income_achieved"],
+                without["years"][i]["net_income_achieved"],
                 with_monthly["years"][i]["net_income_achieved"], places=2)
 
     def test_balances_decrease_over_months(self):

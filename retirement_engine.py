@@ -328,21 +328,24 @@ class RetirementEngine:
     # ------------------------------------------------------------------ #
     #  Monthly gross-up helper
     # ------------------------------------------------------------------ #
-    def _monthly_gross_up(self, net_needed, taxable_ytd, tax_free_portion):
-        """Gross-up a monthly DC withdrawal using YTD taxable income context.
+    def _monthly_gross_up(self, net_needed, taxable_base, tax_free_portion):
+        """Gross-up a monthly DC withdrawal using an annualised taxable base.
 
-        Uses the running tax-year taxable total to find the correct marginal
-        rate, then computes the gross withdrawal needed to yield net_needed
-        after marginal tax on the taxable portion.
+        Uses *taxable_base* (typically the estimated annual guaranteed taxable
+        income) to find the correct marginal rate, then computes the gross
+        withdrawal needed to yield *net_needed* after marginal tax on the
+        taxable portion.  Using an annualised base instead of a running YTD
+        total gives PAYE-like even monthly tax treatment and eliminates the
+        saw-tooth artefact on monthly income charts.
         """
         if net_needed <= 0:
             return 0.0
-        tax_on_existing = self.calculate_tax(taxable_ytd)['total']
+        tax_on_existing = self.calculate_tax(taxable_base)['total']
         lo, hi = net_needed, net_needed * 3
         for _ in range(60):
             mid = (lo + hi) / 2
             taxable_part = mid * (1 - tax_free_portion)
-            total_tax = self.calculate_tax(taxable_ytd + taxable_part)['total']
+            total_tax = self.calculate_tax(taxable_base + taxable_part)['total']
             marginal_tax = total_tax - tax_on_existing
             net_from_dc = mid - marginal_tax
             if abs(net_from_dc - net_needed) < 0.50:
@@ -485,6 +488,10 @@ class RetirementEngine:
 
         # End absolute month — cover full 12-month year for each age
         # anchor_age to end_age inclusive = (end_age - anchor_age + 1) years
+        config_end_age = end_age
+        if include_monthly:
+            # Extend projection for chart: show depletion + 2 years, cap 120
+            end_age = min(120, max(end_age, 120))
         end_abs = anchor_abs + (end_age - anchor_age + 1) * 12 - 1
 
         # ------------------------------------------------------------ #
@@ -645,6 +652,7 @@ class RetirementEngine:
         current_year_age = None
         strategy_mode = "net"
         strategy_amount = 0.0
+        _chart_depl_ctr = 0
 
         for abs_m in range(anchor_abs, end_abs + 1):
             cal_y, cal_m = abs_to_ym(abs_m)
@@ -745,6 +753,7 @@ class RetirementEngine:
                     current_agg["target_annual"] = target_annual
                     monthly_target = target_annual / 12.0
 
+
             # Per-month income tracking (for monthly output rows)
             monthly_guaranteed_detail = {}
             monthly_withdrawal_detail = {}
@@ -797,6 +806,32 @@ class RetirementEngine:
                 for gi in guaranteed
                 if gi["name"] in monthly_guaranteed_detail and gi["taxable"])
 
+            # ---- Annualised DC gross-up ratio (PAYE-like) ---- #
+            # Recomputed every month from current (smoothly indexed)
+            # guaranteed values and current monthly_target to eliminate
+            # both saw-tooth and annual-step artefacts.
+            _est_guar_taxable_m = _guar_taxable_mo * 12
+            _est_guar_gross_m = _guar_gross_mo * 12
+            _annual_tax_on_guar = self.calculate_tax(
+                _est_guar_taxable_m)["total"]
+            _net_from_guar_m = _est_guar_gross_m - _annual_tax_on_guar
+            _annual_shortfall_m = max(
+                0.0, monthly_target * 12 - _net_from_guar_m)
+            _total_dc_bal = sum(
+                max(0, v) for v in dc_balances.values())
+            if _annual_shortfall_m > 0.01 and _total_dc_bal > 0.01:
+                _wavg_tfp = (
+                    sum(dc_meta[n]["tax_free_portion"]
+                        * max(0, dc_balances[n])
+                        for n in dc_balances
+                        if dc_balances[n] > 0.01)
+                    / _total_dc_bal)
+                _dc_gross_annual = self.gross_up(
+                    _annual_shortfall_m, _est_guar_taxable_m, _wavg_tfp)
+                dc_gross_per_net = _dc_gross_annual / _annual_shortfall_m
+            else:
+                dc_gross_per_net = 1.0
+
             _use_gross_mode = (strategy_id != "fixed_target"
                                and strategy_mode == "gross")
 
@@ -841,24 +876,23 @@ class RetirementEngine:
 
             else:
                 # NET mode: compute shortfall after guaranteed
-                _tax_with = self.calculate_tax(taxable_ytd)["total"]
-                _tax_without = self.calculate_tax(
-                    taxable_ytd - _guar_taxable_mo)["total"]
-                _guar_net_mo = _guar_gross_mo - (_tax_with - _tax_without)
+                # _annual_tax_on_guar already computed above from the
+                # smooth monthly estimate (_est_guar_taxable_m).
+                _guar_net_mo = _guar_gross_mo - (_annual_tax_on_guar / 12.0)
                 _remaining_net = max(0, monthly_target - _guar_net_mo)
 
                 for source_name in priority:
                     if _remaining_net <= 0.01:
                         break
                     if source_name in dc_balances and dc_balances[source_name] > 0.01:
-                        tfp = dc_meta[source_name]["tax_free_portion"]
-                        gross_needed = self._monthly_gross_up(
-                            _remaining_net, taxable_ytd, tfp)
+                        # Flat monthly DC gross via annualised ratio
+                        gross_needed = _remaining_net * dc_gross_per_net
                         gross_needed = min(gross_needed, dc_balances[source_name])
                         if gross_needed > 0.01:
                             dc_balances[source_name] -= gross_needed
                             if dc_balances[source_name] < 0.01:
                                 dc_balances[source_name] = 0.0
+                            tfp = dc_meta[source_name]["tax_free_portion"]
                             tfp_amt = gross_needed * tfp
                             taxable_amt = gross_needed - tfp_amt
                             current_agg["dc_gross"] += gross_needed
@@ -870,11 +904,8 @@ class RetirementEngine:
                             monthly_withdrawal_detail[source_name] = (
                                 monthly_withdrawal_detail.get(source_name, 0) + gross_needed)
                             monthly_gross_income += gross_needed
-                            # Recalculate remaining net after this DC draw
-                            _tax_now = self.calculate_tax(taxable_ytd)["total"]
-                            _tax_before = self.calculate_tax(
-                                taxable_ytd - taxable_amt)["total"]
-                            _net_from_this = gross_needed - (_tax_now - _tax_before)
+                            # Net provided by this DC draw (annualised ratio)
+                            _net_from_this = gross_needed / dc_gross_per_net
                             _remaining_net = max(0, _remaining_net - _net_from_this)
                     elif source_name in tf_balances and tf_balances[source_name] > 0.01:
                         available = tf_balances[source_name]
@@ -917,6 +948,17 @@ class RetirementEngine:
                         first_pot_exhausted_age = year_age
                     warnings.append(
                         f"{pname} exhausted at age {year_age} month {month_in_year}")
+
+            # ---- Early exit for extended chart projection ---- #
+            if include_monthly and year_age > config_end_age:
+                total_capital = (sum(max(0, v) for v in dc_balances.values())
+                                 + sum(max(0, v) for v in tf_balances.values()))
+                if total_capital < 0.01:
+                    _chart_depl_ctr += 1
+                    if _chart_depl_ctr >= 24:
+                        break
+                else:
+                    _chart_depl_ctr = 0
 
             # ---- Step 5: Monthly CPI on target ---- #
             if use_monthly_cpi:
@@ -972,7 +1014,7 @@ class RetirementEngine:
         summary = {
             "sustainable": first_shortfall_age is None,
             "first_shortfall_age": first_shortfall_age,
-            "end_age": end_age,
+            "end_age": config_end_age,
             "anchor_age": anchor_age,
             "is_post_retirement": is_post_retirement,
             "num_years": num_years,
