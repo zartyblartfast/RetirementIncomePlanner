@@ -904,6 +904,58 @@ class RetirementEngine:
                         monthly_gross_income += actual
                         remaining_tf -= actual
 
+            # ---- Step 3b: Spillover — unfilled DC draws from TF, and vice versa ---- #
+            if remaining_dc > 0.01:
+                for source_name in priority:
+                    if remaining_dc <= 0.01:
+                        break
+                    if source_name in tf_balances and tf_balances[source_name] > 0:
+                        available = max(0, tf_balances[source_name])
+                        actual = min(remaining_dc, available)
+                        if actual > 0:
+                            tf_balances[source_name] -= actual
+                            residual = tf_balances[source_name]
+                            if 0 < residual < monthly_target:
+                                actual += residual
+                                tf_balances[source_name] = 0.0
+                            elif residual < 0.01:
+                                tf_balances[source_name] = 0.0
+                            current_agg["tf_total"] += actual
+                            current_agg["withdrawal_detail"][source_name] = (
+                                current_agg["withdrawal_detail"].get(source_name, 0) + actual)
+                            current_agg["pnl"][source_name]["withdrawal"] += actual
+                            monthly_withdrawal_detail[source_name] = (
+                                monthly_withdrawal_detail.get(source_name, 0) + actual)
+                            monthly_gross_income += actual
+                            remaining_dc -= actual
+
+            if remaining_tf > 0.01:
+                for source_name in priority:
+                    if remaining_tf <= 0.01:
+                        break
+                    if source_name in dc_balances and dc_balances[source_name] > 0:
+                        available = max(0, dc_balances[source_name])
+                        actual = min(remaining_tf, available)
+                        if actual > 0:
+                            dc_balances[source_name] -= actual
+                            residual = dc_balances[source_name]
+                            if 0 < residual < monthly_target:
+                                actual += residual
+                                dc_balances[source_name] = 0.0
+                            elif residual < 0.01:
+                                dc_balances[source_name] = 0.0
+                            tfp = dc_meta[source_name]["tax_free_portion"]
+                            current_agg["dc_gross"] += actual
+                            current_agg["dc_tf"] += actual * tfp
+                            taxable_ytd += actual * (1 - tfp)
+                            current_agg["withdrawal_detail"][source_name] = (
+                                current_agg["withdrawal_detail"].get(source_name, 0) + actual)
+                            current_agg["pnl"][source_name]["withdrawal"] += actual
+                            monthly_withdrawal_detail[source_name] = (
+                                monthly_withdrawal_detail.get(source_name, 0) + actual)
+                            monthly_gross_income += actual
+                            remaining_tf -= actual
+
             # ---- Step 4: Depletion detection ---- #
             for pname in list(dc_balances):
                 if dc_balances[pname] <= 0 and pname not in depleted_pots:

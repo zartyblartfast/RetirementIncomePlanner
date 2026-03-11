@@ -325,8 +325,8 @@ class TestGold_CPICompoundsTarget(unittest.TestCase):
 #    ISA depletes first (~age 74)
 #    yr0 capital: ~£198,617
 #    yr5 capital: ~£188,866
-#    remaining_capital: ~£67,120
-#    total_tax: ~£24,586
+#    remaining_capital: ~£64,429
+#    total_tax: ~£24,702
 # ===================================================================
 class TestGold_BaselineRealistic(unittest.TestCase):
     """Fixed multi-source config — deterministic, no user data dependency."""
@@ -392,11 +392,11 @@ class TestGold_BaselineRealistic(unittest.TestCase):
 
     def test_remaining_capital(self):
         self.assertAlmostEqual(
-            self.s["remaining_capital"], 67120, delta=500)
+            self.s["remaining_capital"], 64429, delta=500)
 
     def test_total_tax(self):
         self.assertAlmostEqual(
-            self.s["total_tax_paid"], 24586, delta=500)
+            self.s["total_tax_paid"], 24702, delta=500)
 
     def test_yr0_guaranteed_income_positive(self):
         self.assertGreater(self.r["years"][0]["guaranteed_total"], 0)
