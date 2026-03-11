@@ -138,12 +138,14 @@
                     {% endif %}
                 </div>
             </div>
+            {% if market_intel.macro.uk_sonia_pct is not none %}
             <div class="col-md-6">
                 <div class="d-flex align-items-center gap-2">
                     <span class="badge bg-secondary">UK SONIA</span>
                     <span>Live: <strong>{{ market_intel.macro.uk_sonia_pct }}%</strong></span>
                 </div>
             </div>
+            {% endif %}
         </div>
 
         <hr>
