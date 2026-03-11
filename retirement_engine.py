@@ -7,6 +7,7 @@ import copy
 import json
 import math
 import os
+from drawdown_strategies import normalize_config as _normalize_config, compute_annual_target as _compute_annual_target
 
 
 # ------------------------------------------------------------------ #
@@ -152,6 +153,7 @@ class RetirementEngine:
 
     def __init__(self, config: dict):
         self.cfg = copy.deepcopy(config)
+        _normalize_config(self.cfg)
         self._validate_config()
 
     # ------------------------------------------------------------------ #
@@ -421,6 +423,12 @@ class RetirementEngine:
         cpi = cfg["target_income"]["cpi_rate"]
         monthly_cpi = annual_to_monthly_rate(cpi)
 
+        # Strategy dispatch setup
+        strategy_id = cfg.get("drawdown_strategy", "fixed_target")
+        strategy_params = cfg.get("drawdown_strategy_params", {})
+        strategy_state = None
+        use_monthly_cpi = (strategy_id == "fixed_target")
+
         # Load asset model for growth rate resolution
         asset_model = load_asset_model()
 
@@ -659,6 +667,15 @@ class RetirementEngine:
                     if yr_row["shortfall"] and first_shortfall_age is None:
                         first_shortfall_age = yr_row["age"]
 
+                    # Strategy feedback: record actual gross for Guyton-Klinger
+                    if strategy_id == "guyton_klinger" and strategy_state is not None:
+                        actual_gross = current_agg["dc_gross"] + current_agg["tf_total"]
+                        portfolio_at_start = sum(
+                            agg_pnl["opening"] for agg_pnl in current_agg["pnl"].values())
+                        strategy_state["prev_gross"] = actual_gross
+                        if strategy_state.get("starting_rate") is None and portfolio_at_start > 0:
+                            strategy_state["starting_rate"] = actual_gross / portfolio_at_start
+
                 # ---- New year setup ---- #
                 taxable_ytd = 0.0
                 current_year_age = year_age
@@ -666,10 +683,8 @@ class RetirementEngine:
                 year_offset = year_age - anchor_age
                 cy = cal_y if is_post_retirement else ret_y + year_offset
                 tax_year_label = f"{cy}/{str(cy + 1)[-2:]}"
-                target_annual = monthly_target * 12.0
-                current_agg = _new_agg(year_age, tax_year_label, target_annual)
 
-                # ---- Annual withdrawal plan (gross-up with annual context) ---- #
+                # ---- Estimate guaranteed income for this year ---- #
                 est_guar_gross = 0.0
                 est_guar_taxable = 0.0
                 for gi in guaranteed:
@@ -680,35 +695,117 @@ class RetirementEngine:
                         if gi["taxable"]:
                             est_guar_taxable += gi["monthly"] * 12
 
-                tax_on_guar = self.calculate_tax(est_guar_taxable)["total"]
-                net_from_guar = est_guar_gross - tax_on_guar
-                annual_shortfall = max(0, target_annual - net_from_guar)
+                # ---- Strategy dispatch ---- #
+                portfolio_value = sum(dc_balances.values()) + sum(tf_balances.values())
 
+                if strategy_id == "fixed_target":
+                    # Preserve exact existing behaviour
+                    target_annual = monthly_target * 12.0
+                else:
+                    target_dict, strategy_state = _compute_annual_target(
+                        strategy_id, strategy_params, strategy_state,
+                        portfolio_value, cpi)
+                    strategy_mode = target_dict["mode"]
+                    strategy_amount = target_dict["annual_amount"]
+
+                current_agg = _new_agg(year_age, tax_year_label,
+                                       target_annual if strategy_id == "fixed_target"
+                                       else strategy_amount)
+
+                # ---- Annual withdrawal plan ---- #
                 planned_dc_gross = 0.0
                 planned_dc_tf = 0.0
                 planned_tf = 0.0
-                remaining_plan = annual_shortfall
 
-                for source_name in priority:
-                    if remaining_plan <= 0:
-                        break
-                    if source_name in dc_balances:
-                        tfp = dc_meta[source_name]["tax_free_portion"]
-                        gross_needed = self.gross_up(
-                            remaining_plan,
-                            est_guar_taxable + (planned_dc_gross - planned_dc_tf),
-                            tfp)
-                        gross_needed = min(gross_needed, max(0, dc_balances[source_name]))
-                        planned_dc_gross += gross_needed
-                        planned_dc_tf += gross_needed * tfp
-                        total_taxable_est = est_guar_taxable + (planned_dc_gross - planned_dc_tf)
-                        tax_est = self.calculate_tax(total_taxable_est)["total"]
-                        net_so_far = est_guar_gross + planned_dc_gross + planned_tf - tax_est
-                        remaining_plan = max(0, target_annual - net_so_far)
-                    elif source_name in tf_balances:
-                        withdraw = min(remaining_plan, max(0, tf_balances[source_name]))
-                        planned_tf += withdraw
-                        remaining_plan -= withdraw
+                if strategy_id == "fixed_target":
+                    # NET mode: existing gross-up flow
+                    tax_on_guar = self.calculate_tax(est_guar_taxable)["total"]
+                    net_from_guar = est_guar_gross - tax_on_guar
+                    remaining_plan = max(0, target_annual - net_from_guar)
+
+                    for source_name in priority:
+                        if remaining_plan <= 0:
+                            break
+                        if source_name in dc_balances:
+                            tfp = dc_meta[source_name]["tax_free_portion"]
+                            gross_needed = self.gross_up(
+                                remaining_plan,
+                                est_guar_taxable + (planned_dc_gross - planned_dc_tf),
+                                tfp)
+                            gross_needed = min(gross_needed, max(0, dc_balances[source_name]))
+                            planned_dc_gross += gross_needed
+                            planned_dc_tf += gross_needed * tfp
+                            total_taxable_est = est_guar_taxable + (planned_dc_gross - planned_dc_tf)
+                            tax_est = self.calculate_tax(total_taxable_est)["total"]
+                            net_so_far = est_guar_gross + planned_dc_gross + planned_tf - tax_est
+                            remaining_plan = max(0, target_annual - net_so_far)
+                        elif source_name in tf_balances:
+                            withdraw = min(remaining_plan, max(0, tf_balances[source_name]))
+                            planned_tf += withdraw
+                            remaining_plan -= withdraw
+
+                elif strategy_mode == "net":
+                    # NET mode for vanguard_dynamic / guyton_klinger
+                    target_annual = strategy_amount
+                    current_agg["target_annual"] = target_annual
+                    tax_on_guar = self.calculate_tax(est_guar_taxable)["total"]
+                    net_from_guar = est_guar_gross - tax_on_guar
+                    remaining_plan = max(0, target_annual - net_from_guar)
+
+                    for source_name in priority:
+                        if remaining_plan <= 0:
+                            break
+                        if source_name in dc_balances:
+                            tfp = dc_meta[source_name]["tax_free_portion"]
+                            gross_needed = self.gross_up(
+                                remaining_plan,
+                                est_guar_taxable + (planned_dc_gross - planned_dc_tf),
+                                tfp)
+                            gross_needed = min(gross_needed, max(0, dc_balances[source_name]))
+                            planned_dc_gross += gross_needed
+                            planned_dc_tf += gross_needed * tfp
+                            total_taxable_est = est_guar_taxable + (planned_dc_gross - planned_dc_tf)
+                            tax_est = self.calculate_tax(total_taxable_est)["total"]
+                            net_so_far = est_guar_gross + planned_dc_gross + planned_tf - tax_est
+                            remaining_plan = max(0, target_annual - net_so_far)
+                        elif source_name in tf_balances:
+                            withdraw = min(remaining_plan, max(0, tf_balances[source_name]))
+                            planned_tf += withdraw
+                            remaining_plan -= withdraw
+
+                    # Update monthly_target for residual sweep threshold
+                    monthly_target = target_annual / 12.0
+
+                else:
+                    # GROSS mode for fixed_percentage
+                    total_gross_target = strategy_amount
+                    remaining_gross = total_gross_target
+
+                    for source_name in priority:
+                        if remaining_gross <= 0:
+                            break
+                        if source_name in dc_balances:
+                            available = max(0, dc_balances[source_name])
+                            actual = min(remaining_gross, available)
+                            planned_dc_gross += actual
+                            tfp = dc_meta[source_name]["tax_free_portion"]
+                            planned_dc_tf += actual * tfp
+                            remaining_gross -= actual
+                        elif source_name in tf_balances:
+                            available = max(0, tf_balances[source_name])
+                            actual = min(remaining_gross, available)
+                            planned_tf += actual
+                            remaining_gross -= actual
+
+                    # Estimate net for target_annual (display & shortfall)
+                    total_taxable_est = est_guar_taxable + (planned_dc_gross - planned_dc_tf)
+                    tax_est = self.calculate_tax(total_taxable_est)["total"]
+                    est_net = est_guar_gross + planned_dc_gross + planned_tf - tax_est
+                    target_annual = est_net
+                    current_agg["target_annual"] = target_annual
+
+                    # Update monthly_target for residual sweep threshold
+                    monthly_target = target_annual / 12.0
 
                 monthly_dc_target = planned_dc_gross / 12.0
                 monthly_tf_target = planned_tf / 12.0
@@ -823,7 +920,8 @@ class RetirementEngine:
                         f"{pname} exhausted at age {year_age} month {month_in_year}")
 
             # ---- Step 5: Monthly CPI on target ---- #
-            monthly_target *= (1 + monthly_cpi)
+            if use_monthly_cpi:
+                monthly_target *= (1 + monthly_cpi)
             current_agg["months_counted"] += 1
 
             # ---- Step 6: Collect monthly debug row ---- #
