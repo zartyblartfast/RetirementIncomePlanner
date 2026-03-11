@@ -35,7 +35,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-4">
                 <label class="form-label">Drawdown Order</label>
                 <select class="form-select" id="sb-order">
                     {% for perm in order_permutations %}
@@ -48,8 +48,8 @@
                 <label class="form-label">CPI Rate</label>
                 <input type="number" class="form-control" id="sb-cpi" value="{{ current_config.target_income.cpi_rate }}" step="0.005" min="0" max="0.2">
             </div>
-            <div class="col-md-2">
-                <label class="form-label">Retirement Age</label>
+            <div class="col-md-1">
+                <label class="form-label">Ret. Age</label>
                 <input type="number" class="form-control" id="sb-retire" value="{{ current_config.personal.retirement_age }}" step="1" min="50" max="80">
             </div>
             <div class="col-md-2">
