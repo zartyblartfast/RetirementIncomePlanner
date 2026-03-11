@@ -700,6 +700,53 @@ def whatif_project():
         "summary": result["summary"],
     })
 
+@app.route("/whatif_save", methods=["POST"])
+@login_required
+def whatif_save():
+    """Save a What If sandbox projection as a named scenario.
+
+    Accepts JSON body with:
+        name (str), target_income (float), cpi_rate (float), retirement_age (int)
+    """
+    import copy as _copy
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", "").strip()
+    if not name:
+        return jsonify({"error": "Name is required"}), 400
+
+    cfg = _copy.deepcopy(get_config())
+    if "target_income" in data:
+        cfg["target_income"]["net_annual"] = float(data["target_income"])
+    if "cpi_rate" in data:
+        cfg["target_income"]["cpi_rate"] = float(data["cpi_rate"])
+    if "retirement_age" in data:
+        cfg["personal"]["retirement_age"] = int(data["retirement_age"])
+
+    # Extended projection for chart
+    plan_end_age = cfg["personal"]["end_age"]
+    ext_cfg = _copy.deepcopy(cfg)
+    ext_cfg["personal"]["end_age"] = min(120, max(plan_end_age, 120))
+    ext_result = RetirementEngine(ext_cfg).run_projection()
+    DEPLETION_EPSILON = 1.0
+    dep_age = None
+    for yr in ext_result["years"]:
+        if yr["total_capital"] <= DEPLETION_EPSILON:
+            dep_age = yr["age"]
+            break
+    if dep_age:
+        chart_end = min(120, max(plan_end_age, dep_age))
+    else:
+        chart_end = min(120, plan_end_age + 5)
+    ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= chart_end]
+
+    result = RetirementEngine(cfg).run_projection()
+    scenario = {"name": name, "config": cfg, "result": result, "ext_result": ext_result}
+    path = os.path.join(SCENARIO_DIR, f"{name.replace(' ', '_')}.json")
+    with open(path, "w") as f:
+        json.dump(scenario, f, indent=2, default=str)
+
+    return jsonify({"ok": True, "name": name})
+
 # ------------------------------------------------------------------ #
 #  Optimiser
 # ------------------------------------------------------------------ #

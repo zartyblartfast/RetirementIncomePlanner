@@ -4,16 +4,16 @@
 
 <h2 class="mb-3"><i class="bi bi-question-diamond"></i> What If</h2>
 
-<!-- Save Current Scenario -->
+<!-- Save Current Dashboard Settings as Scenario -->
 <div class="card mb-4">
     <div class="card-body">
         <form method="post" class="row g-3 align-items-end">
             <div class="col-md-8">
-                <label class="form-label">Save current settings as a named scenario</label>
+                <label class="form-label">Save your current Dashboard settings as a named scenario</label>
                 <input type="text" class="form-control" name="scenario_name" placeholder="e.g. Conservative £28k" required>
             </div>
             <div class="col-md-4">
-                <button type="submit" class="btn btn-primary w-100"><i class="bi bi-save"></i> Save Scenario</button>
+                <button type="submit" class="btn btn-primary w-100"><i class="bi bi-save"></i> Save Dashboard Scenario</button>
             </div>
         </form>
     </div>
@@ -40,10 +40,23 @@
                 <input type="number" class="form-control" id="sb-retire" value="{{ current_config.personal.retirement_age }}" step="1" min="50" max="80">
             </div>
             <div class="col-md-2">
-                <button type="button" class="btn btn-warning w-100" id="sb-run"><i class="bi bi-lightning"></i> Project</button>
+                <button type="button" class="btn btn-warning w-100" id="sb-run"><i class="bi bi-lightning"></i> See Impact</button>
             </div>
             <div class="col-md-3">
                 <div id="sb-summary" class="small text-muted"></div>
+            </div>
+        </div>
+        <!-- Save What If as Scenario (hidden until projection runs) -->
+        <div class="row g-3 align-items-end mt-2" id="sb-save-row" style="display:none;">
+            <div class="col-md-7">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-bookmark-star"></i></span>
+                    <input type="text" class="form-control" id="sb-save-name" placeholder="Name this What If scenario">
+                    <button type="button" class="btn btn-outline-warning" id="sb-save-btn"><i class="bi bi-save"></i> Save What If Scenario</button>
+                </div>
+            </div>
+            <div class="col-md-5">
+                <small class="text-muted">Saves the sandbox inputs above as a new scenario — does not change your Dashboard settings</small>
             </div>
         </div>
     </div>
@@ -375,6 +388,9 @@ function runSandbox() {
             ? '<span class="text-success"><i class="bi bi-check-circle"></i> Sustainable</span>'
             : '<span class="text-danger"><i class="bi bi-x-circle"></i> Shortfall at ' + s.first_shortfall_age + '</span>';
         summaryEl.innerHTML = sust + ' &middot; Capital at ' + s.end_age + ': &pound;' + Math.round(s.remaining_capital).toLocaleString();
+
+        // Show the save row
+        document.getElementById('sb-save-row').style.display = '';
     })
     .catch(err => {
         summaryEl.innerHTML = '<span class="text-danger">Error: ' + err.message + '</span>';
@@ -387,6 +403,39 @@ document.getElementById('sb-run').addEventListener('click', runSandbox);
 ['sb-income', 'sb-cpi', 'sb-retire'].forEach(id => {
     document.getElementById(id).addEventListener('keydown', e => {
         if (e.key === 'Enter') { e.preventDefault(); runSandbox(); }
+    });
+});
+
+// --- Save What If Scenario ---
+document.getElementById('sb-save-btn').addEventListener('click', () => {
+    const name = document.getElementById('sb-save-name').value.trim();
+    if (!name) { alert('Please enter a name for the scenario.'); return; }
+    const income = parseFloat(document.getElementById('sb-income').value);
+    const cpi = parseFloat(document.getElementById('sb-cpi').value);
+    const retire = parseInt(document.getElementById('sb-retire').value);
+    const btn = document.getElementById('sb-save-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Saving...';
+
+    fetch('{{ url_for("whatif_save") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, target_income: income, cpi_rate: cpi, retirement_age: retire })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            window.location.reload();
+        } else {
+            alert(data.error || 'Failed to save');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-save"></i> Save What If Scenario';
+        }
+    })
+    .catch(err => {
+        alert('Error: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-save"></i> Save What If Scenario';
     });
 });
 </script>
