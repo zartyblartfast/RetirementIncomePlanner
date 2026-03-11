@@ -116,6 +116,45 @@
         </div>
     </div>
 
+    <!-- DRAWDOWN STRATEGY -->
+    <div class="card mb-4">
+        <div class="card-header bg-dark text-white"><i class="bi bi-diagram-3"></i> Drawdown Strategy</div>
+        <div class="card-body">
+            <form method="post">
+                <input type="hidden" name="action" value="save_strategy">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label">Strategy</label>
+                        <select class="form-select" name="drawdown_strategy" id="strategySelect" onchange="showStrategyParams()">
+                            {% for sid in strategy_ids %}
+                            <option value="{{ sid }}" {% if config.drawdown_strategy == sid %}selected{% endif %}>{{ strategies[sid].display_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-8">
+                        <small class="text-muted" id="strategyDesc"></small>
+                    </div>
+                </div>
+                <!-- Strategy-specific parameter fields -->
+                {% for sid in strategy_ids %}
+                <div class="strategy-params mt-3" id="params-{{ sid }}" style="display:none;">
+                    <div class="row g-3">
+                        {% for p in strategies[sid].params %}
+                        <div class="col-md-3">
+                            <label class="form-label">{{ p.label }}</label>
+                            <input type="number" class="form-control" name="sp_{{ p.key }}"
+                                   value="{{ config.drawdown_strategy_params.get(p.key, p.default) if config.drawdown_strategy == sid else p.default }}"
+                                   step="{{ p.step }}">
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+                <button type="submit" class="btn btn-dark btn-sm mt-3"><i class="bi bi-check-lg"></i> Save Strategy</button>
+            </form>
+        </div>
+    </div>
+
     <!-- RESET -->
     <div class="card mb-4 border-danger">
         <div class="card-body text-center">
@@ -500,6 +539,20 @@
 
 {% block scripts %}
 <script>
+// ============================================================
+// Drawdown Strategy — show/hide param panels
+// ============================================================
+const STRATEGY_DESCS = {{ strategies | tojson }};
+function showStrategyParams() {
+    const sel = document.getElementById('strategySelect').value;
+    document.querySelectorAll('.strategy-params').forEach(el => { el.style.display = 'none'; });
+    const panel = document.getElementById('params-' + sel);
+    if (panel) panel.style.display = '';
+    const desc = document.getElementById('strategyDesc');
+    if (desc && STRATEGY_DESCS[sel]) desc.textContent = STRATEGY_DESCS[sel].description;
+}
+showStrategyParams();
+
 // ============================================================
 // Asset Model data (injected from server)
 // ============================================================

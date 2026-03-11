@@ -452,6 +452,21 @@ def settings():
                 cfg["withdrawal_priority"] = [x.strip() for x in wp.split(",") if x.strip()]
             flash("Withdrawal priority updated.", "success")
 
+        elif action == "save_strategy":
+            sid = request.form.get("drawdown_strategy", "fixed_target")
+            cfg["drawdown_strategy"] = sid
+            # Build params from form based on registry
+            entry = STRATEGIES.get(sid, {})
+            params = {}
+            for p in entry.get("params", []):
+                val = request.form.get(f"sp_{p['key']}", str(p["default"]))
+                try:
+                    params[p["key"]] = float(val)
+                except (ValueError, TypeError):
+                    params[p["key"]] = p["default"]
+            cfg["drawdown_strategy_params"] = params
+            flash(f"Drawdown strategy set to {entry.get('display_name', sid)}.", "success")
+
         elif action == "reset_defaults":
             cfg = load_config(CONFIG_PATH)
             if os.path.exists(ACTIVE_CONFIG_PATH):
@@ -527,7 +542,8 @@ def settings():
                            dc_provenance=dc_provenance, tf_provenance=tf_provenance,
                            phase_info=phase_info,
                            dc_projected=dc_projected, tf_projected=tf_projected,
-                           market_intel=market_intel)
+                           market_intel=market_intel,
+                           strategies=STRATEGIES, strategy_ids=STRATEGY_IDS)
 
 # ------------------------------------------------------------------ #
 #  Scenarios
