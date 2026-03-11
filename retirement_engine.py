@@ -643,8 +643,8 @@ class RetirementEngine:
         # ------------------------------------------------------------ #
         current_agg = None
         current_year_age = None
-        monthly_dc_target = 0.0
-        monthly_tf_target = 0.0
+        strategy_mode = "net"
+        strategy_amount = 0.0
 
         for abs_m in range(anchor_abs, end_abs + 1):
             cal_y, cal_m = abs_to_ym(abs_m)
@@ -712,103 +712,38 @@ class RetirementEngine:
                                        target_annual if strategy_id == "fixed_target"
                                        else strategy_amount)
 
-                # ---- Annual withdrawal plan ---- #
-                planned_dc_gross = 0.0
-                planned_dc_tf = 0.0
-                planned_tf = 0.0
-
+                # ---- Annual target setup (source allocation is monthly) ---- #
                 if strategy_id == "fixed_target":
-                    # NET mode: existing gross-up flow
-                    tax_on_guar = self.calculate_tax(est_guar_taxable)["total"]
-                    net_from_guar = est_guar_gross - tax_on_guar
-                    remaining_plan = max(0, target_annual - net_from_guar)
-
-                    for source_name in priority:
-                        if remaining_plan <= 0:
-                            break
-                        if source_name in dc_balances:
-                            tfp = dc_meta[source_name]["tax_free_portion"]
-                            gross_needed = self.gross_up(
-                                remaining_plan,
-                                est_guar_taxable + (planned_dc_gross - planned_dc_tf),
-                                tfp)
-                            gross_needed = min(gross_needed, max(0, dc_balances[source_name]))
-                            planned_dc_gross += gross_needed
-                            planned_dc_tf += gross_needed * tfp
-                            total_taxable_est = est_guar_taxable + (planned_dc_gross - planned_dc_tf)
-                            tax_est = self.calculate_tax(total_taxable_est)["total"]
-                            net_so_far = est_guar_gross + planned_dc_gross + planned_tf - tax_est
-                            remaining_plan = max(0, target_annual - net_so_far)
-                        elif source_name in tf_balances:
-                            withdraw = min(remaining_plan, max(0, tf_balances[source_name]))
-                            planned_tf += withdraw
-                            remaining_plan -= withdraw
+                    pass  # target_annual already set above
 
                 elif strategy_mode == "net":
                     # NET mode for vanguard_dynamic / guyton_klinger
                     target_annual = strategy_amount
                     current_agg["target_annual"] = target_annual
-                    tax_on_guar = self.calculate_tax(est_guar_taxable)["total"]
-                    net_from_guar = est_guar_gross - tax_on_guar
-                    remaining_plan = max(0, target_annual - net_from_guar)
-
-                    for source_name in priority:
-                        if remaining_plan <= 0:
-                            break
-                        if source_name in dc_balances:
-                            tfp = dc_meta[source_name]["tax_free_portion"]
-                            gross_needed = self.gross_up(
-                                remaining_plan,
-                                est_guar_taxable + (planned_dc_gross - planned_dc_tf),
-                                tfp)
-                            gross_needed = min(gross_needed, max(0, dc_balances[source_name]))
-                            planned_dc_gross += gross_needed
-                            planned_dc_tf += gross_needed * tfp
-                            total_taxable_est = est_guar_taxable + (planned_dc_gross - planned_dc_tf)
-                            tax_est = self.calculate_tax(total_taxable_est)["total"]
-                            net_so_far = est_guar_gross + planned_dc_gross + planned_tf - tax_est
-                            remaining_plan = max(0, target_annual - net_so_far)
-                        elif source_name in tf_balances:
-                            withdraw = min(remaining_plan, max(0, tf_balances[source_name]))
-                            planned_tf += withdraw
-                            remaining_plan -= withdraw
-
-                    # Update monthly_target for residual sweep threshold
                     monthly_target = target_annual / 12.0
 
                 else:
                     # GROSS mode for fixed_percentage
-                    total_gross_target = strategy_amount
-                    remaining_gross = total_gross_target
-
-                    for source_name in priority:
-                        if remaining_gross <= 0:
-                            break
-                        if source_name in dc_balances:
-                            available = max(0, dc_balances[source_name])
-                            actual = min(remaining_gross, available)
-                            planned_dc_gross += actual
-                            tfp = dc_meta[source_name]["tax_free_portion"]
-                            planned_dc_tf += actual * tfp
-                            remaining_gross -= actual
-                        elif source_name in tf_balances:
-                            available = max(0, tf_balances[source_name])
-                            actual = min(remaining_gross, available)
-                            planned_tf += actual
-                            remaining_gross -= actual
-
                     # Estimate net for target_annual (display & shortfall)
-                    total_taxable_est = est_guar_taxable + (planned_dc_gross - planned_dc_tf)
+                    total_dc_bal = sum(max(0, v) for v in dc_balances.values())
+                    total_tf_bal = sum(max(0, v) for v in tf_balances.values())
+                    total_pots = total_dc_bal + total_tf_bal
+                    achievable = min(strategy_amount, total_pots)
+                    if total_dc_bal > 0 and total_pots > 0:
+                        dc_frac = total_dc_bal / total_pots
+                        wavg_tfp = sum(
+                            dc_meta[n]["tax_free_portion"] * max(0, dc_balances[n])
+                            for n in dc_balances) / total_dc_bal
+                    else:
+                        dc_frac = 0
+                        wavg_tfp = 0.25
+                    est_dc_taxable = achievable * dc_frac * (1 - wavg_tfp)
+                    total_taxable_est = est_guar_taxable + est_dc_taxable
                     tax_est = self.calculate_tax(total_taxable_est)["total"]
-                    est_net = est_guar_gross + planned_dc_gross + planned_tf - tax_est
+                    est_net = est_guar_gross + achievable - tax_est
                     target_annual = est_net
                     current_agg["target_annual"] = target_annual
-
-                    # Update monthly_target for residual sweep threshold
                     monthly_target = target_annual / 12.0
-
-                monthly_dc_target = planned_dc_gross / 12.0
-                monthly_tf_target = planned_tf / 12.0
 
             # Per-month income tracking (for monthly output rows)
             monthly_guaranteed_detail = {}
@@ -854,23 +789,29 @@ class RetirementEngine:
                 if gi["monthly_idx"] > 0:
                     gi["monthly"] *= (1 + gi["monthly_idx"])
 
-            # ---- Step 3: Execute planned monthly withdrawals ---- #
-            remaining_dc = monthly_dc_target
-            remaining_tf = monthly_tf_target
+            # ---- Step 3: Monthly source allocation ---- #
+            # Compute this month's guaranteed income breakdown
+            _guar_gross_mo = sum(monthly_guaranteed_detail.values())
+            _guar_taxable_mo = sum(
+                monthly_guaranteed_detail[gi["name"]]
+                for gi in guaranteed
+                if gi["name"] in monthly_guaranteed_detail and gi["taxable"])
 
-            for source_name in priority:
-                if source_name in dc_balances and remaining_dc > 0:
-                    available = max(0, dc_balances[source_name])
-                    actual = min(remaining_dc, available)
-                    if actual > 0:
+            _use_gross_mode = (strategy_id != "fixed_target"
+                               and strategy_mode == "gross")
+
+            if _use_gross_mode:
+                # GROSS mode: fixed monthly pot withdrawal target
+                _remaining = max(0, strategy_amount / 12.0)
+
+                for source_name in priority:
+                    if _remaining <= 0.01:
+                        break
+                    if source_name in dc_balances and dc_balances[source_name] > 0.01:
+                        available = dc_balances[source_name]
+                        actual = min(_remaining, available)
                         dc_balances[source_name] -= actual
-                        # Last-residual drawdown: if what's left can't
-                        # cover a full month's income, sweep the rest.
-                        residual = dc_balances[source_name]
-                        if 0 < residual < monthly_target:
-                            actual += residual
-                            dc_balances[source_name] = 0.0
-                        elif residual < 0.01:
+                        if dc_balances[source_name] < 0.01:
                             dc_balances[source_name] = 0.0
                         tfp = dc_meta[source_name]["tax_free_portion"]
                         current_agg["dc_gross"] += actual
@@ -879,46 +820,68 @@ class RetirementEngine:
                         current_agg["withdrawal_detail"][source_name] = (
                             current_agg["withdrawal_detail"].get(source_name, 0) + actual)
                         current_agg["pnl"][source_name]["withdrawal"] += actual
-                        monthly_withdrawal_detail[source_name] = actual
+                        monthly_withdrawal_detail[source_name] = (
+                            monthly_withdrawal_detail.get(source_name, 0) + actual)
                         monthly_gross_income += actual
-                        remaining_dc -= actual
-
-                elif source_name in tf_balances and remaining_tf > 0:
-                    available = max(0, tf_balances[source_name])
-                    actual = min(remaining_tf, available)
-                    if actual > 0:
+                        _remaining -= actual
+                    elif source_name in tf_balances and tf_balances[source_name] > 0.01:
+                        available = tf_balances[source_name]
+                        actual = min(_remaining, available)
                         tf_balances[source_name] -= actual
-                        # Last-residual drawdown: if what's left can't
-                        # cover a full month's income, sweep the rest.
-                        residual = tf_balances[source_name]
-                        if 0 < residual < monthly_target:
-                            actual += residual
-                            tf_balances[source_name] = 0.0
-                        elif residual < 0.01:
+                        if tf_balances[source_name] < 0.01:
                             tf_balances[source_name] = 0.0
                         current_agg["tf_total"] += actual
                         current_agg["withdrawal_detail"][source_name] = (
                             current_agg["withdrawal_detail"].get(source_name, 0) + actual)
                         current_agg["pnl"][source_name]["withdrawal"] += actual
-                        monthly_withdrawal_detail[source_name] = actual
+                        monthly_withdrawal_detail[source_name] = (
+                            monthly_withdrawal_detail.get(source_name, 0) + actual)
                         monthly_gross_income += actual
-                        remaining_tf -= actual
+                        _remaining -= actual
 
-            # ---- Step 3b: Spillover — unfilled DC draws from TF, and vice versa ---- #
-            if remaining_dc > 0.01:
+            else:
+                # NET mode: compute shortfall after guaranteed
+                _tax_with = self.calculate_tax(taxable_ytd)["total"]
+                _tax_without = self.calculate_tax(
+                    taxable_ytd - _guar_taxable_mo)["total"]
+                _guar_net_mo = _guar_gross_mo - (_tax_with - _tax_without)
+                _remaining_net = max(0, monthly_target - _guar_net_mo)
+
                 for source_name in priority:
-                    if remaining_dc <= 0.01:
+                    if _remaining_net <= 0.01:
                         break
-                    if source_name in tf_balances and tf_balances[source_name] > 0:
-                        available = max(0, tf_balances[source_name])
-                        actual = min(remaining_dc, available)
-                        if actual > 0:
+                    if source_name in dc_balances and dc_balances[source_name] > 0.01:
+                        tfp = dc_meta[source_name]["tax_free_portion"]
+                        gross_needed = self._monthly_gross_up(
+                            _remaining_net, taxable_ytd, tfp)
+                        gross_needed = min(gross_needed, dc_balances[source_name])
+                        if gross_needed > 0.01:
+                            dc_balances[source_name] -= gross_needed
+                            if dc_balances[source_name] < 0.01:
+                                dc_balances[source_name] = 0.0
+                            tfp_amt = gross_needed * tfp
+                            taxable_amt = gross_needed - tfp_amt
+                            current_agg["dc_gross"] += gross_needed
+                            current_agg["dc_tf"] += tfp_amt
+                            taxable_ytd += taxable_amt
+                            current_agg["withdrawal_detail"][source_name] = (
+                                current_agg["withdrawal_detail"].get(source_name, 0) + gross_needed)
+                            current_agg["pnl"][source_name]["withdrawal"] += gross_needed
+                            monthly_withdrawal_detail[source_name] = (
+                                monthly_withdrawal_detail.get(source_name, 0) + gross_needed)
+                            monthly_gross_income += gross_needed
+                            # Recalculate remaining net after this DC draw
+                            _tax_now = self.calculate_tax(taxable_ytd)["total"]
+                            _tax_before = self.calculate_tax(
+                                taxable_ytd - taxable_amt)["total"]
+                            _net_from_this = gross_needed - (_tax_now - _tax_before)
+                            _remaining_net = max(0, _remaining_net - _net_from_this)
+                    elif source_name in tf_balances and tf_balances[source_name] > 0.01:
+                        available = tf_balances[source_name]
+                        actual = min(_remaining_net, available)
+                        if actual > 0.01:
                             tf_balances[source_name] -= actual
-                            residual = tf_balances[source_name]
-                            if 0 < residual < monthly_target:
-                                actual += residual
-                                tf_balances[source_name] = 0.0
-                            elif residual < 0.01:
+                            if tf_balances[source_name] < 0.01:
                                 tf_balances[source_name] = 0.0
                             current_agg["tf_total"] += actual
                             current_agg["withdrawal_detail"][source_name] = (
@@ -927,34 +890,7 @@ class RetirementEngine:
                             monthly_withdrawal_detail[source_name] = (
                                 monthly_withdrawal_detail.get(source_name, 0) + actual)
                             monthly_gross_income += actual
-                            remaining_dc -= actual
-
-            if remaining_tf > 0.01:
-                for source_name in priority:
-                    if remaining_tf <= 0.01:
-                        break
-                    if source_name in dc_balances and dc_balances[source_name] > 0:
-                        available = max(0, dc_balances[source_name])
-                        actual = min(remaining_tf, available)
-                        if actual > 0:
-                            dc_balances[source_name] -= actual
-                            residual = dc_balances[source_name]
-                            if 0 < residual < monthly_target:
-                                actual += residual
-                                dc_balances[source_name] = 0.0
-                            elif residual < 0.01:
-                                dc_balances[source_name] = 0.0
-                            tfp = dc_meta[source_name]["tax_free_portion"]
-                            current_agg["dc_gross"] += actual
-                            current_agg["dc_tf"] += actual * tfp
-                            taxable_ytd += actual * (1 - tfp)
-                            current_agg["withdrawal_detail"][source_name] = (
-                                current_agg["withdrawal_detail"].get(source_name, 0) + actual)
-                            current_agg["pnl"][source_name]["withdrawal"] += actual
-                            monthly_withdrawal_detail[source_name] = (
-                                monthly_withdrawal_detail.get(source_name, 0) + actual)
-                            monthly_gross_income += actual
-                            remaining_tf -= actual
+                            _remaining_net -= actual
 
             # ---- Step 4: Depletion detection ---- #
             for pname in list(dc_balances):

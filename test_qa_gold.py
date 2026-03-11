@@ -97,10 +97,9 @@ class TestGold_ZeroGrowthExactDepletion(unittest.TestCase):
         self.assertEqual(self.s["depletion_events"][0]["age"], 70)
 
     def test_depletion_month(self):
-        # Annual plan spreads £6k over 12 months (£500/mo).  After month 11
-        # the remaining £500 < monthly target (£1k), so the last-residual
-        # drawdown sweeps it → depletion at month 11.
-        self.assertEqual(self.s["depletion_events"][0]["month"], 11)
+        # Monthly source allocation draws £1k/month from £6k balance.
+        # Pot depletes at month 6 (6 × £1k = £6k).
+        self.assertEqual(self.s["depletion_events"][0]["month"], 6)
 
     def test_year1_capital(self):
         self.assertAlmostEqual(
@@ -324,9 +323,9 @@ class TestGold_CPICompoundsTarget(unittest.TestCase):
 #    num_years: 23
 #    ISA depletes first (~age 74)
 #    yr0 capital: ~£198,617
-#    yr5 capital: ~£188,866
-#    remaining_capital: ~£64,429
-#    total_tax: ~£24,702
+#    yr5 capital: ~£188,366
+#    remaining_capital: ~£63,271
+#    total_tax: ~£25,000
 # ===================================================================
 class TestGold_BaselineRealistic(unittest.TestCase):
     """Fixed multi-source config — deterministic, no user data dependency."""
@@ -388,15 +387,15 @@ class TestGold_BaselineRealistic(unittest.TestCase):
 
     def test_yr5_capital(self):
         self.assertAlmostEqual(
-            self.r["years"][5]["total_capital"], 188866, delta=500)
+            self.r["years"][5]["total_capital"], 188366, delta=500)
 
     def test_remaining_capital(self):
         self.assertAlmostEqual(
-            self.s["remaining_capital"], 64429, delta=500)
+            self.s["remaining_capital"], 63271, delta=500)
 
     def test_total_tax(self):
         self.assertAlmostEqual(
-            self.s["total_tax_paid"], 24702, delta=500)
+            self.s["total_tax_paid"], 25000, delta=500)
 
     def test_yr0_guaranteed_income_positive(self):
         self.assertGreater(self.r["years"][0]["guaranteed_total"], 0)
@@ -881,6 +880,227 @@ class TestGold_DelayedGuaranteedIncome(unittest.TestCase):
             yr_72["dc_withdrawal_gross"],
             yr_68["dc_withdrawal_gross"] * 0.5,
             "DC drawdown should drop by at least 50% once guaranteed covers target")
+
+
+# ===================================================================
+#  Scenario 14: Monthly source allocation — correct depletion timing
+#  £30k TF ISA, £12k/yr target (£1k/month), 0 CPI, 0 growth.
+#  Year 3: pot has £6k → monthly allocation draws £1k/month → depletes
+#  at month 6, NOT month 11 or 12.
+# ===================================================================
+class TestGold_MonthlyAllocationDepletion(unittest.TestCase):
+    """£6k pot at £1k/month must deplete in exactly month 6."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cfg = _cfg(
+            target_income={"net_annual": 12000, "cpi_rate": 0.0},
+            tax_free_accounts=[{
+                "name": "ISA",
+                "starting_balance": 30000,
+                "growth_rate": 0.0,
+                "allocation": {"mode": "manual", "manual_override": True},
+                "values_as_of": "2028-01",
+            }],
+            withdrawal_priority=["ISA"],
+        )
+        cls.r = RetirementEngine(cls.cfg).run_projection(include_monthly=True)
+        cls.s = cls.r["summary"]
+
+    def test_depletion_month_is_6(self):
+        """Monthly allocation: £6k at £1k/month = 6 months, not 11."""
+        ev = self.s["depletion_events"][0]
+        self.assertEqual(ev["month"], 6)
+
+    def test_monthly_draws_are_1000(self):
+        """Each month draws exactly £1,000 until depletion."""
+        # Year 3 (age 70): months 1-6 should each draw £1,000
+        yr3_rows = [r for r in self.r["monthly_rows"] if r["age"] == 70]
+        for i, row in enumerate(yr3_rows[:6]):
+            wd = row["withdrawal_detail"].get("ISA", 0)
+            self.assertAlmostEqual(wd, 1000, delta=1,
+                                   msg=f"Month {i+1} of year 3 should draw £1,000")
+
+    def test_no_spike_at_depletion(self):
+        """No withdrawal should exceed £1,000 (no residual sweep spike)."""
+        for row in self.r["monthly_rows"]:
+            wd = row["withdrawal_detail"].get("ISA", 0)
+            self.assertLessEqual(wd, 1001,
+                                 msg=f"ISA draw at age {row['age']} mo {row['month_in_year']} "
+                                     f"was {wd}, exceeds £1,000 target")
+
+
+# ===================================================================
+#  Scenario 15: Mid-year depletion rolls to next source immediately
+#  ISA £5k (priority 1), DC £200k (priority 2). Target £12k/yr net.
+#  ISA depletes mid-year; DC must pick up in the SAME month.
+# ===================================================================
+class TestGold_MidYearRollover(unittest.TestCase):
+    """When a pot depletes mid-year, the next source fills the gap immediately."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cfg = _cfg(
+            target_income={"net_annual": 12000, "cpi_rate": 0.0},
+            dc_pots=[{
+                "name": "DC",
+                "starting_balance": 200000,
+                "growth_rate": 0.0,
+                "annual_fees": 0.0,
+                "tax_free_portion": 0.25,
+                "allocation": {"mode": "manual", "manual_override": True},
+                "values_as_of": "2028-01",
+            }],
+            tax_free_accounts=[{
+                "name": "ISA",
+                "starting_balance": 5000,
+                "growth_rate": 0.0,
+                "allocation": {"mode": "manual", "manual_override": True},
+                "values_as_of": "2028-01",
+            }],
+            withdrawal_priority=["ISA", "DC"],
+        )
+        cls.r = RetirementEngine(cls.cfg).run_projection(include_monthly=True)
+        cls.s = cls.r["summary"]
+
+    def test_isa_depletes_first(self):
+        dep_pots = [e["pot"] for e in self.s["depletion_events"]]
+        self.assertIn("ISA", dep_pots)
+
+    def test_no_income_gap_after_depletion(self):
+        """The month after ISA depletes, DC must fill the shortfall."""
+        dep = next(e for e in self.s["depletion_events"] if e["pot"] == "ISA")
+        # Find the first month AFTER depletion
+        found = False
+        for row in self.r["monthly_rows"]:
+            if found:
+                dc_wd = row["withdrawal_detail"].get("DC", 0)
+                self.assertGreater(dc_wd, 0,
+                                   "DC must fill shortfall after ISA depletes")
+                break
+            if row["age"] == dep["age"] and row["month_in_year"] == dep["month"]:
+                found = True
+
+    def test_income_continuous(self):
+        """Gross income should never be zero while capital remains."""
+        for row in self.r["monthly_rows"]:
+            if row["total_capital"] > 1:
+                self.assertGreater(row["gross_income"], 0,
+                                   f"Zero income at age {row['age']} mo {row['month_in_year']} "
+                                   f"with capital {row['total_capital']}")
+
+
+# ===================================================================
+#  Scenario 16: No year-boundary smoothing
+#  Single TF pot with balance that doesn't divide evenly by 12.
+#  £7k ISA, £12k/yr target, 0 growth.  Should draw £1k/month for 7
+#  months, not £583/month for 12 months.
+# ===================================================================
+class TestGold_NoYearBoundarySmoothing(unittest.TestCase):
+    """Pots drain at the full monthly rate, not spread over 12 months."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cfg = _cfg(
+            personal={
+                "date_of_birth": "1960-01",
+                "retirement_date": "2028-01",
+                "retirement_age": 68,
+                "end_age": 70,
+                "currency": "GBP",
+            },
+            target_income={"net_annual": 12000, "cpi_rate": 0.0},
+            tax_free_accounts=[{
+                "name": "ISA",
+                "starting_balance": 7000,
+                "growth_rate": 0.0,
+                "allocation": {"mode": "manual", "manual_override": True},
+                "values_as_of": "2028-01",
+            }],
+            withdrawal_priority=["ISA"],
+        )
+        cls.r = RetirementEngine(cls.cfg).run_projection(include_monthly=True)
+        cls.s = cls.r["summary"]
+
+    def test_draws_1000_per_month(self):
+        """First 7 months: draw £1,000 each (not £583 from annual smoothing)."""
+        rows = self.r["monthly_rows"]
+        for i in range(7):
+            wd = rows[i]["withdrawal_detail"].get("ISA", 0)
+            self.assertAlmostEqual(wd, 1000, delta=1,
+                                   msg=f"Month {i+1} should draw £1,000")
+
+    def test_depletion_at_month_7(self):
+        """ISA depletes at month 7, not month 12."""
+        ev = self.s["depletion_events"][0]
+        self.assertEqual(ev["pot"], "ISA")
+        self.assertEqual(ev["month"], 7)
+
+    def test_zero_after_depletion(self):
+        """Month 8+: ISA withdrawal should be zero."""
+        rows = [r for r in self.r["monthly_rows"] if r["month_in_year"] > 7
+                and r["age"] == 68]
+        for row in rows:
+            wd = row["withdrawal_detail"].get("ISA", 0)
+            self.assertAlmostEqual(wd, 0, delta=0.01)
+
+
+# ===================================================================
+#  Scenario 17: Tax-aware monthly DC withdrawals
+#  DC-only config. Verify that monthly gross-up uses YTD taxable
+#  context and that net income meets target each year.
+# ===================================================================
+class TestGold_TaxAwareMonthlyDC(unittest.TestCase):
+    """Monthly DC gross-up with YTD taxable context produces correct net income."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cfg = _cfg(
+            personal={
+                "date_of_birth": "1960-01",
+                "retirement_date": "2028-01",
+                "retirement_age": 68,
+                "end_age": 78,
+                "currency": "GBP",
+            },
+            target_income={"net_annual": 25000, "cpi_rate": 0.0},
+            dc_pots=[{
+                "name": "DC",
+                "starting_balance": 300000,
+                "growth_rate": 0.0,
+                "annual_fees": 0.0,
+                "tax_free_portion": 0.25,
+                "allocation": {"mode": "manual", "manual_override": True},
+                "values_as_of": "2028-01",
+            }],
+            withdrawal_priority=["DC"],
+        )
+        cls.r = RetirementEngine(cls.cfg).run_projection()
+        cls.s = cls.r["summary"]
+
+    def test_sustainable(self):
+        self.assertTrue(self.s["sustainable"])
+
+    def test_net_meets_target_every_year(self):
+        """Each year's net income must meet or exceed target."""
+        for yr in self.r["years"]:
+            self.assertGreaterEqual(
+                yr["net_income_achieved"], yr["target_net"] - 1,
+                f"Year age {yr['age']}: net {yr['net_income_achieved']:.0f} "
+                f"< target {yr['target_net']:.0f}")
+
+    def test_dc_gross_withdrawal_reasonable(self):
+        """DC gross should be higher than net (tax exists) but not wildly so."""
+        yr0 = self.r["years"][0]
+        self.assertGreater(yr0["dc_withdrawal_gross"], yr0["net_income_achieved"])
+        # With 25% TFP and IoM tax, gross shouldn't exceed 1.5x net
+        self.assertLess(yr0["dc_withdrawal_gross"], yr0["net_income_achieved"] * 1.5)
+
+    def test_tax_free_portion_applied(self):
+        """25% of DC gross should be tax-free."""
+        yr0 = self.r["years"][0]
+        expected_tf = yr0["dc_withdrawal_gross"] * 0.25
+        self.assertAlmostEqual(yr0["dc_tax_free_portion"], expected_tf, delta=1)
 
 
 if __name__ == "__main__":
