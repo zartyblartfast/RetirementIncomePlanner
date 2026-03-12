@@ -185,7 +185,13 @@
 <!-- Income Breakdown Chart (single selected scenario) -->
 {% if scenarios | length >= 1 %}
 <div class="card mb-4">
-    <div class="card-header"><i class="bi bi-bar-chart-line"></i> Income Breakdown <small class="text-muted ms-2" id="incomeChartLabel">(select a scenario)</small></div>
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-bar-chart-line"></i> Income Breakdown <small class="text-muted ms-2" id="incomeChartLabel">(select a scenario)</small></span>
+        <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" id="incomeAnnualToggle" checked>
+            <label class="form-check-label small" for="incomeAnnualToggle">Annualised</label>
+        </div>
+    </div>
     <div class="card-body">
         <canvas id="incomeBreakdownChart" height="100"></canvas>
         <div id="incomeChartSpinner" class="text-center py-3 d-none"><div class="spinner-border spinner-border-sm text-secondary"></div> Loading…</div>
@@ -246,6 +252,7 @@
 const scenarios = {{ scenarios | tojson }};
 const colours = ['#0d6efd', '#dc3545', '#198754', '#fd7e14', '#6f42c1', '#20c997'];
 const SANDBOX_COLOUR = '#ff6f00';
+const STRATEGY_NAMES = {{ strategies | tojson }};
 
 // Use ext_result (extended projection) when available, fall back to result
 let allAges = [];
@@ -363,7 +370,9 @@ document.querySelectorAll('.sc-card').forEach(card => {
         // Load income breakdown for selected scenario
         if (selectedIdx !== null) {
             const sc = scenarios[selectedIdx];
-            fetchAndRenderIncome(sc.name, sc.name);
+            const stId = (sc.config || {}).drawdown_strategy || 'fixed_target';
+            const stLabel = (STRATEGY_NAMES[stId] || {}).display_name || stId;
+            fetchAndRenderIncome(sc.name, sc.name, stLabel, stId);
         }
     });
 });
@@ -377,9 +386,51 @@ const INCOME_COLOURS = {
     'ISA': '#7c3aed',
 };
 const INCOME_COLOUR_FALLBACK = ['#0891b2', '#ca8a04', '#be185d', '#4f46e5', '#059669'];
+const GROUP2_STRATEGIES = ['guyton_klinger', 'vanguard_dynamic'];
 let incomeChart = null;
+let _lastIncomeData = null;  // stored for toggle redraws
 
-function renderIncomeBreakdown(monthlyRows, scenarioLabel) {
+function annualiseRows(monthlyRows) {
+    // For each retirement year, hold month-1 withdrawal values flat across all 12 months.
+    // Exception: years containing a pot depletion use actual monthly values to avoid
+    // overstating income with a month-1 snapshot that assumed the pot would last all year.
+    // Guaranteed income (State Pension, DB pensions) is left untouched — it's already steady monthly.
+
+    // First pass: identify years (by age) that contain a pot depletion
+    const depletionYears = new Set();
+    monthlyRows.forEach(m => {
+        if (m.depleted_this_month && m.depleted_this_month.length > 0) {
+            depletionYears.add(m.age);
+        }
+    });
+
+    // Second pass: annualise stable years, pass through depletion years
+    const result = [];
+    let yearWithdrawals = null;  // null until first month 1 is seen
+    let yearHasDepletion = false;
+    monthlyRows.forEach(m => {
+        if (m.month_in_year === 1) {
+            yearHasDepletion = depletionYears.has(m.age);
+            if (!yearHasDepletion) {
+                yearWithdrawals = {};
+                Object.entries(m.withdrawal_detail || {}).forEach(([k, v]) => { yearWithdrawals[k] = v; });
+            }
+        }
+        const row = Object.assign({}, m);
+        // Guaranteed detail: pass through unchanged
+        row.guaranteed_detail = Object.assign({}, m.guaranteed_detail || {});
+        // Withdrawal detail: actual for depletion years, month-1 snapshot for stable years
+        if (yearHasDepletion || yearWithdrawals === null) {
+            row.withdrawal_detail = Object.assign({}, m.withdrawal_detail || {});
+        } else {
+            row.withdrawal_detail = Object.assign({}, yearWithdrawals);
+        }
+        result.push(row);
+    });
+    return result;
+}
+
+function renderIncomeBreakdown(monthlyRows, scenarioLabel, strategyName, strategyId) {
     const canvas = document.getElementById('incomeBreakdownChart');
     const label = document.getElementById('incomeChartLabel');
     const spinner = document.getElementById('incomeChartSpinner');
@@ -392,17 +443,30 @@ function renderIncomeBreakdown(monthlyRows, scenarioLabel) {
     }
     label.textContent = scenarioLabel;
 
+    // Store for toggle redraws
+    _lastIncomeData = { monthlyRows, scenarioLabel, strategyName, strategyId };
+
+    // Determine if annualised display applies
+    const isGroup2 = GROUP2_STRATEGIES.includes(strategyId);
+    const isFixedPct = (strategyId === 'fixed_percentage');
+    const annualToggle = document.getElementById('incomeAnnualToggle');
+    const useAnnual = isGroup2 || (!isFixedPct && annualToggle.checked);
+    // Disable toggle for Group 2 (always annualised) and Fixed Percentage (already flat)
+    annualToggle.disabled = isGroup2 || isFixedPct;
+
+    const displayRows = useAnnual ? annualiseRows(monthlyRows) : monthlyRows;
+
     // Collect all unique source names across all months
     const guaranteedNames = new Set();
     const withdrawalNames = new Set();
-    monthlyRows.forEach(m => {
+    displayRows.forEach(m => {
         Object.keys(m.guaranteed_detail || {}).forEach(k => guaranteedNames.add(k));
         Object.keys(m.withdrawal_detail || {}).forEach(k => withdrawalNames.add(k));
     });
     const allSources = [...guaranteedNames, ...withdrawalNames];
 
     // Build labels: "Age Y.M"
-    const labels = monthlyRows.map(m => {
+    const labels = displayRows.map(m => {
         const mo = m.month_in_year;
         return mo === 1 ? String(m.age) : '';
     });
@@ -412,9 +476,10 @@ function renderIncomeBreakdown(monthlyRows, scenarioLabel) {
     const datasets = allSources.map(src => {
         const colour = INCOME_COLOURS[src] || INCOME_COLOUR_FALLBACK[colIdx++ % INCOME_COLOUR_FALLBACK.length];
         const isGuaranteed = guaranteedNames.has(src);
+        const stepThis = useAnnual && !isGuaranteed;
         return {
             label: src,
-            data: monthlyRows.map(m => {
+            data: displayRows.map(m => {
                 const detail = isGuaranteed ? (m.guaranteed_detail || {}) : (m.withdrawal_detail || {});
                 return detail[src] || 0;
             }),
@@ -422,7 +487,8 @@ function renderIncomeBreakdown(monthlyRows, scenarioLabel) {
             borderColor: colour,
             borderWidth: 1,
             fill: true,
-            tension: 0.2,
+            tension: stepThis ? 0 : 0.2,
+            stepped: stepThis ? 'before' : false,
             pointRadius: 0,
         };
     });
@@ -435,6 +501,7 @@ function renderIncomeBreakdown(monthlyRows, scenarioLabel) {
             responsive: true,
             plugins: {
                 title: { display: true, text: 'Monthly Income by Source — ' + scenarioLabel },
+                subtitle: { display: !!strategyName, text: strategyName ? 'Drawdown Strategy: ' + strategyName : '', font: { size: 14, weight: 'bold' }, color: '#0d6efd', padding: { bottom: 10 } },
                 tooltip: {
                     mode: 'index',
                     callbacks: {
@@ -465,12 +532,12 @@ function renderIncomeBreakdown(monthlyRows, scenarioLabel) {
     });
 }
 
-function fetchAndRenderIncome(scenarioName, label) {
+function fetchAndRenderIncome(scenarioName, label, strategyName, strategyId) {
     const spinner = document.getElementById('incomeChartSpinner');
     spinner.classList.remove('d-none');
     fetch('/scenario_monthly/' + encodeURIComponent(scenarioName))
         .then(r => r.json())
-        .then(data => renderIncomeBreakdown(data.monthly_rows, label))
+        .then(data => renderIncomeBreakdown(data.monthly_rows, label, strategyName, strategyId))
         .catch(() => {
             spinner.classList.add('d-none');
             document.getElementById('incomeChartLabel').textContent = '(error loading data)';
@@ -479,7 +546,10 @@ function fetchAndRenderIncome(scenarioName, label) {
 
 // Auto-load income breakdown for first scenario on page load
 if (scenarios.length > 0) {
-    fetchAndRenderIncome(scenarios[0].name, scenarios[0].name);
+    const _initSc = scenarios[0];
+    const _initStId = (_initSc.config || {}).drawdown_strategy || 'fixed_target';
+    const _initStLabel = (STRATEGY_NAMES[_initStId] || {}).display_name || _initStId;
+    fetchAndRenderIncome(_initSc.name, _initSc.name, _initStLabel, _initStId);
 }
 
 // --- What If Sandbox ---
@@ -582,7 +652,10 @@ function runSandbox() {
 
         // Render income breakdown from sandbox monthly data
         if (data.monthly_rows) {
-            renderIncomeBreakdown(data.monthly_rows, '\u2728 What If');
+            const selOpt = document.getElementById('sb-strategy');
+            const stratName = selOpt.options[selOpt.selectedIndex].text;
+            const stratId = selOpt.value;
+            renderIncomeBreakdown(data.monthly_rows, '\u2728 What If', stratName, stratId);
         }
     })
     .catch(err => {
@@ -591,6 +664,13 @@ function runSandbox() {
 }
 
 document.getElementById('sb-run').addEventListener('click', runSandbox);
+
+// Annualised toggle: redraw chart from stored data when toggled
+document.getElementById('incomeAnnualToggle').addEventListener('change', () => {
+    if (_lastIncomeData) {
+        renderIncomeBreakdown(_lastIncomeData.monthlyRows, _lastIncomeData.scenarioLabel, _lastIncomeData.strategyName, _lastIncomeData.strategyId);
+    }
+});
 
 // Run on Enter key in sandbox inputs
 document.querySelectorAll('#sb-cpi, #sb-retire, .sb-sp').forEach(el => {
