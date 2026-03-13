@@ -706,27 +706,31 @@ def whatif_project():
     if "retirement_age" in data:
         cfg["personal"]["retirement_age"] = int(data["retirement_age"])
 
-    # Run extended projection for chart
+    # Single projection: provides chart years, monthly income data, and summary
     plan_end_age = cfg["personal"]["end_age"]
-    ext_cfg = _copy.deepcopy(cfg)
-    ext_cfg["personal"]["end_age"] = min(120, max(plan_end_age, 120))
-    ext_result = RetirementEngine(ext_cfg).run_projection()
+    result = RetirementEngine(cfg).run_projection(include_monthly=True)
+    years = result["years"]
 
+    # Trim chart years: include dep_age + 1 so the zero-opening point is visible
     DEPLETION_EPSILON = 1.0
     dep_age = None
-    for yr in ext_result["years"]:
+    for yr in years:
         if yr["total_capital"] <= DEPLETION_EPSILON:
             dep_age = yr["age"]
             break
     if dep_age:
-        chart_end = min(120, dep_age)
-        ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= chart_end]
+        chart_end = min(120, dep_age + 1)
+    else:
+        chart_end = min(120, plan_end_age + 5)
+    chart_years = [y for y in years if y["age"] <= chart_end]
 
-    # Normal projection for summary + monthly income breakdown
-    result = RetirementEngine(cfg).run_projection(include_monthly=True)
+    # Patch summary: remaining_capital should reflect plan end age, not loop end
+    plan_year = next((y for y in years if y["age"] == plan_end_age), None)
+    if plan_year:
+        result["summary"]["remaining_capital"] = plan_year["total_capital"]
 
     return jsonify({
-        "years": ext_result["years"],
+        "years": chart_years,
         "summary": result["summary"],
         "monthly_rows": result.get("monthly_rows", []),
     })
