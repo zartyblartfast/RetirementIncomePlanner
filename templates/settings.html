@@ -44,27 +44,6 @@
         </div>
     </div>
 
-    <!-- TARGET INCOME -->
-    <div class="card mb-4">
-        <div class="card-header bg-success text-white"><i class="bi bi-bullseye"></i> Target Income</div>
-        <div class="card-body">
-            <form method="post">
-                <input type="hidden" name="action" value="save_target">
-                <div class="row g-2">
-                    <div class="col-md-6">
-                        <label class="form-label">Net Annual Income (&pound;)</label>
-                        <input type="number" class="form-control" name="net_annual" value="{{ config.target_income.net_annual }}" step="500">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">CPI Inflation Rate</label>
-                        <input type="number" class="form-control" name="cpi_rate" value="{{ config.target_income.cpi_rate }}" step="0.0001">
-                    </div>
-                </div>
-                <button type="submit" class="btn btn-success btn-sm mt-3"><i class="bi bi-check-lg"></i> Save</button>
-            </form>
-        </div>
-    </div>
-
     <!-- TAX SETTINGS -->
     <div class="card mb-4">
         <div class="card-header bg-secondary text-white"><i class="bi bi-receipt"></i> Tax Settings</div>
@@ -120,7 +99,7 @@
     <div class="card mb-4">
         <div class="card-header bg-dark text-white"><i class="bi bi-diagram-3"></i> Drawdown Strategy</div>
         <div class="card-body">
-            <form method="post">
+            <form method="post" id="strategyForm">
                 <input type="hidden" name="action" value="save_strategy">
                 <div class="row g-3 align-items-end">
                     <div class="col-md-4">
@@ -131,7 +110,11 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-8">
+                    <div class="col-md-4">
+                        <label class="form-label">CPI Inflation Rate</label>
+                        <input type="number" class="form-control" name="cpi_rate" value="{{ config.target_income.cpi_rate }}" step="0.0001">
+                    </div>
+                    <div class="col-md-4">
                         <small class="text-muted" id="strategyDesc"></small>
                     </div>
                 </div>
@@ -142,9 +125,9 @@
                         {% for p in strategies[sid].params %}
                         <div class="col-md-3">
                             <label class="form-label">{{ p.label }}</label>
-                            <input type="number" class="form-control" name="sp_{{ p.key }}"
+                            <input type="number" class="form-control strategy-input" name="sp_{{ p.key }}"
                                    value="{{ config.drawdown_strategy_params.get(p.key, p.default) if config.drawdown_strategy == sid else p.default }}"
-                                   step="{{ p.step }}">
+                                   step="{{ p.step }}" disabled>
                         </div>
                         {% endfor %}
                     </div>
@@ -545,9 +528,15 @@
 const STRATEGY_DESCS = {{ strategies | tojson }};
 function showStrategyParams() {
     const sel = document.getElementById('strategySelect').value;
-    document.querySelectorAll('.strategy-params').forEach(el => { el.style.display = 'none'; });
+    document.querySelectorAll('.strategy-params').forEach(el => {
+        el.style.display = 'none';
+        el.querySelectorAll('.strategy-input').forEach(inp => { inp.disabled = true; });
+    });
     const panel = document.getElementById('params-' + sel);
-    if (panel) panel.style.display = '';
+    if (panel) {
+        panel.style.display = '';
+        panel.querySelectorAll('.strategy-input').forEach(inp => { inp.disabled = false; });
+    }
     const desc = document.getElementById('strategyDesc');
     if (desc && STRATEGY_DESCS[sel]) desc.textContent = STRATEGY_DESCS[sel].description;
 }

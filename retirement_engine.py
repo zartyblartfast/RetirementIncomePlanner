@@ -422,13 +422,24 @@ class RetirementEngine:
         cfg = self.cfg
         retirement_age = cfg["personal"]["retirement_age"]
         end_age = cfg["personal"]["end_age"]
-        target_net_annual = cfg["target_income"]["net_annual"]
         cpi = cfg["target_income"]["cpi_rate"]
+
+        # Strategy params are the single source of truth for the income target.
+        # normalize_config() guarantees these keys exist.
+        strategy_id = cfg.get("drawdown_strategy", "fixed_target")
+        strategy_params = cfg.get("drawdown_strategy_params", {})
+        if strategy_id == "fixed_target":
+            target_net_annual = strategy_params.get(
+                "net_annual", cfg["target_income"]["net_annual"])
+        elif strategy_id in ("vanguard_dynamic", "guyton_klinger"):
+            target_net_annual = strategy_params.get(
+                "initial_target", cfg["target_income"]["net_annual"])
+        else:
+            # GROSS-mode strategies (fixed_percentage): initial net estimate
+            target_net_annual = cfg["target_income"]["net_annual"]
         monthly_cpi = annual_to_monthly_rate(cpi)
 
         # Strategy dispatch setup
-        strategy_id = cfg.get("drawdown_strategy", "fixed_target")
-        strategy_params = cfg.get("drawdown_strategy_params", {})
         strategy_state = None
         use_monthly_cpi = (strategy_id == "fixed_target")
 
