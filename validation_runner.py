@@ -111,15 +111,14 @@ def _scenario_01_zero_growth_depletion():
         "hand_calculation": (
             "Year 1: £12,000 withdrawn → £18,000 remaining. "
             "Year 2: £12,000 withdrawn → £6,000 remaining. "
-            "Year 3: £6,000 spread over 12 months = £500/mo. Monthly target is £1,000. "
-            "After month 11, only £500 left (< £1,000), swept via last-residual drawdown. "
-            "Depletion at age 70, month 11."
+            "Year 3: £6,000 at £1,000/mo → depletes after month 6. "
+            "Depletion at age 70, month 6."
         ),
         "checks": [
             _check_bool("Sustainable", s["sustainable"], False),
             _check_bool("Depleted pot", dep.get("pot", ""), "ISA"),
             _check("Depletion age", dep.get("age", 0), 70, 0, "age"),
-            _check("Depletion month", dep.get("month", 0), 11, 0, "month"),
+            _check("Depletion month", dep.get("month", 0), 6, 0, "month"),
             _check("Year 1 capital", r["years"][0]["total_capital"], 18000, 1),
             _check("Year 2 capital", r["years"][1]["total_capital"], 6000, 1),
         ],
@@ -349,15 +348,15 @@ def _scenario_06_baseline_realistic():
         "hand_calculation": (
             "Sustainable plan over 23 years. ISA depletes first (~age 74) since it's priority 1. "
             "Year 0 capital ~£199k (growth applied to £200k starting, minus withdrawals). "
-            "Year 5 capital ~£189k. Remaining capital ~£67k. Total IoM tax ~£25k."
+            "Year 5 capital ~£188k. Remaining capital ~£63k. Total IoM tax ~£25k."
         ),
         "checks": [
             _check_bool("Sustainable", s["sustainable"], True),
             _check("Projection years", s["num_years"], 23, 0, "years"),
             _check_bool("ISA depletes first", s["depletion_events"][0]["pot"], "ISA"),
             _check("Year 0 capital", r["years"][0]["total_capital"], 198617, 500),
-            _check("Year 5 capital", r["years"][5]["total_capital"], 188866, 500),
-            _check("Remaining capital", s["remaining_capital"], 67120, 500),
+            _check("Year 5 capital", r["years"][5]["total_capital"], 188366, 500),
+            _check("Remaining capital", s["remaining_capital"], 62922, 500),
             _check("Total IoM tax", s["total_tax_paid"], 24586, 500),
         ],
     }
