@@ -184,22 +184,41 @@ def compute_annual_target(strategy_id, params, state, portfolio_value, cpi_rate)
 def normalize_config(cfg):
     """Ensure drawdown_strategy fields exist with sensible defaults.
 
+    Strategy params are the single source of truth for the income target.
+    target_income.net_annual is kept in sync for display / backward compat.
+
     Mutates cfg in place for convenience; also returns it.
     """
     if "drawdown_strategy" not in cfg:
         cfg["drawdown_strategy"] = "fixed_target"
 
+    fallback_target = cfg.get("target_income", {}).get("net_annual", 30000)
+    sid = cfg["drawdown_strategy"]
+
     if "drawdown_strategy_params" not in cfg:
-        sid = cfg["drawdown_strategy"]
         if sid == "fixed_target":
             cfg["drawdown_strategy_params"] = {
-                "net_annual": cfg.get("target_income", {}).get("net_annual", 30000),
+                "net_annual": fallback_target,
             }
+        elif sid in ("vanguard_dynamic", "guyton_klinger"):
+            entry = STRATEGIES.get(sid, {})
+            params = {p["key"]: p["default"] for p in entry.get("params", [])}
+            params["initial_target"] = fallback_target
+            cfg["drawdown_strategy_params"] = params
         else:
             # Build defaults from registry
             entry = STRATEGIES.get(sid, {})
             cfg["drawdown_strategy_params"] = {
                 p["key"]: p["default"] for p in entry.get("params", [])
             }
+
+    # Sync target_income.net_annual from the strategy's authoritative value
+    params = cfg["drawdown_strategy_params"]
+    if sid == "fixed_target":
+        cfg.setdefault("target_income", {})["net_annual"] = params.get(
+            "net_annual", fallback_target)
+    elif sid in ("vanguard_dynamic", "guyton_klinger"):
+        cfg.setdefault("target_income", {})["net_annual"] = params.get(
+            "initial_target", fallback_target)
 
     return cfg

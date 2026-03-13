@@ -88,12 +88,25 @@ def save_session_config(cfg):
     session.modified = True
 
 def apply_form_to_config(cfg, form):
-    """Apply dashboard quick-edit form values to config."""
+    """Apply dashboard quick-edit form values to config.
+
+    Writes the target income to the active strategy's param (source of truth)
+    and keeps target_income.net_annual in sync for display.
+    """
     try:
-        cfg["target_income"]["net_annual"] = float(form.get("target_income", 30000))
+        new_target = float(form.get("target_income", 30000))
+        cfg["target_income"]["net_annual"] = new_target
         cfg["target_income"]["cpi_rate"] = float(form.get("cpi_rate", 0.03))
         cfg["personal"]["end_age"] = int(form.get("end_age", 90))
         cfg["tax"]["tax_cap_enabled"] = form.get("tax_cap_enabled") == "on"
+        # Sync target to active strategy's param
+        sid = cfg.get("drawdown_strategy", "fixed_target")
+        params = cfg.get("drawdown_strategy_params", {})
+        if sid == "fixed_target":
+            params["net_annual"] = new_target
+        elif sid in ("vanguard_dynamic", "guyton_klinger"):
+            params["initial_target"] = new_target
+        cfg["drawdown_strategy_params"] = params
         # Withdrawal priority from hidden field
         wp = form.get("withdrawal_priority", "")
         if wp:
@@ -306,14 +319,6 @@ def settings():
                 pass
             flash("Personal details updated.", "success")
 
-        elif action == "save_target":
-            try:
-                cfg["target_income"]["net_annual"] = float(request.form.get("net_annual", 30000))
-                cfg["target_income"]["cpi_rate"] = float(request.form.get("cpi_rate", 0.03))
-            except ValueError:
-                pass
-            flash("Target income updated.", "success")
-
         elif action == "save_tax":
             cfg["tax"]["regime"] = request.form.get("regime", "Isle of Man")
             try:
@@ -465,6 +470,17 @@ def settings():
                 except (ValueError, TypeError):
                     params[p["key"]] = p["default"]
             cfg["drawdown_strategy_params"] = params
+            # Save CPI (shared across all strategies)
+            try:
+                cfg["target_income"]["cpi_rate"] = float(
+                    request.form.get("cpi_rate", cfg["target_income"]["cpi_rate"]))
+            except (ValueError, TypeError):
+                pass
+            # Sync target_income.net_annual from strategy param
+            if sid == "fixed_target":
+                cfg["target_income"]["net_annual"] = params.get("net_annual", 30000)
+            elif sid in ("vanguard_dynamic", "guyton_klinger"):
+                cfg["target_income"]["net_annual"] = params.get("initial_target", 30000)
             flash(f"Drawdown strategy set to {entry.get('display_name', sid)}.", "success")
 
         elif action == "reset_defaults":
