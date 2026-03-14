@@ -106,6 +106,7 @@ def apply_form_to_config(cfg, form):
             params["net_annual"] = new_target
         elif sid in ("vanguard_dynamic", "guyton_klinger"):
             params["initial_target"] = new_target
+        # ARVA: no initial_target param — withdrawal computed from portfolio
         cfg["drawdown_strategy_params"] = params
         # Withdrawal priority from hidden field
         wp = form.get("withdrawal_priority", "")
@@ -481,6 +482,7 @@ def settings():
                 cfg["target_income"]["net_annual"] = params.get("net_annual", 30000)
             elif sid in ("vanguard_dynamic", "guyton_klinger"):
                 cfg["target_income"]["net_annual"] = params.get("initial_target", 30000)
+            # ARVA: no initial_target param — withdrawal computed dynamically
             flash(f"Drawdown strategy set to {entry.get('display_name', sid)}.", "success")
 
         elif action == "reset_defaults":

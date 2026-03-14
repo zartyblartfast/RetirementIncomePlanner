@@ -68,6 +68,30 @@ STRATEGIES = {
              "step": 0.5, "default": 10.0},
         ],
     },
+    "arva": {
+        "display_name": "ARVA",
+        "description": "Annually Recalculated Virtual Annuity — withdrawal recalculated each year to target depletion by end age.",
+        "params": [
+            {"key": "assumed_real_return_pct", "label": "Assumed Real Return (%)", "type": "number",
+             "step": 0.5, "default": 3.0},
+            {"key": "target_end_age", "label": "Target End Age", "type": "number",
+             "step": 1, "default": 90},
+        ],
+    },
+    "arva_guardrails": {
+        "display_name": "ARVA + Guardrails",
+        "description": "ARVA with caps on year-to-year spending changes to reduce volatility.",
+        "params": [
+            {"key": "assumed_real_return_pct", "label": "Assumed Real Return (%)", "type": "number",
+             "step": 0.5, "default": 3.0},
+            {"key": "target_end_age", "label": "Target End Age", "type": "number",
+             "step": 1, "default": 90},
+            {"key": "max_annual_increase_pct", "label": "Max Annual Increase (%)", "type": "number",
+             "step": 1.0, "default": 10.0},
+            {"key": "max_annual_decrease_pct", "label": "Max Annual Decrease (%)", "type": "number",
+             "step": 1.0, "default": 10.0},
+        ],
+    },
 }
 
 STRATEGY_IDS = list(STRATEGIES.keys())
@@ -124,6 +148,22 @@ def _compute_vanguard_dynamic(params, state, portfolio_value, cpi_rate):
     return {"mode": "net", "annual_amount": new_target}, state
 
 
+def _pmt(pv, r, n):
+    """Annuity payment: amount to withdraw annually to deplete pv over n years at rate r.
+
+    Returns the level annual payment that exactly exhausts pv given:
+        pv  = present value (portfolio)
+        r   = annual real return
+        n   = number of remaining years
+        FV  = 0 (target full depletion)
+    """
+    if n <= 0:
+        return pv  # All remaining capital
+    if abs(r) < 1e-10:
+        return pv / n
+    return pv * r / (1 - (1 + r) ** (-n))
+
+
 def _compute_guyton_klinger(params, state, portfolio_value, cpi_rate):
     """Guyton-Klinger Guardrails: adjust income when rate drifts outside rails."""
     upper = params.get("upper_guardrail_pct", 5.5) / 100.0
@@ -160,21 +200,67 @@ def _compute_guyton_klinger(params, state, portfolio_value, cpi_rate):
     return {"mode": "net", "annual_amount": current_target}, state
 
 
+def _compute_arva(params, state, portfolio_value, cpi_rate, current_age=None):
+    """ARVA: recalculate withdrawal each year using annuity formula targeting depletion."""
+    r = params.get("assumed_real_return_pct", 3.0) / 100.0
+    target_end_age = params.get("target_end_age", 90)
+
+    if state is None:
+        state = {}
+
+    remaining_years = max(1, target_end_age - (current_age or target_end_age - 1))
+    withdrawal = max(0, _pmt(portfolio_value, r, remaining_years))
+
+    state = {"prev_withdrawal": withdrawal}
+    return {"mode": "pot_net", "annual_amount": withdrawal}, state
+
+
+def _compute_arva_guardrails(params, state, portfolio_value, cpi_rate, current_age=None):
+    """ARVA + Guardrails: ARVA with capped year-to-year spending changes."""
+    r = params.get("assumed_real_return_pct", 3.0) / 100.0
+    target_end_age = params.get("target_end_age", 90)
+    max_up = params.get("max_annual_increase_pct", 10.0) / 100.0
+    max_down = params.get("max_annual_decrease_pct", 10.0) / 100.0
+
+    remaining_years = max(1, target_end_age - (current_age or target_end_age - 1))
+    raw_withdrawal = max(0, _pmt(portfolio_value, r, remaining_years))
+
+    if state is None:
+        # First year: no prior withdrawal to clamp against
+        state = {"prev_withdrawal": raw_withdrawal}
+        return {"mode": "pot_net", "annual_amount": raw_withdrawal}, state
+
+    prev = state.get("prev_withdrawal", raw_withdrawal)
+    max_val = prev * (1 + max_up)
+    min_val = prev * (1 - max_down)
+    clamped = max(min_val, min(raw_withdrawal, max_val))
+
+    state = {"prev_withdrawal": clamped}
+    return {"mode": "pot_net", "annual_amount": clamped}, state
+
+
 _COMPUTE_MAP = {
     "fixed_target": _compute_fixed_target,
     "fixed_percentage": _compute_fixed_percentage,
     "vanguard_dynamic": _compute_vanguard_dynamic,
     "guyton_klinger": _compute_guyton_klinger,
+    "arva": _compute_arva,
+    "arva_guardrails": _compute_arva_guardrails,
 }
 
 
-def compute_annual_target(strategy_id, params, state, portfolio_value, cpi_rate):
+def compute_annual_target(strategy_id, params, state, portfolio_value, cpi_rate,
+                          current_age=None):
     """Dispatch to the correct strategy compute function.
 
     Returns (target_dict, new_state).
     """
     fn = _COMPUTE_MAP.get(strategy_id, _compute_fixed_target)
-    return fn(params, state, portfolio_value, cpi_rate)
+    # Pass current_age for strategies that use it (ARVA)
+    try:
+        return fn(params, state, portfolio_value, cpi_rate, current_age=current_age)
+    except TypeError:
+        return fn(params, state, portfolio_value, cpi_rate)
 
 
 # ------------------------------------------------------------------ #
@@ -205,6 +291,12 @@ def normalize_config(cfg):
             params = {p["key"]: p["default"] for p in entry.get("params", [])}
             params["initial_target"] = fallback_target
             cfg["drawdown_strategy_params"] = params
+        elif sid in ("arva", "arva_guardrails"):
+            entry = STRATEGIES.get(sid, {})
+            params = {p["key"]: p["default"] for p in entry.get("params", [])}
+            # Seed target_end_age from config's end_age when available
+            params["target_end_age"] = cfg.get("personal", {}).get("end_age", 90)
+            cfg["drawdown_strategy_params"] = params
         else:
             # Build defaults from registry
             entry = STRATEGIES.get(sid, {})
@@ -220,5 +312,6 @@ def normalize_config(cfg):
     elif sid in ("vanguard_dynamic", "guyton_klinger"):
         cfg.setdefault("target_income", {})["net_annual"] = params.get(
             "initial_target", fallback_target)
+    # ARVA: no initial_target param; target_income.net_annual left as-is
 
     return cfg

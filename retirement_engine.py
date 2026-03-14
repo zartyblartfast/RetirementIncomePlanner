@@ -723,7 +723,7 @@ class RetirementEngine:
                 else:
                     target_dict, strategy_state = _compute_annual_target(
                         strategy_id, strategy_params, strategy_state,
-                        portfolio_value, cpi)
+                        portfolio_value, cpi, current_age=year_age)
                     strategy_mode = target_dict["mode"]
                     strategy_amount = target_dict["annual_amount"]
 
@@ -734,6 +734,16 @@ class RetirementEngine:
                 # ---- Annual target setup (source allocation is monthly) ---- #
                 if strategy_id == "fixed_target":
                     pass  # target_annual already set above
+
+                elif strategy_mode == "pot_net":
+                    # POT_NET mode (ARVA): strategy_amount is the net
+                    # withdrawal FROM POTS.  Add estimated guaranteed-net
+                    # so that Step 3's shortfall equals the pot amount.
+                    _tax_on_guar = self.calculate_tax(est_guar_taxable)["total"]
+                    _guar_net = est_guar_gross - _tax_on_guar
+                    target_annual = strategy_amount + _guar_net
+                    current_agg["target_annual"] = target_annual
+                    monthly_target = target_annual / 12.0
 
                 elif strategy_mode == "net":
                     # NET mode for vanguard_dynamic / guyton_klinger
@@ -863,11 +873,12 @@ class RetirementEngine:
                         current_agg["dc_gross"] += actual
                         current_agg["dc_tf"] += actual * tfp
                         taxable_ytd += actual * (1 - tfp)
+                        _net_from_dc = actual / dc_gross_per_net
                         current_agg["withdrawal_detail"][source_name] = (
-                            current_agg["withdrawal_detail"].get(source_name, 0) + actual)
+                            current_agg["withdrawal_detail"].get(source_name, 0) + _net_from_dc)
                         current_agg["pnl"][source_name]["withdrawal"] += actual
                         monthly_withdrawal_detail[source_name] = (
-                            monthly_withdrawal_detail.get(source_name, 0) + actual)
+                            monthly_withdrawal_detail.get(source_name, 0) + _net_from_dc)
                         monthly_gross_income += actual
                         _remaining -= actual
                     elif source_name in tf_balances and tf_balances[source_name] > 0.01:
@@ -909,14 +920,14 @@ class RetirementEngine:
                             current_agg["dc_gross"] += gross_needed
                             current_agg["dc_tf"] += tfp_amt
                             taxable_ytd += taxable_amt
-                            current_agg["withdrawal_detail"][source_name] = (
-                                current_agg["withdrawal_detail"].get(source_name, 0) + gross_needed)
-                            current_agg["pnl"][source_name]["withdrawal"] += gross_needed
-                            monthly_withdrawal_detail[source_name] = (
-                                monthly_withdrawal_detail.get(source_name, 0) + gross_needed)
-                            monthly_gross_income += gross_needed
                             # Net provided by this DC draw (annualised ratio)
                             _net_from_this = gross_needed / dc_gross_per_net
+                            current_agg["withdrawal_detail"][source_name] = (
+                                current_agg["withdrawal_detail"].get(source_name, 0) + _net_from_this)
+                            current_agg["pnl"][source_name]["withdrawal"] += gross_needed
+                            monthly_withdrawal_detail[source_name] = (
+                                monthly_withdrawal_detail.get(source_name, 0) + _net_from_this)
+                            monthly_gross_income += gross_needed
                             _remaining_net = max(0, _remaining_net - _net_from_this)
                     elif source_name in tf_balances and tf_balances[source_name] > 0.01:
                         available = tf_balances[source_name]
