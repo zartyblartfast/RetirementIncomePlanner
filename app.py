@@ -8,7 +8,9 @@ from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify)
 from retirement_engine import RetirementEngine, load_config, load_asset_model, resolve_growth_rate, resolve_growth_provenance
 from market_data import fetch_market_data, get_all_pot_intelligence
-from optimiser import Optimiser
+from optimiser import (Optimiser, find_best_drawdown_order,
+                       find_max_sustainable_income, find_max_sustainable_age,
+                       find_tax_efficient_strategy, find_income_sweep)
 from drawdown_strategies import normalize_config, STRATEGIES, STRATEGY_IDS, get_strategy_display_name
 from version import get_version_info
 from validation_runner import run_all_scenarios, ALL_SCENARIOS
@@ -826,15 +828,57 @@ def scenario_monthly(name):
     return jsonify({"monthly_rows": result.get("monthly_rows", [])})
 
 # ------------------------------------------------------------------ #
-#  Optimiser
+#  Optimiser (progressive AJAX loading)
 # ------------------------------------------------------------------ #
 @app.route("/optimise")
 @login_required
 def optimise():
     cfg = get_config()
-    opt = Optimiser(cfg)
-    results = opt.run_all()
-    return render_template("optimise.html", config=cfg, results=results)
+    return render_template("optimise.html", config=cfg)
+
+@app.route("/api/optimise/q1")
+@login_required
+def api_optimise_q1():
+    cfg = get_config()
+    data = find_best_drawdown_order(cfg)
+    # Strip heavy projection data the JS doesn't need
+    for s in data.get('ranked', []):
+        s.pop('result', None)
+    return jsonify(data)
+
+@app.route("/api/optimise/q2")
+@login_required
+def api_optimise_q2():
+    cfg = get_config()
+    data = find_max_sustainable_income(cfg)
+    data.pop('projection', None)
+    data.pop('current_projection', None)
+    return jsonify(data)
+
+@app.route("/api/optimise/q3")
+@login_required
+def api_optimise_q3():
+    cfg = get_config()
+    data = find_max_sustainable_age(cfg)
+    data.pop('projection', None)
+    data.pop('current_projection', None)
+    return jsonify(data)
+
+@app.route("/api/optimise/q4")
+@login_required
+def api_optimise_q4():
+    cfg = get_config()
+    data = find_tax_efficient_strategy(cfg)
+    for s in data.get('ranked', []):
+        s.pop('result', None)
+    return jsonify(data)
+
+@app.route("/api/optimise/q5")
+@login_required
+def api_optimise_q5():
+    cfg = get_config()
+    max_income = float(request.args.get("max_income", 50000))
+    return jsonify(find_income_sweep(cfg, max_income))
 
 @app.route("/apply_priority", methods=["POST"])
 @login_required
