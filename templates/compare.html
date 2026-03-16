@@ -752,9 +752,18 @@ function runSandbox() {
         chart.update();
 
         const s = data.summary;
-        const sust = s.sustainable
-            ? '<span class="text-success"><i class="bi bi-check-circle"></i> Sustainable</span>'
-            : '<span class="text-danger"><i class="bi bi-x-circle"></i> Shortfall at ' + s.first_shortfall_age + '</span>';
+        // Sustainability is relative to the plan end_age, not the extended projection
+        const shortfallWithinPlan = !s.sustainable && s.first_shortfall_age && s.first_shortfall_age <= s.end_age;
+        const shortfallAfterPlan = !s.sustainable && s.first_shortfall_age && s.first_shortfall_age > s.end_age;
+        let sust;
+        if (shortfallWithinPlan) {
+            sust = '<span class="text-danger"><i class="bi bi-x-circle"></i> Shortfall at ' + s.first_shortfall_age + '</span>';
+        } else if (shortfallAfterPlan) {
+            sust = '<span class="text-success"><i class="bi bi-check-circle"></i> Sustainable to ' + s.end_age + '</span>' +
+                   '<span class="text-warning ms-2"><i class="bi bi-exclamation-triangle"></i> depletes at ' + s.first_shortfall_age + '</span>';
+        } else {
+            sust = '<span class="text-success"><i class="bi bi-check-circle"></i> Sustainable</span>';
+        }
         summaryEl.innerHTML = '<small>' + sust + ' &middot; Capital at ' + s.end_age + ': &pound;' + Math.round(s.remaining_capital).toLocaleString() + '</small>';
 
         document.getElementById('sb-save-row').style.display = '';
