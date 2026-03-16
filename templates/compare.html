@@ -274,11 +274,25 @@ scenarios.forEach(sc => {
 });
 allAges.sort((a, b) => a - b);
 
+// Helper: get strategy display name from config
+function getStrategyName(cfg) {
+    const sid = (cfg || {}).drawdown_strategy || 'fixed_target';
+    return (STRATEGY_NAMES[sid] || {}).display_name || 'Fixed Target';
+}
+
+// Determine if all scenarios share the same strategy for subtitle
+const allStrategies = scenarios.map(sc => getStrategyName(sc.config));
+const uniqueStrategies = [...new Set(allStrategies)];
+const compareSubtitle = uniqueStrategies.length === 1
+    ? 'Drawdown Strategy: ' + uniqueStrategies[0]
+    : '';
+
 const datasets = scenarios.map((sc, i) => {
     const years = (sc.ext_result && sc.ext_result.years) ? sc.ext_result.years : sc.result.years;
     const isCurrent = sc.is_current || false;
+    const sName = getStrategyName(sc.config);
     return {
-        label: sc.name + (isCurrent ? ' \u25C9' : ''),
+        label: sc.name + ' (' + sName + ')' + (isCurrent ? ' \u25C9' : ''),
         data: allAges.map(age => {
             const yr = years.find(y => y.age === age);
             return getOpeningCapital(yr);
@@ -296,7 +310,10 @@ const chart = new Chart(document.getElementById('compareChart'), {
     data: { labels: allAges, datasets: datasets },
     options: {
         responsive: true,
-        plugins: { title: { display: true, text: 'Total Capital by Age' } },
+        plugins: {
+            title: { display: true, text: 'Total Capital by Age' },
+            subtitle: { display: !!compareSubtitle, text: compareSubtitle, font: { size: 14, weight: 'bold' }, color: '#0d6efd', padding: { bottom: 10 } },
+        },
         scales: {
             y: { ticks: { callback: v => '\u00a3' + v.toLocaleString() } }
         }

@@ -539,6 +539,11 @@ const ages = years.map(y => y.age);
 const extAges = extYears.map(y => y.age);
 const planEndAge = {{ plan_end_age }};
 const depletionAge = {{ depletion_age if depletion_age else 'null' }};
+const strategyDisplayName = {{ strategies.get(config.get('drawdown_strategy', 'fixed_target'), {}).get('display_name', 'Fixed Target') | tojson }};
+
+// Capital chart: trim at depletion age if capital depletes; otherwise show to 120
+const capYears = depletionAge ? extYears.filter(y => y.age <= depletionAge) : extYears;
+const capAges = capYears.map(y => y.age);
 
 // Capital Trajectory Chart (extended to show depletion)
 const colours = ['#0d6efd', '#fd7e14', '#198754', '#dc3545', '#6f42c1', '#20c997', '#ffc107'];
@@ -549,7 +554,7 @@ let ci = 0;
 dcPotNames.forEach(name => {
     capDatasets.push({
         label: name,
-        data: extYears.map(y => y.pot_balances[name] || 0),
+        data: capYears.map(y => y.pot_balances[name] || 0),
         borderColor: colours[ci % colours.length],
         backgroundColor: colours[ci % colours.length] + '33',
         fill: true,
@@ -561,7 +566,7 @@ dcPotNames.forEach(name => {
 tfAccNames.forEach(name => {
     capDatasets.push({
         label: name,
-        data: extYears.map(y => y.tf_balances[name] || 0),
+        data: capYears.map(y => y.tf_balances[name] || 0),
         borderColor: colours[ci % colours.length],
         backgroundColor: colours[ci % colours.length] + '33',
         fill: true,
@@ -578,7 +583,7 @@ const verticalLinePlugin = {
         const yScale = chart.scales.y;
         const ctx = chart.ctx;
         // Find pixel position of planEndAge
-        const idx = extAges.indexOf(planEndAge);
+        const idx = capAges.indexOf(planEndAge);
         if (idx === -1) return;
         const x = xScale.getPixelForValue(idx);
         // Draw dashed vertical line
@@ -598,7 +603,7 @@ const verticalLinePlugin = {
         ctx.fillText('Plan end (' + planEndAge + ')', x, yScale.top + 14);
         // Depletion age marker
         if (depletionAge) {
-            const dIdx = extAges.indexOf(depletionAge);
+            const dIdx = capAges.indexOf(depletionAge);
             if (dIdx !== -1) {
                 const dx = xScale.getPixelForValue(dIdx);
                 ctx.beginPath();
@@ -619,12 +624,13 @@ const verticalLinePlugin = {
 
 new Chart(document.getElementById('capitalChart'), {
     type: 'line',
-    data: { labels: extAges, datasets: capDatasets },
+    data: { labels: capAges, datasets: capDatasets },
     options: {
         responsive: true,
         layout: { padding: { top: 20 } },
         plugins: {
             title: { display: true, text: 'Capital Balances by Age (extended projection)' },
+            subtitle: { display: true, text: 'Drawdown Strategy: ' + strategyDisplayName, font: { size: 14, weight: 'bold' }, color: '#0d6efd', padding: { bottom: 10 } },
             legend: { labels: { padding: 16 } },
         },
         scales: {
@@ -773,6 +779,7 @@ new Chart(document.getElementById('incomeChart'), {
         responsive: true,
         plugins: {
             title: { display: true, text: 'Income Sources by Age (Gross) with Tax & Net Overlay' },
+            subtitle: { display: true, text: 'Drawdown Strategy: ' + strategyDisplayName, font: { size: 14, weight: 'bold' }, color: '#0d6efd', padding: { bottom: 10 } },
             tooltip: {
                 callbacks: {
                     label: function(ctx) {

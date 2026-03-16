@@ -279,13 +279,9 @@ def dashboard():
         if yr["total_capital"] <= DEPLETION_EPSILON:
             depletion_age = yr["age"]
             break
-    # Trim extended years: always show depletion visually if it occurs
-    if depletion_age:
-        chart_end = max(plan_end_age + 5, depletion_age + 2)
-    else:
-        chart_end = plan_end_age + 5
+    # Cap extended projection at 120
     depletion_beyond_chart = False
-    ext_years_trimmed = [y for y in ext_result["years"] if y["age"] <= chart_end]
+    ext_years_trimmed = [y for y in ext_result["years"] if y["age"] <= 120]
 
 
     phase_info = compute_phase_info(cfg)
@@ -300,7 +296,8 @@ def dashboard():
                            depletion_age=depletion_age,
                            depletion_beyond_chart=depletion_beyond_chart,
                            phase_info=phase_info,
-                           market_intel=market_intel,)
+                           market_intel=market_intel,
+                           strategies=STRATEGIES,)
 
 # ------------------------------------------------------------------ #
 #  Settings — dynamic income stream management
@@ -582,18 +579,8 @@ def compare():
         ext_cfg["personal"]["end_age"] = min(120, max(plan_end_age, 120))
         engine = RetirementEngine(ext_cfg)
         ext_result = engine.run_projection()
-        # Trim: find depletion, then cap at depletion+2 or plan_end+5, max 120
-        DEPLETION_EPSILON = 1.0
-        dep_age = None
-        for yr in ext_result["years"]:
-            if yr["total_capital"] <= DEPLETION_EPSILON:
-                dep_age = yr["age"]
-                break
-        if dep_age:
-            chart_end = min(120, dep_age)
-        else:
-            chart_end = min(120, plan_end_age + 5)
-        ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= chart_end]
+        # Cap extended projection at 120
+        ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= 120]
         # Also run the normal projection for the summary stats
         result = RetirementEngine(cfg).run_projection()
         scenario = {"name": name, "config": cfg, "result": result,
@@ -654,17 +641,8 @@ def compare():
         plan_end_age = cfg["personal"]["end_age"]
         ext_cfg["personal"]["end_age"] = min(120, max(plan_end_age, 120))
         ext_result = RetirementEngine(ext_cfg).run_projection()
-        DEPLETION_EPSILON = 1.0
-        dep_age = None
-        for yr in ext_result["years"]:
-            if yr["total_capital"] <= DEPLETION_EPSILON:
-                dep_age = yr["age"]
-                break
-        if dep_age:
-            chart_end = min(120, dep_age)
-        else:
-            chart_end = min(120, plan_end_age + 5)
-        ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= chart_end]
+        # Cap extended projection at 120
+        ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= 120]
         # Normal projection for summary
         result = RetirementEngine(cfg).run_projection()
         current_sc = {
@@ -732,18 +710,8 @@ def whatif_project():
     result = RetirementEngine(cfg).run_projection(include_monthly=True)
     years = result["years"]
 
-    # Trim chart years: include dep_age + 1 so the zero-opening point is visible
-    DEPLETION_EPSILON = 1.0
-    dep_age = None
-    for yr in years:
-        if yr["total_capital"] <= DEPLETION_EPSILON:
-            dep_age = yr["age"]
-            break
-    if dep_age:
-        chart_end = min(120, dep_age + 1)
-    else:
-        chart_end = min(120, plan_end_age + 5)
-    chart_years = [y for y in years if y["age"] <= chart_end]
+    # Cap chart years at 120
+    chart_years = [y for y in years if y["age"] <= 120]
 
     # Patch summary: remaining_capital should reflect plan end age, not loop end
     plan_year = next((y for y in years if y["age"] == plan_end_age), None)
@@ -791,15 +759,8 @@ def whatif_save():
     ext_cfg = _copy.deepcopy(cfg)
     ext_cfg["personal"]["end_age"] = min(120, max(plan_end_age, 120))
     ext_result = RetirementEngine(ext_cfg).run_projection()
-    DEPLETION_EPSILON = 1.0
-    dep_age = None
-    for yr in ext_result["years"]:
-        if yr["total_capital"] <= DEPLETION_EPSILON:
-            dep_age = yr["age"]
-            break
-    if dep_age:
-        chart_end = min(120, dep_age)
-        ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= chart_end]
+    # Cap extended projection at 120
+    ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= 120]
 
     result = RetirementEngine(cfg).run_projection()
     scenario = {"name": name, "config": cfg, "result": result, "ext_result": ext_result}
