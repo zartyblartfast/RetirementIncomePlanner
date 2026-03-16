@@ -354,6 +354,68 @@
     "covariance_formula": "Cov_ij = corr_ij * vol_i * vol_j",
     "geometric_derivation": "geometric_return \u2248 arithmetic_return \u2212 (volatility\u00b2 / 2)"
   },
+  "benchmark_mappings": {
+    "developed_equity": "global_equity",
+    "global_smallcap": "global_equity",
+    "emerging_equity": "global_equity",
+    "uk_largecap": "global_equity",
+    "global_equity": "global_equity",
+    "interest_rate": "cash",
+    "money_market": "cash",
+    "uk_gilts": "investment_grade_bonds",
+    "corporate_bonds": "investment_grade_bonds",
+    "index_linked_gilts": "inflation_linked_bonds",
+    "property": "property",
+    "diversified_growth": "diversified_growth",
+    "balanced": "diversified_growth"
+  },
+  "historical_data_mapping": {
+    "global_equity": {
+      "method": "blend",
+      "components": [
+        {"series": "us_equity", "weight": 0.7},
+        {"series": "uk_equity_price", "weight": 0.3}
+      ],
+      "fallback": "us_equity",
+      "notes": "UK component is price-only (no dividends). US includes dividends. US weighted higher for this reason."
+    },
+    "diversified_growth": {
+      "method": "blend",
+      "components": [
+        {"series": "_global_equity", "weight": 0.6},
+        {"series": "uk_gilts", "weight": 0.4}
+      ],
+      "fallback": null,
+      "notes": "Synthetic multi-asset proxy: 60% blended equity + 40% gilts"
+    },
+    "investment_grade_bonds": {
+      "method": "single",
+      "series": "uk_gilts",
+      "fallback": "us_bonds",
+      "notes": "UK gilt total return (approximate from yield changes)"
+    },
+    "inflation_linked_bonds": {
+      "method": "derived",
+      "formula": "uk_gilts - uk_cpi",
+      "fallback": null,
+      "notes": "Crude approximation: nominal gilt return minus inflation"
+    },
+    "cash": {
+      "method": "single",
+      "series": "cash",
+      "fallback": null,
+      "notes": "UK Bank Rate used as cash return proxy"
+    },
+    "property": {
+      "method": "blend",
+      "components": [
+        {"series": "_global_equity", "weight": 0.7},
+        {"series": "uk_gilts", "weight": 0.3}
+      ],
+      "fallback": null,
+      "notes": "Synthetic REIT-like proxy. No direct UK property data in sources."
+    }
+  },
   "changelog": [
     {
       "version_date": "2026-03-04",
