@@ -1,0 +1,422 @@
+"""Backtest Engine — Rolling-window historical backtesting wrapper.
+
+Runs the existing RetirementEngine across multiple historical periods,
+injecting year-varying growth rates and CPI from historical_returns.json.
+
+Each pot's annual return is computed as a weighted blend of historical
+asset-class returns, based on the pot's holdings → benchmark_key → asset class
+mapping chain.
+"""
+
+import copy
+import json
+import math
+import os
+
+from retirement_engine import RetirementEngine, load_asset_model
+
+# ------------------------------------------------------------------ #
+#  Data loading
+# ------------------------------------------------------------------ #
+DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+HIST_FILE = os.path.join(DATA_DIR, "historical_returns.json")
+
+
+def load_historical_returns():
+    """Load the unified historical return series."""
+    with open(HIST_FILE) as f:
+        return json.load(f)
+
+
+# ------------------------------------------------------------------ #
+#  Asset-class return resolver
+# ------------------------------------------------------------------ #
+def _resolve_asset_class_return(asset_class_id, year_str, annual_returns,
+                                hist_data_mapping):
+    """Compute the historical return for one asset class in one year.
+
+    Uses the historical_data_mapping rules from asset_model.json to blend
+    or derive returns from the raw series in historical_returns.json.
+    """
+    entry = annual_returns.get(year_str, {})
+    mapping = hist_data_mapping.get(asset_class_id)
+    if not mapping:
+        return None
+
+    method = mapping.get("method")
+
+    if method == "single":
+        series = mapping["series"]
+        val = entry.get(series)
+        if val is not None:
+            return val
+        # Try fallback
+        fallback = mapping.get("fallback")
+        if fallback:
+            return entry.get(fallback)
+        return None
+
+    elif method == "blend":
+        total = 0.0
+        total_weight = 0.0
+        for comp in mapping["components"]:
+            series = comp["series"]
+            weight = comp["weight"]
+            # Handle recursive references like "_global_equity"
+            if series.startswith("_"):
+                # Recursively resolve
+                sub_id = series[1:]  # strip leading underscore
+                val = _resolve_asset_class_return(
+                    sub_id, year_str, annual_returns, hist_data_mapping)
+            else:
+                val = entry.get(series)
+            if val is not None:
+                total += weight * val
+                total_weight += weight
+        if total_weight > 0:
+            # Scale up if some components missing
+            return total / total_weight * sum(c["weight"] for c in mapping["components"])
+        # Try fallback
+        fallback = mapping.get("fallback")
+        if fallback:
+            return entry.get(fallback)
+        return None
+
+    elif method == "derived":
+        formula = mapping.get("formula", "")
+        if " - " in formula:
+            parts = formula.split(" - ")
+            a = entry.get(parts[0].strip())
+            b = entry.get(parts[1].strip())
+            if a is not None and b is not None:
+                return a - b
+        return None
+
+    return None
+
+
+# ------------------------------------------------------------------ #
+#  Per-pot annual return from holdings
+# ------------------------------------------------------------------ #
+def compute_pot_annual_return(pot_config, year_str, annual_returns,
+                              asset_model, hist_data_mapping):
+    """Compute the weighted annual return for a pot based on its holdings.
+
+    Each holding has a benchmark_key and weight. The benchmark_key maps to
+    an asset class via asset_model["benchmark_mappings"], which then maps
+    to a historical return series.
+
+    If the pot has no holdings, falls back to the pot's allocation template
+    or its static growth_rate.
+    """
+    benchmark_mappings = asset_model.get("benchmark_mappings", {})
+    holdings = pot_config.get("holdings", [])
+
+    if holdings:
+        total_return = 0.0
+        total_weight = 0.0
+        for h in holdings:
+            bk = h.get("benchmark_key", "")
+            w = h.get("weight", 0)
+            asset_class = benchmark_mappings.get(bk)
+            if asset_class and w > 0:
+                ac_return = _resolve_asset_class_return(
+                    asset_class, year_str, annual_returns, hist_data_mapping)
+                if ac_return is not None:
+                    total_return += w * ac_return
+                    total_weight += w
+        if total_weight > 0:
+            # Scale to full weight if some holdings couldn't be resolved
+            return total_return / total_weight
+        return None
+
+    # Fallback: use allocation template weights
+    alloc = pot_config.get("allocation", {})
+    mode = alloc.get("mode", "manual")
+
+    if mode == "template":
+        template_id = alloc.get("template_id", "")
+        templates = {t["id"]: t for t in asset_model.get("portfolio_templates", [])}
+        template = templates.get(template_id)
+        if template:
+            total_return = 0.0
+            total_weight = 0.0
+            for tw in template["weights"]:
+                ac_id = tw["asset_class_id"]
+                w = tw["weight"]
+                ac_return = _resolve_asset_class_return(
+                    ac_id, year_str, annual_returns, hist_data_mapping)
+                if ac_return is not None:
+                    total_return += w * ac_return
+                    total_weight += w
+            if total_weight > 0:
+                return total_return / total_weight
+
+    elif mode == "custom":
+        custom_weights = alloc.get("custom_weights", {})
+        if custom_weights:
+            total_return = 0.0
+            total_weight = 0.0
+            for ac_id, w in custom_weights.items():
+                ac_return = _resolve_asset_class_return(
+                    ac_id, year_str, annual_returns, hist_data_mapping)
+                if ac_return is not None:
+                    total_return += w * ac_return
+                    total_weight += w
+            if total_weight > 0:
+                return total_return / total_weight
+
+    # Final fallback: return None (caller uses static growth_rate)
+    return None
+
+
+# ------------------------------------------------------------------ #
+#  Build growth & CPI schedules for one historical window
+# ------------------------------------------------------------------ #
+def build_schedules(cfg, window_start_year, n_years, annual_returns,
+                    asset_model, hist_data_mapping):
+    """Build growth_rate_schedule and cpi_rate_schedule for a single window.
+
+    Args:
+        cfg: retirement config dict
+        window_start_year: first historical year in this window
+        n_years: number of projection years
+        annual_returns: the "annual_returns" dict from historical_returns.json
+        asset_model: loaded asset model
+        hist_data_mapping: asset_model["historical_data_mapping"]
+
+    Returns:
+        dict with keys:
+            _dc_growth_schedules: {pot_name: {age: rate, ...}, ...}
+            _tf_growth_schedules: {acc_name: {age: rate, ...}, ...}
+            cpi_rate_schedule: {age: rate, ...}
+            window_label: "1929-1951" style label
+    """
+    retirement_age = cfg["personal"]["retirement_age"]
+
+    dc_schedules = {}
+    for pot in cfg["dc_pots"]:
+        name = pot["name"]
+        dc_schedules[name] = {}
+
+    tf_schedules = {}
+    for acc in cfg["tax_free_accounts"]:
+        name = acc["name"]
+        tf_schedules[name] = {}
+
+    cpi_schedule = {}
+
+    for offset in range(n_years):
+        age = retirement_age + offset
+        hist_year = window_start_year + offset
+        year_str = str(hist_year)
+
+        # CPI
+        entry = annual_returns.get(year_str, {})
+        uk_cpi = entry.get("uk_cpi")
+        if uk_cpi is not None:
+            cpi_schedule[age] = uk_cpi
+
+        # DC pots
+        for pot in cfg["dc_pots"]:
+            name = pot["name"]
+            ret = compute_pot_annual_return(
+                pot, year_str, annual_returns, asset_model, hist_data_mapping)
+            if ret is not None:
+                dc_schedules[name][age] = ret
+
+        # Tax-free accounts
+        for acc in cfg["tax_free_accounts"]:
+            name = acc["name"]
+            ret = compute_pot_annual_return(
+                acc, year_str, annual_returns, asset_model, hist_data_mapping)
+            if ret is not None:
+                tf_schedules[name][age] = ret
+
+    end_year = window_start_year + n_years - 1
+    return {
+        "_dc_growth_schedules": dc_schedules,
+        "_tf_growth_schedules": tf_schedules,
+        "cpi_rate_schedule": cpi_schedule,
+        "window_label": f"{window_start_year}-{end_year}",
+        "window_start": window_start_year,
+    }
+
+
+# ------------------------------------------------------------------ #
+#  Main backtest runner
+# ------------------------------------------------------------------ #
+def run_backtest(cfg, max_windows=None):
+    """Run rolling-window backtest across all viable historical periods.
+
+    Args:
+        cfg: retirement config dict (will be deep-copied per window)
+        max_windows: optional cap on number of windows (for testing)
+
+    Returns:
+        dict with:
+            windows: list of {window_label, window_start, result}
+            metadata: {n_windows, n_years, start_range, end_range, ...}
+    """
+    hist_data = load_historical_returns()
+    annual_returns = hist_data["annual_returns"]
+    asset_model = load_asset_model()
+    hist_data_mapping = asset_model.get("historical_data_mapping", {})
+
+    retirement_age = cfg["personal"]["retirement_age"]
+    end_age = cfg["personal"]["end_age"]
+    n_years = end_age - retirement_age
+
+    # Determine viable window range
+    available_years = sorted(int(y) for y in annual_returns.keys())
+    min_year = available_years[0]
+    max_year = available_years[-1]
+
+    # We need n_years of consecutive data per window
+    viable_starts = [y for y in available_years
+                     if y + n_years - 1 <= max_year]
+
+    if max_windows:
+        viable_starts = viable_starts[:max_windows]
+
+    windows = []
+    for start_year in viable_starts:
+        # Deep copy config for this window
+        window_cfg = copy.deepcopy(cfg)
+
+        # Build historical schedules
+        schedules = build_schedules(
+            window_cfg, start_year, n_years,
+            annual_returns, asset_model, hist_data_mapping)
+
+        # Inject schedules into config
+        window_cfg["_dc_growth_schedules"] = schedules["_dc_growth_schedules"]
+        window_cfg["_tf_growth_schedules"] = schedules["_tf_growth_schedules"]
+        window_cfg["cpi_rate_schedule"] = schedules["cpi_rate_schedule"]
+
+        # Run projection
+        engine = RetirementEngine(window_cfg)
+        result = engine.run_projection()
+
+        windows.append({
+            "window_label": schedules["window_label"],
+            "window_start": start_year,
+            "result": result,
+        })
+
+    return {
+        "windows": windows,
+        "metadata": {
+            "n_windows": len(windows),
+            "n_years": n_years,
+            "start_range": viable_starts[0] if viable_starts else None,
+            "end_range": viable_starts[-1] if viable_starts else None,
+            "retirement_age": retirement_age,
+            "end_age": end_age,
+        }
+    }
+
+
+# ------------------------------------------------------------------ #
+#  Percentile extraction (Chunk A3 placeholder — basic version here)
+# ------------------------------------------------------------------ #
+def extract_percentiles(backtest_result, percentiles=(10, 25, 50, 75, 90)):
+    """Extract percentile trajectories from backtest windows.
+
+    For each age, collects total_capital across all windows and computes
+    the requested percentiles.
+
+    Returns:
+        dict with:
+            ages: [68, 69, ..., 90]
+            percentile_trajectories: {
+                "p50": [{age, total_capital, net_income}, ...],
+                "p25": [...], ...
+            }
+            sustainability_rate: fraction of windows that lasted to end_age
+            worst_window: {label, depletion_age or None}
+            best_window: {label, final_capital}
+    """
+    import numpy as np
+
+    windows = backtest_result["windows"]
+    if not windows:
+        return None
+
+    meta = backtest_result["metadata"]
+    retirement_age = meta["retirement_age"]
+    end_age = meta["end_age"]
+    ages = list(range(retirement_age, end_age + 1))
+
+    # Collect per-age arrays
+    capital_by_age = {age: [] for age in ages}
+    income_by_age = {age: [] for age in ages}
+
+    for w in windows:
+        year_lookup = {yr["age"]: yr for yr in w["result"]["years"]}
+        for age in ages:
+            yr = year_lookup.get(age)
+            if yr:
+                capital_by_age[age].append(yr["total_capital"])
+                income_by_age[age].append(yr.get("net_income_achieved", 0))
+            else:
+                capital_by_age[age].append(0)
+                income_by_age[age].append(0)
+
+    # Compute percentiles
+    pct_trajectories = {}
+    for p in percentiles:
+        label = f"p{p}"
+        pct_trajectories[label] = []
+        for age in ages:
+            cap_val = float(np.percentile(capital_by_age[age], p))
+            inc_val = float(np.percentile(income_by_age[age], p))
+            pct_trajectories[label].append({
+                "age": age,
+                "total_capital": round(cap_val, 2),
+                "net_income": round(inc_val, 2),
+            })
+
+    # Sustainability rate: % of windows where capital > 0 at end_age
+    DEPLETION_EPSILON = 1.0
+    sustainable_count = sum(
+        1 for vals in [capital_by_age[end_age]]
+        for v in vals if v > DEPLETION_EPSILON
+    )
+    # Fix: count properly
+    sustainable_count = sum(
+        1 for v in capital_by_age[end_age] if v > DEPLETION_EPSILON
+    )
+    sustainability_rate = sustainable_count / len(windows) if windows else 0
+
+    # Worst window (lowest final capital)
+    worst_idx = min(range(len(windows)),
+                    key=lambda i: capital_by_age[end_age][i])
+    worst_final = capital_by_age[end_age][worst_idx]
+    worst_depl = None
+    for age in ages:
+        if capital_by_age[age][worst_idx] <= DEPLETION_EPSILON:
+            worst_depl = age
+            break
+
+    # Best window (highest final capital)
+    best_idx = max(range(len(windows)),
+                   key=lambda i: capital_by_age[end_age][i])
+
+    return {
+        "ages": ages,
+        "percentile_trajectories": pct_trajectories,
+        "sustainability_rate": round(sustainability_rate, 4),
+        "n_windows": len(windows),
+        "worst_window": {
+            "label": windows[worst_idx]["window_label"],
+            "start_year": windows[worst_idx]["window_start"],
+            "final_capital": round(worst_final, 2),
+            "depletion_age": worst_depl,
+        },
+        "best_window": {
+            "label": windows[best_idx]["window_label"],
+            "start_year": windows[best_idx]["window_start"],
+            "final_capital": round(capital_by_age[end_age][best_idx], 2),
+        },
+    }

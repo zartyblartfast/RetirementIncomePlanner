@@ -439,6 +439,10 @@ class RetirementEngine:
             target_net_annual = cfg["target_income"]["net_annual"]
         monthly_cpi = annual_to_monthly_rate(cpi)
 
+        # Optional year-varying schedules for backtesting
+        # Keys are age (int), values are annual rates (float)
+        cpi_rate_schedule = cfg.get("cpi_rate_schedule", {})
+
         # Strategy dispatch setup
         strategy_state = None
         use_monthly_cpi = (strategy_id == "fixed_target")
@@ -698,6 +702,23 @@ class RetirementEngine:
                 # ---- New year setup ---- #
                 taxable_ytd = 0.0
                 current_year_age = year_age
+
+                # ---- Backtest schedule overrides ---- #
+                # Update growth rates from per-pot schedules
+                for name in dc_meta:
+                    sched = cfg.get("_dc_growth_schedules", {}).get(name)
+                    if sched and year_age in sched:
+                        dc_meta[name]["growth_rate"] = sched[year_age]
+                        dc_monthly[name]["growth"] = annual_to_monthly_rate(sched[year_age])
+                for name in tf_meta:
+                    sched = cfg.get("_tf_growth_schedules", {}).get(name)
+                    if sched and year_age in sched:
+                        tf_meta[name]["growth_rate"] = sched[year_age]
+                        tf_monthly[name]["growth"] = annual_to_monthly_rate(sched[year_age])
+                # Update CPI from schedule
+                if cpi_rate_schedule and year_age in cpi_rate_schedule:
+                    cpi = cpi_rate_schedule[year_age]
+                    monthly_cpi = annual_to_monthly_rate(cpi)
 
                 year_offset = year_age - anchor_age
                 cy = cal_y if is_post_retirement else ret_y + year_offset
