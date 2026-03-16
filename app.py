@@ -725,6 +725,7 @@ def whatif_project():
         cfg["target_income"]["cpi_rate"] = float(data["cpi_rate"])
     if "retirement_age" in data:
         cfg["personal"]["retirement_age"] = int(data["retirement_age"])
+    normalize_config(cfg)  # sync target_income.net_annual from strategy params
 
     # Single projection: provides chart years, monthly income data, and summary
     plan_end_age = cfg["personal"]["end_age"]
@@ -783,6 +784,7 @@ def whatif_save():
         cfg["target_income"]["cpi_rate"] = float(data["cpi_rate"])
     if "retirement_age" in data:
         cfg["personal"]["retirement_age"] = int(data["retirement_age"])
+    normalize_config(cfg)  # sync target_income.net_annual from strategy params
 
     # Extended projection for chart
     plan_end_age = cfg["personal"]["end_age"]
