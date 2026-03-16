@@ -28,7 +28,9 @@
     <div class="card-body">
         <div class="row g-3 align-items-end">
             <div class="col-md-3">
-                <label class="form-label">Drawdown Strategy</label>
+                <label class="form-label">Drawdown Strategy
+                    <a href="#" id="sb-strategy-info" tabindex="0" class="text-muted ms-1" data-bs-toggle="popover" data-bs-trigger="focus" data-bs-html="true" data-bs-placement="bottom" title="Strategy Info" data-bs-content=""><i class="bi bi-info-circle"></i></a>
+                </label>
                 <select class="form-select" id="sb-strategy" onchange="sbShowStrategyParams()">
                     {% for sid in strategy_ids %}
                     <option value="{{ sid }}" {% if current_config.drawdown_strategy == sid %}selected{% endif %}>{{ strategies[sid].display_name }}</option>
@@ -668,11 +670,35 @@ if (scenarios.length > 0) {
 }
 
 // --- What If Sandbox ---
+const STRATEGY_INFO = {
+    fixed_target: '<strong>Fixed Target</strong><br>You set a target net income. Each year the withdrawal is adjusted upward by CPI to maintain purchasing power. Simple and predictable, but income never adapts to market conditions — if markets fall, capital depletes faster.',
+    fixed_percentage: '<strong>Fixed Percentage</strong><br>Each year you withdraw a fixed percentage of your remaining capital. There is no income target — income rises and falls directly with your portfolio value. You can never fully deplete, but income can drop sharply in bad years.',
+    vanguard_dynamic: '<strong>Vanguard Dynamic Spending</strong><br>Starts with an initial target income, adjusted by CPI each year, but with <em>caps</em> on how much income can rise or fall year-to-year. In good markets income grows (up to the ceiling); in bad markets it\'s cut (down to the floor). This smooths income while adapting to reality.',
+    guyton_klinger: '<strong>Guyton-Klinger Guardrails</strong><br>Starts with an initial target income. If your actual withdrawal rate drifts above the <em>upper guardrail</em>, income is cut by a fixed percentage. If it drifts below the <em>lower guardrail</em>, income is raised. This keeps spending in a sustainable corridor — income varies but within controlled bounds.',
+    arva: '<strong>ARVA (Annually Recalculated Virtual Annuity)</strong><br>No target income — the strategy <em>calculates</em> the optimal withdrawal each year based on your remaining capital, age, and assumed real return. Think of it as re-pricing an annuity annually. Income adjusts every year to target depleting capital exactly at your end age.',
+    arva_guardrails: '<strong>ARVA + Guardrails</strong><br>Same as ARVA, but with caps on how much income can change year-to-year (ceiling and floor limits). This reduces the volatility of pure ARVA while keeping its adaptive foundation. No target income is set — the strategy determines the withdrawal amount.',
+};
+
+let strategyPopover = null;
+
+function updateStrategyInfo() {
+    const sel = document.getElementById('sb-strategy').value;
+    const infoEl = document.getElementById('sb-strategy-info');
+    const content = STRATEGY_INFO[sel] || '';
+
+    // Dispose old popover and create new one with updated content
+    if (strategyPopover) { strategyPopover.dispose(); }
+    infoEl.setAttribute('data-bs-content', content);
+    infoEl.setAttribute('title', (STRATEGY_NAMES[sel] || {}).display_name || 'Strategy Info');
+    strategyPopover = new bootstrap.Popover(infoEl, { html: true, trigger: 'focus', placement: 'bottom' });
+}
+
 function sbShowStrategyParams() {
     const sel = document.getElementById('sb-strategy').value;
     document.querySelectorAll('.sb-strategy-params').forEach(el => { el.style.display = 'none'; });
     const panel = document.getElementById('sb-params-' + sel);
     if (panel) panel.style.display = '';
+    updateStrategyInfo();
 }
 sbShowStrategyParams();
 
