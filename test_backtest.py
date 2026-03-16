@@ -130,14 +130,31 @@ def test_percentile_extraction():
     elapsed_pct = time.time() - start
 
     print(f"  Backtest: {elapsed_bt:.2f}s, Percentiles: {elapsed_pct:.3f}s")
-    print(f"  Sustainability rate: {pcts['sustainability_rate']*100:.1f}%")
+    sus = pcts["sustainability"]
+    print(f"  Sustainability rate: {sus['rate']*100:.1f}% ({sus['count']}/{sus['total']})")
     print(f"  Worst window: {pcts['worst_window']['label']} "
           f"(final=£{pcts['worst_window']['final_capital']:,.0f}, "
           f"depletion_age={pcts['worst_window']['depletion_age']})")
     print(f"  Best window: {pcts['best_window']['label']} "
           f"(final=£{pcts['best_window']['final_capital']:,.0f})")
 
-    # Print median trajectory
+    # Income stability
+    inc = pcts["income_stability"]
+    print(f"  Median income ratio: {inc['median_income_ratio']*100:.1f}% of target")
+    print(f"  Worst income ratio:  {inc['worst_income_ratio']*100:.1f}% of target")
+
+    # Worst-period timeline (first 5 years)
+    timeline = pcts["worst_window"]["timeline"]
+    print(f"  Worst-period timeline ({pcts['worst_window']['label']}):")
+    for t in timeline[:5]:
+        mkt = f"{t['market_return']:+.1f}%" if t['market_return'] is not None else 'N/A'
+        sf = ' ⚠ SHORTFALL' if t['shortfall'] else ''
+        print(f"    Age {t['age']} ({t['calendar_year']}): "
+              f"Market {mkt}  Capital £{t['total_capital']:,.0f}  "
+              f"Income £{t['net_income']:,.0f}/{t['target_income']:,.0f} "
+              f"({t['income_ratio']*100:.0f}%){sf}")
+
+    # Percentile fan chart data
     p50 = pcts["percentile_trajectories"]["p50"]
     print(f"  Median capital trajectory (every 5 years):")
     for pt in p50:

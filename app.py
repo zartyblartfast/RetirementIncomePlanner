@@ -771,6 +771,56 @@ def whatif_save():
     return jsonify({"ok": True, "name": name})
 
 # ------------------------------------------------------------------ #
+#  What If Sandbox — Historical Stress Test
+# ------------------------------------------------------------------ #
+@app.route("/whatif_backtest", methods=["POST"])
+@login_required
+def whatif_backtest():
+    """Run historical stress test with sandbox overrides.
+
+    Same sandbox overrides as /whatif_project, but runs through all
+    viable historical windows and returns stress-test metrics.
+    """
+    import copy as _copy
+    from backtest_engine import run_backtest, extract_stress_test
+
+    data = request.get_json(silent=True) or {}
+    cfg = _copy.deepcopy(get_config())
+
+    # Apply sandbox overrides (same as whatif_project)
+    if "drawdown_strategy" in data:
+        cfg["drawdown_strategy"] = data["drawdown_strategy"]
+    if "drawdown_strategy_params" in data:
+        cfg["drawdown_strategy_params"] = {
+            k: float(v) for k, v in data["drawdown_strategy_params"].items()
+        }
+    if "withdrawal_priority" in data:
+        cfg["withdrawal_priority"] = data["withdrawal_priority"]
+    if "cpi_rate" in data:
+        cfg["target_income"]["cpi_rate"] = float(data["cpi_rate"])
+    if "retirement_age" in data:
+        cfg["personal"]["retirement_age"] = int(data["retirement_age"])
+    normalize_config(cfg)
+
+    # Run full backtest
+    bt_result = run_backtest(cfg)
+
+    # Extract stress-test metrics
+    target_income = cfg["target_income"].get("net_annual", 0)
+    stress = extract_stress_test(bt_result, target_income=target_income)
+
+    # Get strategy display name for the response
+    strategy_id = cfg.get("drawdown_strategy", "fixed_target")
+    strategy_name = get_strategy_display_name(strategy_id)
+
+    return jsonify({
+        "strategy": strategy_name,
+        "strategy_id": strategy_id,
+        "stress_test": stress,
+        "metadata": bt_result["metadata"],
+    })
+
+# ------------------------------------------------------------------ #
 #  Scenario monthly income data (for Income Breakdown chart)
 # ------------------------------------------------------------------ #
 @app.route("/scenario_monthly/<name>")

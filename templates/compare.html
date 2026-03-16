@@ -52,8 +52,11 @@
                 <label class="form-label">Ret. Age</label>
                 <input type="number" class="form-control" id="sb-retire" value="{{ current_config.personal.retirement_age }}" step="1" min="50" max="80">
             </div>
-            <div class="col-md-2">
-                <button type="button" class="btn btn-warning w-100" id="sb-run"><i class="bi bi-lightning"></i> See Impact</button>
+            <div class="col-md-1">
+                <button type="button" class="btn btn-warning w-100" id="sb-run" title="Single projection with static growth"><i class="bi bi-lightning"></i> Project</button>
+            </div>
+            <div class="col-md-1">
+                <button type="button" class="btn btn-outline-danger w-100" id="sb-stress" title="Test against 106 historical periods (1900-2005)"><i class="bi bi-shield-exclamation"></i> Stress</button>
             </div>
         </div>
         <!-- Strategy-specific parameter fields -->
@@ -83,6 +86,82 @@
             </div>
             <div class="col-md-5">
                 <small class="text-muted">Saves the sandbox inputs above as a new scenario — does not change your Dashboard settings</small>
+            </div>
+        </div>
+        <!-- Stress Test Results Panel -->
+        <div id="stress-panel" class="mt-3" style="display:none;">
+            <div class="card border-danger">
+                <div class="card-header bg-danger bg-opacity-10 d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-shield-exclamation"></i> <strong>Historical Stress Test</strong></span>
+                    <small class="text-muted" id="stress-meta"></small>
+                </div>
+                <div class="card-body">
+                    <!-- Resilience Summary -->
+                    <div class="row mb-3" id="stress-summary">
+                        <div class="col-md-4">
+                            <div class="card text-center h-100">
+                                <div class="card-body py-2">
+                                    <div class="text-muted small">Money Lasts to End?</div>
+                                    <div class="fs-3 fw-bold" id="stress-sustain"></div>
+                                    <div class="text-muted small" id="stress-sustain-detail"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card text-center h-100">
+                                <div class="card-body py-2">
+                                    <div class="text-muted small">Median Income Maintained</div>
+                                    <div class="fs-3 fw-bold" id="stress-income-ratio"></div>
+                                    <div class="text-muted small" id="stress-income-detail"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card text-center h-100">
+                                <div class="card-body py-2">
+                                    <div class="text-muted small">Worst Period</div>
+                                    <div class="fs-5 fw-bold" id="stress-worst-label"></div>
+                                    <div class="text-muted small" id="stress-worst-detail"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Fan Chart: Capital Trajectory -->
+                    <div class="mb-3">
+                        <canvas id="stressCapitalChart" height="90"></canvas>
+                    </div>
+                    <!-- Worst-Period Timeline -->
+                    <div class="mb-2">
+                        <h6 class="mb-2"><i class="bi bi-clock-history"></i> Worst-Period Timeline <small class="text-muted" id="stress-timeline-label"></small></h6>
+                        <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                            <table class="table table-sm table-bordered mb-0" id="stress-timeline-table">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>Age</th>
+                                        <th>Year</th>
+                                        <th>Market</th>
+                                        <th>Capital</th>
+                                        <th>Income</th>
+                                        <th>Target</th>
+                                        <th>% of Target</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <!-- Transparency -->
+                    <details class="mt-2">
+                        <summary class="text-muted small"><i class="bi bi-info-circle"></i> Methodology &amp; Data Sources</summary>
+                        <div class="small text-muted mt-1">
+                            <p class="mb-1"><strong>Equity returns:</strong> 70% S&amp;P 500 total return (price + dividends) + 30% UK share price return (price only, no dividends). UK component understates total return.</p>
+                            <p class="mb-1"><strong>Bond returns:</strong> UK gilt yields (BoE Millennium), approximated as yield + 10yr duration &times; (&minus;&Delta;yield).</p>
+                            <p class="mb-1"><strong>Inflation:</strong> UK CPI from BoE Millennium (to 2016) + ONS CPI (2017+).</p>
+                            <p class="mb-1"><strong>Cash:</strong> Bank of England Bank Rate.</p>
+                            <p class="mb-0"><strong>Method:</strong> Each pot&rsquo;s return is weighted by its asset allocation. The projection is run for every viable historical period of the required length. Results show how the scenario would have performed across 100+ years of real market history.</p>
+                        </div>
+                    </details>
+                </div>
             </div>
         </div>
     </div>
@@ -264,6 +343,18 @@ function getOpeningCapital(yr) {
     return yr.total_capital;
 }
 
+// Helper: map years array to capital values, stopping (null) after depletion
+function mapCapitalWithDepletion(years, ages) {
+    let depleted = false;
+    return ages.map(age => {
+        if (depleted) return null;
+        const yr = years.find(y => y.age === age);
+        const val = getOpeningCapital(yr);
+        if (val !== null && val < 1) { depleted = true; return 0; }
+        return val;
+    });
+}
+
 // Use ext_result (extended projection) when available, fall back to result
 let allAges = [];
 scenarios.forEach(sc => {
@@ -293,10 +384,7 @@ const datasets = scenarios.map((sc, i) => {
     const sName = getStrategyName(sc.config);
     return {
         label: sc.name + ' (' + sName + ')' + (isCurrent ? ' \u25C9' : ''),
-        data: allAges.map(age => {
-            const yr = years.find(y => y.age === age);
-            return getOpeningCapital(yr);
-        }),
+        data: mapCapitalWithDepletion(years, allAges),
         borderColor: colours[i % colours.length],
         backgroundColor: colours[i % colours.length] + '33',
         borderDash: isCurrent ? [8, 4] : [],
@@ -637,17 +725,11 @@ function runSandbox() {
         // Rebuild scenario datasets to match new allAges length
         scenarios.forEach((sc, i) => {
             const years = (sc.ext_result && sc.ext_result.years) ? sc.ext_result.years : sc.result.years;
-            chart.data.datasets[i].data = allAges.map(age => {
-                const yr = years.find(y => y.age === age);
-                return getOpeningCapital(yr);
-            });
+            chart.data.datasets[i].data = mapCapitalWithDepletion(years, allAges);
         });
 
         // Build sandbox dataset
-        const sbData = allAges.map(age => {
-            const yr = sbYears.find(y => y.age === age);
-            return getOpeningCapital(yr);
-        });
+        const sbData = mapCapitalWithDepletion(sbYears, allAges);
 
         const sbDataset = {
             label: '\u2728 What If',
@@ -691,6 +773,194 @@ function runSandbox() {
 }
 
 document.getElementById('sb-run').addEventListener('click', runSandbox);
+
+// --- Historical Stress Test ---
+let stressCapitalChart = null;
+
+function runStressTest() {
+    const payload = getSandboxPayload();
+    const panel = document.getElementById('stress-panel');
+    const summaryEl = document.getElementById('sb-summary');
+    const btn = document.getElementById('sb-stress');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    summaryEl.innerHTML = '<small class="text-muted"><i class="bi bi-hourglass-split"></i> Running stress test across 100+ historical periods (~3s)...</small>';
+
+    fetch('{{ url_for("whatif_backtest") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-shield-exclamation"></i> Stress';
+        summaryEl.innerHTML = '';
+        renderStressResults(data);
+        panel.style.display = '';
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-shield-exclamation"></i> Stress';
+        summaryEl.innerHTML = '<small class="text-danger">Stress test error: ' + err.message + '</small>';
+    });
+}
+
+function renderStressResults(data) {
+    const st = data.stress_test;
+    const meta = data.metadata;
+    const sus = st.sustainability;
+    const inc = st.income_stability;
+    const worst = st.worst_window;
+    const best = st.best_window;
+
+    // Meta line
+    document.getElementById('stress-meta').textContent =
+        data.strategy + ' \u2014 ' + meta.n_windows + ' periods (' + meta.start_range + '-' + meta.end_range + ')';
+
+    // Sustainability card
+    const susEl = document.getElementById('stress-sustain');
+    const susPct = Math.round(sus.rate * 100);
+    susEl.textContent = susPct + '%';
+    susEl.className = 'fs-3 fw-bold ' + (susPct >= 80 ? 'text-success' : susPct >= 50 ? 'text-warning' : 'text-danger');
+    document.getElementById('stress-sustain-detail').textContent =
+        sus.count + ' of ' + sus.total + ' periods lasted to age ' + meta.end_age;
+
+    // Income stability card
+    const incEl = document.getElementById('stress-income-ratio');
+    const incPct = Math.round(inc.median_income_ratio * 100);
+    incEl.textContent = incPct + '%';
+    incEl.className = 'fs-3 fw-bold ' + (incPct >= 95 ? 'text-success' : incPct >= 80 ? 'text-warning' : 'text-danger');
+    const worstPct = Math.round(inc.worst_income_ratio * 100);
+    document.getElementById('stress-income-detail').textContent =
+        'Worst single year: ' + worstPct + '% of target';
+
+    // Worst period card
+    document.getElementById('stress-worst-label').textContent = worst.label;
+    const deplText = worst.depletion_age
+        ? 'Depleted at age ' + worst.depletion_age
+        : 'Final capital: \u00a3' + Math.round(worst.final_capital).toLocaleString();
+    document.getElementById('stress-worst-detail').innerHTML =
+        deplText + '<br>Best: ' + best.label + ' (\u00a3' + Math.round(best.final_capital).toLocaleString() + ')';
+
+    // Fan chart
+    renderStressFanChart(st);
+
+    // Timeline table
+    renderStressTimeline(worst);
+}
+
+function renderStressFanChart(st) {
+    const ages = st.ages;
+    const p10 = st.percentile_trajectories.p10;
+    const p25 = st.percentile_trajectories.p25;
+    const p50 = st.percentile_trajectories.p50;
+    const p75 = st.percentile_trajectories.p75;
+    const p90 = st.percentile_trajectories.p90;
+
+    const datasets = [
+        {
+            label: 'P90 (optimistic)',
+            data: p90.map(d => d.total_capital),
+            borderColor: '#19875422',
+            backgroundColor: 'transparent',
+            borderWidth: 1,
+            borderDash: [4, 4],
+            pointRadius: 0,
+            fill: false,
+        },
+        {
+            label: 'P75',
+            data: p75.map(d => d.total_capital),
+            borderColor: '#198754aa',
+            backgroundColor: '#19875418',
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: '+1',
+        },
+        {
+            label: 'P50 (median)',
+            data: p50.map(d => d.total_capital),
+            borderColor: '#0d6efd',
+            backgroundColor: '#0d6efd33',
+            borderWidth: 3,
+            pointRadius: 0,
+            fill: false,
+        },
+        {
+            label: 'P25',
+            data: p25.map(d => d.total_capital),
+            borderColor: '#dc354588',
+            backgroundColor: '#dc354518',
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: '-1',
+        },
+        {
+            label: 'P10 (pessimistic)',
+            data: p10.map(d => d.total_capital),
+            borderColor: '#dc354522',
+            backgroundColor: 'transparent',
+            borderWidth: 1,
+            borderDash: [4, 4],
+            pointRadius: 0,
+            fill: false,
+        },
+    ];
+
+    if (stressCapitalChart) stressCapitalChart.destroy();
+    stressCapitalChart = new Chart(document.getElementById('stressCapitalChart'), {
+        type: 'line',
+        data: { labels: ages, datasets },
+        options: {
+            responsive: true,
+            plugins: {
+                title: { display: true, text: 'Capital Trajectory \u2014 Historical Percentile Bands' },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        label: ctx => ctx.dataset.label + ': \u00a3' + Math.round(ctx.parsed.y).toLocaleString()
+                    }
+                },
+                legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 12 } }
+            },
+            scales: {
+                x: { title: { display: true, text: 'Age' } },
+                y: {
+                    title: { display: true, text: 'Total Capital (\u00a3)' },
+                    ticks: { callback: v => '\u00a3' + v.toLocaleString() }
+                }
+            },
+            interaction: { mode: 'index', intersect: false }
+        }
+    });
+}
+
+function renderStressTimeline(worst) {
+    document.getElementById('stress-timeline-label').textContent = '(' + worst.label + ')';
+    const tbody = document.querySelector('#stress-timeline-table tbody');
+    tbody.innerHTML = '';
+    worst.timeline.forEach(t => {
+        const mkt = t.market_return !== null ? (t.market_return >= 0 ? '+' : '') + t.market_return.toFixed(1) + '%' : 'N/A';
+        const mktClass = t.market_return !== null ? (t.market_return >= 0 ? 'text-success' : 'text-danger') : '';
+        const pct = Math.round(t.income_ratio * 100);
+        const pctClass = pct >= 100 ? '' : pct >= 80 ? 'text-warning' : 'text-danger fw-bold';
+        const rowClass = t.shortfall ? 'table-danger' : '';
+        tbody.innerHTML += '<tr class="' + rowClass + '">' +
+            '<td>' + t.age + '</td>' +
+            '<td>' + t.calendar_year + '</td>' +
+            '<td class="' + mktClass + '">' + mkt + '</td>' +
+            '<td>\u00a3' + Math.round(t.total_capital).toLocaleString() + '</td>' +
+            '<td>\u00a3' + Math.round(t.net_income).toLocaleString() + '</td>' +
+            '<td>\u00a3' + Math.round(t.target_income).toLocaleString() + '</td>' +
+            '<td class="' + pctClass + '">' + pct + '%</td>' +
+            '</tr>';
+    });
+}
+
+document.getElementById('sb-stress').addEventListener('click', runStressTest);
 
 // Annualised toggle: redraw chart from stored data when toggled
 document.getElementById('incomeAnnualToggle').addEventListener('change', () => {

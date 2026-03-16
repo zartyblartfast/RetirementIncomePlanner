@@ -318,24 +318,23 @@ def run_backtest(cfg, max_windows=None):
 
 
 # ------------------------------------------------------------------ #
-#  Percentile extraction (Chunk A3 placeholder — basic version here)
+#  Stress-test analysis: percentiles + income stability + timeline
 # ------------------------------------------------------------------ #
-def extract_percentiles(backtest_result, percentiles=(10, 25, 50, 75, 90)):
-    """Extract percentile trajectories from backtest windows.
+def extract_stress_test(backtest_result, target_income=None,
+                        percentiles=(10, 25, 50, 75, 90)):
+    """Extract stress-test metrics from backtest windows.
 
-    For each age, collects total_capital across all windows and computes
-    the requested percentiles.
+    Produces:
+      - Percentile trajectories (capital & income fan chart data)
+      - Sustainability rate
+      - Income stability metrics (median as % of target, worst drop)
+      - Worst-period year-by-year timeline
+      - Best/worst window identification
 
-    Returns:
-        dict with:
-            ages: [68, 69, ..., 90]
-            percentile_trajectories: {
-                "p50": [{age, total_capital, net_income}, ...],
-                "p25": [...], ...
-            }
-            sustainability_rate: fraction of windows that lasted to end_age
-            worst_window: {label, depletion_age or None}
-            best_window: {label, final_capital}
+    Args:
+        backtest_result: output from run_backtest()
+        target_income: annual target net income (for % comparison)
+        percentiles: which percentiles to compute
     """
     import numpy as np
 
@@ -348,9 +347,10 @@ def extract_percentiles(backtest_result, percentiles=(10, 25, 50, 75, 90)):
     end_age = meta["end_age"]
     ages = list(range(retirement_age, end_age + 1))
 
-    # Collect per-age arrays
+    # ── Collect per-age arrays across all windows ──
     capital_by_age = {age: [] for age in ages}
     income_by_age = {age: [] for age in ages}
+    target_by_age = {age: [] for age in ages}
 
     for w in windows:
         year_lookup = {yr["age"]: yr for yr in w["result"]["years"]}
@@ -359,11 +359,13 @@ def extract_percentiles(backtest_result, percentiles=(10, 25, 50, 75, 90)):
             if yr:
                 capital_by_age[age].append(yr["total_capital"])
                 income_by_age[age].append(yr.get("net_income_achieved", 0))
+                target_by_age[age].append(yr.get("target_net", 0))
             else:
                 capital_by_age[age].append(0)
                 income_by_age[age].append(0)
+                target_by_age[age].append(0)
 
-    # Compute percentiles
+    # ── Percentile trajectories ──
     pct_trajectories = {}
     for p in percentiles:
         label = f"p{p}"
@@ -377,19 +379,49 @@ def extract_percentiles(backtest_result, percentiles=(10, 25, 50, 75, 90)):
                 "net_income": round(inc_val, 2),
             })
 
-    # Sustainability rate: % of windows where capital > 0 at end_age
+    # ── Sustainability rate ──
     DEPLETION_EPSILON = 1.0
-    sustainable_count = sum(
-        1 for vals in [capital_by_age[end_age]]
-        for v in vals if v > DEPLETION_EPSILON
-    )
-    # Fix: count properly
     sustainable_count = sum(
         1 for v in capital_by_age[end_age] if v > DEPLETION_EPSILON
     )
     sustainability_rate = sustainable_count / len(windows) if windows else 0
 
-    # Worst window (lowest final capital)
+    # ── Income stability metrics ──
+    # Use target_income from first year of first window if not provided
+    if target_income is None:
+        first_yr = windows[0]["result"]["years"][0] if windows[0]["result"]["years"] else None
+        if first_yr:
+            target_income = first_yr.get("target_net", 0)
+
+    # Median income achieved as fraction of target across all windows/years
+    all_incomes = []
+    all_income_ratios = []
+    for w in windows:
+        for yr in w["result"]["years"]:
+            inc = yr.get("net_income_achieved", 0)
+            tgt = yr.get("target_net", 0)
+            all_incomes.append(inc)
+            if tgt > 0:
+                all_income_ratios.append(inc / tgt)
+
+    median_income_ratio = float(np.median(all_income_ratios)) if all_income_ratios else 1.0
+
+    # Worst single-year income drop (as % of that year's target)
+    worst_income_ratio = min(all_income_ratios) if all_income_ratios else 1.0
+
+    # Per-window: average income achieved as % of target
+    window_avg_ratios = []
+    for w in windows:
+        ratios = []
+        for yr in w["result"]["years"]:
+            tgt = yr.get("target_net", 0)
+            inc = yr.get("net_income_achieved", 0)
+            if tgt > 0:
+                ratios.append(inc / tgt)
+        if ratios:
+            window_avg_ratios.append(sum(ratios) / len(ratios))
+
+    # ── Worst / best window identification ──
     worst_idx = min(range(len(windows)),
                     key=lambda i: capital_by_age[end_age][i])
     worst_final = capital_by_age[end_age][worst_idx]
@@ -399,20 +431,58 @@ def extract_percentiles(backtest_result, percentiles=(10, 25, 50, 75, 90)):
             worst_depl = age
             break
 
-    # Best window (highest final capital)
     best_idx = max(range(len(windows)),
                    key=lambda i: capital_by_age[end_age][i])
+
+    # ── Worst-period timeline ──
+    worst_w = windows[worst_idx]
+    worst_timeline = []
+    hist_data = load_historical_returns()
+    asset_model = load_asset_model()
+    hdm = asset_model.get("historical_data_mapping", {})
+    for yr in worst_w["result"]["years"]:
+        age = yr["age"]
+        hist_year = worst_w["window_start"] + (age - retirement_age)
+
+        # Blended market return for display headline
+        market_return = _resolve_asset_class_return(
+            "global_equity", str(hist_year), hist_data["annual_returns"], hdm)
+
+        tgt = yr.get("target_net", 0)
+        inc = yr.get("net_income_achieved", 0)
+        inc_ratio = inc / tgt if tgt > 0 else 1.0
+
+        worst_timeline.append({
+            "age": age,
+            "calendar_year": hist_year,
+            "market_return": round(market_return * 100, 1) if market_return else None,
+            "total_capital": round(yr["total_capital"], 0),
+            "net_income": round(inc, 0),
+            "target_income": round(tgt, 0),
+            "income_ratio": round(inc_ratio, 3),
+            "shortfall": yr.get("shortfall", False),
+        })
 
     return {
         "ages": ages,
         "percentile_trajectories": pct_trajectories,
-        "sustainability_rate": round(sustainability_rate, 4),
+        "sustainability": {
+            "rate": round(sustainability_rate, 4),
+            "count": sustainable_count,
+            "total": len(windows),
+        },
+        "income_stability": {
+            "median_income_ratio": round(median_income_ratio, 4),
+            "worst_income_ratio": round(worst_income_ratio, 4),
+            "target_income_used": round(target_income, 2) if target_income else 0,
+        },
         "n_windows": len(windows),
         "worst_window": {
-            "label": windows[worst_idx]["window_label"],
-            "start_year": windows[worst_idx]["window_start"],
+            "label": worst_w["window_label"],
+            "start_year": worst_w["window_start"],
             "final_capital": round(worst_final, 2),
             "depletion_age": worst_depl,
+            "timeline": worst_timeline,
         },
         "best_window": {
             "label": windows[best_idx]["window_label"],
@@ -420,3 +490,9 @@ def extract_percentiles(backtest_result, percentiles=(10, 25, 50, 75, 90)):
             "final_capital": round(capital_by_age[end_age][best_idx], 2),
         },
     }
+
+
+# Backward compat alias
+def extract_percentiles(backtest_result, percentiles=(10, 25, 50, 75, 90)):
+    """Legacy wrapper — calls extract_stress_test."""
+    return extract_stress_test(backtest_result, percentiles=percentiles)
