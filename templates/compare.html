@@ -289,6 +289,24 @@
                     {% endfor %}
                 </tr>
                 <tr>
+                    <td><strong>Strategy Params</strong></td>
+                    {% for sc in scenarios %}
+                    <td data-sc-col="{{ loop.index0 }}">
+                        {% set sid = sc.config.get('drawdown_strategy', 'fixed_target') %}
+                        {% set sp = sc.config.get('drawdown_strategy_params', {}) %}
+                        {% set entry = strategies.get(sid, {}) %}
+                        {% set visible_params = [] %}
+                        {% for p in entry.get('params', []) %}
+                            {% if not p.get('sandbox_hidden', False) %}
+                                {% set val = sp.get(p.key, p.default) %}
+                                {% if visible_params.append(p.label ~ ': ' ~ val) %}{% endif %}
+                            {% endif %}
+                        {% endfor %}
+                        <small class="text-muted">{{ visible_params | join(', ') if visible_params else '—' }}</small>
+                    </td>
+                    {% endfor %}
+                </tr>
+                <tr>
                     <td><strong>Drawdown Order</strong></td>
                     {% for sc in scenarios %}
                     <td data-sc-col="{{ loop.index0 }}"><small class="text-muted">{{ sc.config.withdrawal_priority | join(' → ') }}</small></td>
@@ -367,7 +385,10 @@
 <!-- Scenarios -->
 {% if scenarios %}
 <div class="card mb-4">
-    <div class="card-header"><i class="bi bi-collection"></i> Scenarios</div>
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-collection"></i> Scenarios</span>
+        <button type="button" class="btn btn-sm btn-outline-primary" id="btn-compare" disabled><i class="bi bi-arrows-angle-contract"></i> Compare Selected</button>
+    </div>
     <div class="card-body">
         {% set chart_colours = ['#0d6efd', '#dc3545', '#198754', '#fd7e14', '#6f42c1', '#20c997'] %}
         <div class="row g-3">
@@ -386,7 +407,10 @@
                         <p class="mb-0">Capital at {{ sc.result.summary.end_age }}: &pound;{{ "{:,.0f}".format(sc.result.summary.remaining_capital) }}</p>
                     </div>
                     <div class="card-footer d-flex justify-content-between align-items-center">
-                        <small class="text-muted"><i class="bi bi-box-arrow-in-up"></i> Click to load settings</small>
+                        <div class="form-check mb-0" onclick="event.stopPropagation();">
+                            <input class="form-check-input sc-compare-check" type="checkbox" data-sc-name="{{ sc.name }}" id="sc-check-{{ loop.index0 }}">
+                            <label class="form-check-label small text-muted" for="sc-check-{{ loop.index0 }}">Compare</label>
+                        </div>
                         <span>
                         {% if sc.is_unsaved %}
                         <form method="post" class="d-inline">
@@ -407,6 +431,55 @@
 {% else %}
 <div class="alert alert-secondary"><i class="bi bi-info-circle"></i> No scenarios saved yet. Adjust settings on the Dashboard or Settings page, then save a scenario here.</div>
 {% endif %}
+
+<!-- Comparison Results Panel -->
+<div id="compare-panel" class="card mb-4" style="display:none;">
+    <div class="card-header bg-primary bg-opacity-10 d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-arrows-angle-contract"></i> <strong>Scenario Comparison</strong></span>
+        <small class="text-muted" id="compare-meta"></small>
+    </div>
+    <div class="card-body">
+        <!-- Key Insights -->
+        <div id="compare-insights" class="mb-3"></div>
+        <!-- Detailed Comparison Table -->
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered table-hover mb-0" id="compare-detail-table" style="white-space: nowrap;">
+                <thead class="table-light" id="compare-detail-thead"></thead>
+                <tbody id="compare-detail-tbody"></tbody>
+            </table>
+        </div>
+        <!-- Stress Comparison -->
+        <div class="mt-3 mb-3">
+            <button class="btn btn-sm btn-outline-danger" id="btn-stress-compare">
+                <i class="bi bi-lightning"></i> Compare under Historical Stress
+            </button>
+            <span id="stress-compare-spinner" class="d-none ms-2"><span class="spinner-border spinner-border-sm text-danger"></span> <small class="text-muted" id="stress-compare-progress">Running stress tests...</small></span>
+            <div id="stress-compare-results" class="mt-2" style="display:none;">
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered table-hover mb-0" id="stress-compare-table" style="white-space: nowrap;">
+                        <thead class="table-light" id="stress-compare-thead"></thead>
+                        <tbody id="stress-compare-tbody"></tbody>
+                    </table>
+                </div>
+                <div id="stress-compare-insights" class="mt-2"></div>
+            </div>
+        </div>
+        <!-- Year-by-Year Delta Table -->
+        <div class="mt-3">
+            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#compare-yearly" aria-expanded="false">
+                <i class="bi bi-calendar3"></i> Show Year-by-Year Detail
+            </button>
+            <div class="collapse mt-2" id="compare-yearly">
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-sm table-bordered table-hover mb-0" id="compare-yearly-table" style="white-space: nowrap;">
+                        <thead class="table-light sticky-top" id="compare-yearly-thead"></thead>
+                        <tbody id="compare-yearly-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 {% endblock %}
 
@@ -629,6 +702,357 @@ document.querySelectorAll('.sc-card').forEach(card => {
         }
     });
 });
+
+// --- Scenario Comparison ---
+const compareBtn = document.getElementById('btn-compare');
+if (compareBtn) {
+    // Enable Compare button when 2+ checkboxes are checked
+    document.querySelectorAll('.sc-compare-check').forEach(cb => {
+        cb.addEventListener('change', () => {
+            const checked = document.querySelectorAll('.sc-compare-check:checked');
+            compareBtn.disabled = checked.length < 2;
+            compareBtn.textContent = checked.length >= 2
+                ? 'Compare ' + checked.length + ' Scenarios'
+                : 'Compare Selected';
+            if (checked.length < 2) {
+                compareBtn.innerHTML = '<i class="bi bi-arrows-angle-contract"></i> Compare Selected';
+            } else {
+                compareBtn.innerHTML = '<i class="bi bi-arrows-angle-contract"></i> Compare ' + checked.length + ' Scenarios';
+            }
+        });
+    });
+
+    compareBtn.addEventListener('click', () => {
+        const checked = document.querySelectorAll('.sc-compare-check:checked');
+        const names = Array.from(checked).map(cb => cb.dataset.scName);
+        const selected = scenarios.filter(sc => names.includes(sc.name));
+        if (selected.length < 2) return;
+        renderComparison(selected);
+    });
+}
+
+function renderComparison(selectedScenarios) {
+    const panel = document.getElementById('compare-panel');
+    panel.style.display = '';
+
+    // Meta
+    document.getElementById('compare-meta').textContent =
+        selectedScenarios.length + ' scenarios compared';
+
+    // --- Key Insights ---
+    const insights = [];
+    const summaries = selectedScenarios.map(sc => ({
+        name: sc.name,
+        sustainable: sc.result.summary.sustainable,
+        shortfall_age: sc.result.summary.first_shortfall_age,
+        capital: sc.result.summary.remaining_capital,
+        tax: sc.result.summary.total_tax_paid,
+        end_age: sc.result.summary.end_age,
+        strategy: (sc.config || {}).drawdown_strategy || 'fixed_target',
+        cumul_income: (sc.result.years || []).reduce((s, yr) => s + (yr.net_income_achieved || 0), 0),
+    }));
+
+    // Best capital
+    const bestCap = summaries.reduce((a, b) => a.capital > b.capital ? a : b);
+    const worstCap = summaries.reduce((a, b) => a.capital < b.capital ? a : b);
+    if (bestCap.name !== worstCap.name) {
+        const diff = bestCap.capital - worstCap.capital;
+        insights.push('<i class="bi bi-piggy-bank text-success"></i> <strong>' + bestCap.name + '</strong> leaves £' + Math.round(diff).toLocaleString() + ' more capital than <strong>' + worstCap.name + '</strong>');
+    }
+
+    // Best cumulative income
+    const bestInc = summaries.reduce((a, b) => a.cumul_income > b.cumul_income ? a : b);
+    const worstInc = summaries.reduce((a, b) => a.cumul_income < b.cumul_income ? a : b);
+    if (bestInc.name !== worstInc.name) {
+        const diff = bestInc.cumul_income - worstInc.cumul_income;
+        insights.push('<i class="bi bi-cash-stack text-primary"></i> <strong>' + bestInc.name + '</strong> delivers £' + Math.round(diff).toLocaleString() + ' more total income than <strong>' + worstInc.name + '</strong>');
+    }
+
+    // Sustainability differences
+    const allSustainable = summaries.every(s => s.sustainable);
+    const noneSustainable = summaries.every(s => !s.sustainable);
+    if (!allSustainable && !noneSustainable) {
+        const sustNames = summaries.filter(s => s.sustainable).map(s => s.name);
+        const failNames = summaries.filter(s => !s.sustainable).map(s => '<strong>' + s.name + '</strong> (age ' + s.shortfall_age + ')');
+        insights.push('<i class="bi bi-exclamation-triangle text-warning"></i> Sustainable: ' + sustNames.map(n => '<strong>' + n + '</strong>').join(', ') + ' — Shortfall: ' + failNames.join(', '));
+    }
+
+    // Tax differences
+    const bestTax = summaries.reduce((a, b) => a.tax < b.tax ? a : b);
+    const worstTax = summaries.reduce((a, b) => a.tax > b.tax ? a : b);
+    if (bestTax.name !== worstTax.name && (worstTax.tax - bestTax.tax) > 1000) {
+        insights.push('<i class="bi bi-receipt text-info"></i> <strong>' + bestTax.name + '</strong> saves £' + Math.round(worstTax.tax - bestTax.tax).toLocaleString() + ' in tax vs <strong>' + worstTax.name + '</strong>');
+    }
+
+    document.getElementById('compare-insights').innerHTML = insights.length
+        ? '<div class="alert alert-light border">' + insights.join('<br>') + '</div>'
+        : '';
+
+    // --- Summary Detail Table ---
+    const thead = document.getElementById('compare-detail-thead');
+    const tbody = document.getElementById('compare-detail-tbody');
+    thead.innerHTML = '<tr><th>Metric</th>' + selectedScenarios.map(sc => '<th class="text-center">' + sc.name + '</th>').join('') + '</tr>';
+
+    const metrics = [
+        { label: 'Strategy', fn: sc => (STRATEGY_NAMES[sc.config.drawdown_strategy] || {}).display_name || sc.config.drawdown_strategy },
+        { label: 'Strategy Params', fn: sc => {
+            const sid = sc.config.drawdown_strategy || 'fixed_target';
+            const sp = sc.config.drawdown_strategy_params || {};
+            const entry = STRATEGY_NAMES[sid] || {};
+            const params = (entry.params || []).filter(p => !p.sandbox_hidden);
+            return params.length ? params.map(p => p.label + ': ' + (sp[p.key] !== undefined ? sp[p.key] : p.default)).join(', ') : '\u2014';
+        }},
+        { label: 'Target Income', fn: sc => '\u00a3' + Math.round(sc.config.target_income.net_annual).toLocaleString() },
+        { label: 'CPI', fn: sc => (sc.config.target_income.cpi_rate * 100).toFixed(1) + '%' },
+        { label: 'End Age', fn: sc => sc.result.summary.end_age },
+        { label: 'Drawdown Order', fn: sc => sc.config.withdrawal_priority.join(' \u2192 ') },
+        { label: 'Sustainable?', fn: sc => sc.result.summary.sustainable ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No (age ' + sc.result.summary.first_shortfall_age + ')</span>' },
+        { label: 'Remaining Capital', fn: sc => '\u00a3' + Math.round(sc.result.summary.remaining_capital).toLocaleString() },
+        { label: 'Cumulative Income', fn: sc => '\u00a3' + Math.round(sc.result.years.reduce((s, yr) => s + (yr.net_income_achieved || 0), 0)).toLocaleString() },
+        { label: 'Total Tax', fn: sc => '\u00a3' + Math.round(sc.result.summary.total_tax_paid).toLocaleString() },
+    ];
+
+    tbody.innerHTML = metrics.map(m =>
+        '<tr><td><strong>' + m.label + '</strong></td>' +
+        selectedScenarios.map(sc => '<td class="text-center">' + m.fn(sc) + '</td>').join('') +
+        '</tr>'
+    ).join('');
+
+    // --- Year-by-Year Detail ---
+    const ythead = document.getElementById('compare-yearly-thead');
+    const ytbody = document.getElementById('compare-yearly-tbody');
+    ythead.innerHTML = '<tr><th>Age</th>' +
+        selectedScenarios.map(sc => '<th class="text-center" colspan="2">' + sc.name + '</th>').join('') +
+        '</tr>' +
+        '<tr><th></th>' +
+        selectedScenarios.map(() => '<th class="text-end small">Income</th><th class="text-end small">Capital</th>').join('') +
+        '</tr>';
+
+    // Find common age range
+    const allAges = new Set();
+    selectedScenarios.forEach(sc => {
+        (sc.result.years || []).forEach(yr => allAges.add(yr.age));
+    });
+    const sortedAges = [...allAges].sort((a, b) => a - b);
+
+    // Build lookup: scenario name → age → year data
+    const lookup = {};
+    selectedScenarios.forEach(sc => {
+        lookup[sc.name] = {};
+        (sc.result.years || []).forEach(yr => { lookup[sc.name][yr.age] = yr; });
+    });
+
+    ytbody.innerHTML = sortedAges.map(age => {
+        return '<tr><td>' + age + '</td>' +
+            selectedScenarios.map(sc => {
+                const yr = lookup[sc.name][age];
+                if (!yr) return '<td class="text-muted">—</td><td class="text-muted">—</td>';
+                return '<td class="text-end">\u00a3' + Math.round(yr.net_income_achieved || 0).toLocaleString() + '</td>' +
+                       '<td class="text-end">\u00a3' + Math.round(yr.total_capital || 0).toLocaleString() + '</td>';
+            }).join('') +
+            '</tr>';
+    }).join('');
+
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // Wire up stress compare button for these scenarios
+    const stressBtn = document.getElementById('btn-stress-compare');
+    stressBtn.onclick = () => runStressComparison(selectedScenarios);
+}
+
+// Track current comparison scenarios
+let _compareScenarios = [];
+
+async function runStressComparison(selectedScenarios) {
+    _compareScenarios = selectedScenarios;
+    const spinner = document.getElementById('stress-compare-spinner');
+    const progress = document.getElementById('stress-compare-progress');
+    const results = document.getElementById('stress-compare-results');
+    const btn = document.getElementById('btn-stress-compare');
+
+    spinner.classList.remove('d-none');
+    btn.disabled = true;
+    results.style.display = 'none';
+
+    const stressResults = [];
+    for (let i = 0; i < selectedScenarios.length; i++) {
+        const sc = selectedScenarios[i];
+        progress.textContent = 'Running stress test ' + (i + 1) + ' of ' + selectedScenarios.length + ' (' + sc.name + ')...';
+
+        const cfg = sc.config || {};
+        const payload = {
+            drawdown_strategy: cfg.drawdown_strategy || 'fixed_target',
+            drawdown_strategy_params: cfg.drawdown_strategy_params || {},
+            withdrawal_priority: cfg.withdrawal_priority || [],
+            cpi_rate: (cfg.target_income || {}).cpi_rate || 0.03,
+            retirement_age: (cfg.personal || {}).retirement_age || 68,
+            end_age: (cfg.personal || {}).end_age || 90,
+        };
+
+        try {
+            const resp = await fetch('/whatif_backtest', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await resp.json();
+            stressResults.push({ name: sc.name, data: data });
+        } catch (e) {
+            stressResults.push({ name: sc.name, data: null, error: e.message });
+        }
+    }
+
+    spinner.classList.add('d-none');
+    btn.disabled = false;
+    renderStressComparison(selectedScenarios, stressResults);
+}
+
+function renderStressComparison(selectedScenarios, stressResults) {
+    const results = document.getElementById('stress-compare-results');
+    results.style.display = '';
+
+    const thead = document.getElementById('stress-compare-thead');
+    const tbody = document.getElementById('stress-compare-tbody');
+
+    thead.innerHTML = '<tr><th>Stress Metric</th>' +
+        selectedScenarios.map(sc => '<th class="text-center">' + sc.name + '</th>').join('') + '</tr>';
+
+    const metrics = [
+        {
+            label: 'Money Lasts to End',
+            fn: (sr) => {
+                if (!sr.data) return '<span class="text-muted">Error</span>';
+                const sus = sr.data.stress_test.sustainability;
+                const pct = Math.round(sus.rate * 100);
+                const cls = pct >= 80 ? 'text-success' : pct >= 50 ? 'text-warning' : 'text-danger';
+                return '<span class="' + cls + ' fw-bold">' + pct + '%</span> <small>(' + sus.count + '/' + sus.total + ')</small>';
+            }
+        },
+        {
+            label: 'Depletion Detail',
+            fn: (sr) => {
+                if (!sr.data) return '—';
+                const sus = sr.data.stress_test.sustainability;
+                const dist = sus.depletion_age_dist || [];
+                const depleted = sus.total - sus.count;
+                if (depleted === 0) return '<small class="text-success">No depletion</small>';
+                if (dist.length === 1 && dist[0].age === sr.data.metadata.end_age) {
+                    return '<small>' + depleted + ' at end age ' + dist[0].age + ' only</small>';
+                }
+                return '<small>' + dist.map(d => d.count + ' at ' + d.age).join(', ') + '</small>';
+            }
+        },
+        {
+            label: 'Median Income Maintained',
+            fn: (sr) => {
+                if (!sr.data) return '—';
+                const pct = Math.round(sr.data.stress_test.income_stability.median_income_ratio * 100);
+                const cls = pct >= 95 ? 'text-success' : pct >= 80 ? 'text-warning' : 'text-danger';
+                return '<span class="' + cls + ' fw-bold">' + pct + '%</span>';
+            }
+        },
+        {
+            label: 'Worst Single Year Income',
+            fn: (sr) => {
+                if (!sr.data) return '—';
+                const pct = Math.round(sr.data.stress_test.income_stability.worst_income_ratio * 100);
+                const cls = pct >= 80 ? 'text-success' : pct >= 60 ? 'text-warning' : 'text-danger';
+                return '<span class="' + cls + '">' + pct + '% of target</span>';
+            }
+        },
+        {
+            label: 'Cumulative Income (Median)',
+            fn: (sr) => {
+                if (!sr.data) return '—';
+                return '\u00a3' + Math.round(sr.data.stress_test.cumulative_income.median).toLocaleString();
+            }
+        },
+        {
+            label: 'Cumulative Income (Worst)',
+            fn: (sr) => {
+                if (!sr.data) return '—';
+                return '\u00a3' + Math.round(sr.data.stress_test.cumulative_income.worst).toLocaleString();
+            }
+        },
+        {
+            label: 'Cumulative Income (Best)',
+            fn: (sr) => {
+                if (!sr.data) return '—';
+                return '\u00a3' + Math.round(sr.data.stress_test.cumulative_income.best).toLocaleString();
+            }
+        },
+        {
+            label: 'Worst Period',
+            fn: (sr) => {
+                if (!sr.data) return '—';
+                const w = sr.data.stress_test.worst_window;
+                return '<strong>' + w.label + '</strong><br><small>' +
+                    (w.depletion_age ? 'Depleted at ' + w.depletion_age : 'Capital \u00a3' + Math.round(w.final_capital).toLocaleString()) + '</small>';
+            }
+        },
+        {
+            label: 'Windows Tested',
+            fn: (sr) => {
+                if (!sr.data) return '—';
+                const m = sr.data.metadata;
+                return m.n_windows + ' (' + m.start_range + '-' + m.end_range + ')';
+            }
+        },
+    ];
+
+    tbody.innerHTML = metrics.map(m =>
+        '<tr><td><strong>' + m.label + '</strong></td>' +
+        stressResults.map(sr => '<td class="text-center">' + m.fn(sr) + '</td>').join('') +
+        '</tr>'
+    ).join('');
+
+    // Stress insights
+    const sInsights = [];
+    const validResults = stressResults.filter(sr => sr.data);
+    if (validResults.length >= 2) {
+        // Survival comparison
+        const survRates = validResults.map(sr => ({
+            name: sr.name,
+            rate: sr.data.stress_test.sustainability.rate
+        }));
+        const bestSurv = survRates.reduce((a, b) => a.rate > b.rate ? a : b);
+        const worstSurv = survRates.reduce((a, b) => a.rate < b.rate ? a : b);
+        if (bestSurv.rate !== worstSurv.rate) {
+            const diff = Math.round((bestSurv.rate - worstSurv.rate) * 100);
+            sInsights.push('<i class="bi bi-shield-check text-success"></i> <strong>' + bestSurv.name + '</strong> survives ' + diff + ' percentage points more often than <strong>' + worstSurv.name + '</strong>');
+        }
+
+        // Median cumulative income comparison
+        const medIncomes = validResults.map(sr => ({
+            name: sr.name,
+            income: sr.data.stress_test.cumulative_income.median
+        }));
+        const bestMedInc = medIncomes.reduce((a, b) => a.income > b.income ? a : b);
+        const worstMedInc = medIncomes.reduce((a, b) => a.income < b.income ? a : b);
+        if (bestMedInc.income !== worstMedInc.income) {
+            const diff = bestMedInc.income - worstMedInc.income;
+            sInsights.push('<i class="bi bi-cash-stack text-primary"></i> <strong>' + bestMedInc.name + '</strong> delivers \u00a3' + Math.round(diff).toLocaleString() + ' more median cumulative income under stress');
+        }
+
+        // Worst-case income comparison
+        const worstIncomes = validResults.map(sr => ({
+            name: sr.name,
+            ratio: sr.data.stress_test.income_stability.worst_income_ratio
+        }));
+        const bestFloor = worstIncomes.reduce((a, b) => a.ratio > b.ratio ? a : b);
+        const worstFloor = worstIncomes.reduce((a, b) => a.ratio < b.ratio ? a : b);
+        if (bestFloor.ratio !== worstFloor.ratio) {
+            const diff = Math.round((bestFloor.ratio - worstFloor.ratio) * 100);
+            sInsights.push('<i class="bi bi-graph-down-arrow text-warning"></i> <strong>' + bestFloor.name + '</strong> has a ' + diff + ' pp higher income floor in the worst year');
+        }
+    }
+
+    document.getElementById('stress-compare-insights').innerHTML = sInsights.length
+        ? '<div class="alert alert-light border">' + sInsights.join('<br>') + '</div>'
+        : '';
+
+    document.getElementById('stress-compare-results').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
 
 // --- Income Breakdown Stacked Area Chart ---
 const INCOME_COLOURS = {
