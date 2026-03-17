@@ -434,34 +434,43 @@ def extract_stress_test(backtest_result, target_income=None,
     best_idx = max(range(len(windows)),
                    key=lambda i: capital_by_age[end_age][i])
 
-    # ── Worst-period timeline ──
-    worst_w = windows[worst_idx]
-    worst_timeline = []
+    # Median window: closest to median final capital
+    finals = [capital_by_age[end_age][i] for i in range(len(windows))]
+    sorted_finals = sorted(finals)
+    median_val = sorted_finals[len(sorted_finals) // 2]
+    median_idx = min(range(len(windows)),
+                     key=lambda i: abs(capital_by_age[end_age][i] - median_val))
+
+    # ── Build timelines for worst / median / best ──
     hist_data = load_historical_returns()
     asset_model = load_asset_model()
     hdm = asset_model.get("historical_data_mapping", {})
-    for yr in worst_w["result"]["years"]:
-        age = yr["age"]
-        hist_year = worst_w["window_start"] + (age - retirement_age)
 
-        # Blended market return for display headline
-        market_return = _resolve_asset_class_return(
-            "global_equity", str(hist_year), hist_data["annual_returns"], hdm)
+    def _build_timeline(w):
+        timeline = []
+        for yr in w["result"]["years"]:
+            age = yr["age"]
+            hist_year = w["window_start"] + (age - retirement_age)
+            market_return = _resolve_asset_class_return(
+                "global_equity", str(hist_year), hist_data["annual_returns"], hdm)
+            tgt = yr.get("target_net", 0)
+            inc = yr.get("net_income_achieved", 0)
+            inc_ratio = inc / tgt if tgt > 0 else 1.0
+            timeline.append({
+                "age": age,
+                "calendar_year": hist_year,
+                "market_return": round(market_return * 100, 1) if market_return else None,
+                "total_capital": round(yr["total_capital"], 0),
+                "net_income": round(inc, 0),
+                "target_income": round(tgt, 0),
+                "income_ratio": round(inc_ratio, 3),
+                "shortfall": yr.get("shortfall", False),
+            })
+        return timeline
 
-        tgt = yr.get("target_net", 0)
-        inc = yr.get("net_income_achieved", 0)
-        inc_ratio = inc / tgt if tgt > 0 else 1.0
-
-        worst_timeline.append({
-            "age": age,
-            "calendar_year": hist_year,
-            "market_return": round(market_return * 100, 1) if market_return else None,
-            "total_capital": round(yr["total_capital"], 0),
-            "net_income": round(inc, 0),
-            "target_income": round(tgt, 0),
-            "income_ratio": round(inc_ratio, 3),
-            "shortfall": yr.get("shortfall", False),
-        })
+    worst_w = windows[worst_idx]
+    median_w = windows[median_idx]
+    best_w = windows[best_idx]
 
     return {
         "ages": ages,
@@ -482,13 +491,20 @@ def extract_stress_test(backtest_result, target_income=None,
             "start_year": worst_w["window_start"],
             "final_capital": round(worst_final, 2),
             "depletion_age": worst_depl,
-            "timeline": worst_timeline,
+            "timeline": _build_timeline(worst_w),
             "trajectory": [round(capital_by_age[age][worst_idx], 0) for age in ages],
         },
+        "median_window": {
+            "label": median_w["window_label"],
+            "start_year": median_w["window_start"],
+            "final_capital": round(capital_by_age[end_age][median_idx], 2),
+            "timeline": _build_timeline(median_w),
+        },
         "best_window": {
-            "label": windows[best_idx]["window_label"],
-            "start_year": windows[best_idx]["window_start"],
+            "label": best_w["window_label"],
+            "start_year": best_w["window_start"],
             "final_capital": round(capital_by_age[end_age][best_idx], 2),
+            "timeline": _build_timeline(best_w),
         },
     }
 

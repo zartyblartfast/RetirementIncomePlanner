@@ -140,9 +140,17 @@
                     <div class="mb-3">
                         <canvas id="stressIncomeChart" height="90"></canvas>
                     </div>
-                    <!-- Worst-Period Timeline -->
+                    <!-- Period Timeline (worst / median / best) -->
                     <div class="mb-2">
-                        <h6 class="mb-2"><i class="bi bi-clock-history"></i> Worst-Period Timeline <small class="text-muted" id="stress-timeline-label"></small></h6>
+                        <div class="d-flex align-items-center mb-2">
+                            <h6 class="mb-0 me-2"><i class="bi bi-clock-history"></i> Period Timeline</h6>
+                            <select class="form-select form-select-sm" id="stress-timeline-select" style="width: auto;">
+                                <option value="worst" selected>Worst Period</option>
+                                <option value="median">Median Period</option>
+                                <option value="best">Best Period</option>
+                            </select>
+                            <small class="text-muted ms-2" id="stress-timeline-label"></small>
+                        </div>
                         <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
                             <table class="table table-sm table-bordered mb-0" id="stress-timeline-table">
                                 <thead class="table-light sticky-top">
@@ -822,6 +830,12 @@ document.getElementById('sb-run').addEventListener('click', runSandbox);
 // --- Historical Stress Test ---
 let stressCapitalChart = null;
 let stressIncomeChart = null;
+let stressTimelines = {};
+
+document.getElementById('stress-timeline-select').addEventListener('change', function() {
+    const selected = stressTimelines[this.value];
+    if (selected) renderStressTimeline(selected);
+});
 
 function runStressTest() {
     const payload = getSandboxPayload();
@@ -894,8 +908,14 @@ function renderStressResults(data) {
     renderStressFanChart(st);
     renderStressIncomeFanChart(st, inc.target_income_used);
 
-    // Timeline table
-    renderStressTimeline(worst);
+    // Timeline table — store all three for dropdown switching
+    stressTimelines = {
+        worst: st.worst_window,
+        median: st.median_window,
+        best: st.best_window,
+    };
+    document.getElementById('stress-timeline-select').value = 'worst';
+    renderStressTimeline(stressTimelines.worst);
 }
 
 function renderStressFanChart(st) {
@@ -1152,11 +1172,13 @@ function renderStressIncomeFanChart(st, targetIncome) {
     });
 }
 
-function renderStressTimeline(worst) {
-    document.getElementById('stress-timeline-label').textContent = '(' + worst.label + ')';
+function renderStressTimeline(win) {
+    const detail = win.label + ' \u2014 Final: \u00a3' + Math.round(win.final_capital).toLocaleString()
+        + (win.depletion_age ? '  (depleted age ' + win.depletion_age + ')' : '');
+    document.getElementById('stress-timeline-label').textContent = detail;
     const tbody = document.querySelector('#stress-timeline-table tbody');
     tbody.innerHTML = '';
-    worst.timeline.forEach(t => {
+    win.timeline.forEach(t => {
         const mkt = t.market_return !== null ? (t.market_return >= 0 ? '+' : '') + t.market_return.toFixed(1) + '%' : 'N/A';
         const mktClass = t.market_return !== null ? (t.market_return >= 0 ? 'text-success' : 'text-danger') : '';
         const pct = Math.round(t.income_ratio * 100);
