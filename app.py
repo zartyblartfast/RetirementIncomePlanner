@@ -703,6 +703,8 @@ def whatif_project():
         cfg["target_income"]["cpi_rate"] = float(data["cpi_rate"])
     if "retirement_age" in data:
         cfg["personal"]["retirement_age"] = int(data["retirement_age"])
+    if "end_age" in data:
+        cfg["personal"]["end_age"] = int(data["end_age"])
     normalize_config(cfg)  # sync target_income.net_annual from strategy params
 
     # Single projection: provides chart years, monthly income data, and summary
@@ -752,6 +754,8 @@ def whatif_save():
         cfg["target_income"]["cpi_rate"] = float(data["cpi_rate"])
     if "retirement_age" in data:
         cfg["personal"]["retirement_age"] = int(data["retirement_age"])
+    if "end_age" in data:
+        cfg["personal"]["end_age"] = int(data["end_age"])
     normalize_config(cfg)  # sync target_income.net_annual from strategy params
 
     # Extended projection for chart
@@ -800,6 +804,8 @@ def whatif_backtest():
         cfg["target_income"]["cpi_rate"] = float(data["cpi_rate"])
     if "retirement_age" in data:
         cfg["personal"]["retirement_age"] = int(data["retirement_age"])
+    if "end_age" in data:
+        cfg["personal"]["end_age"] = int(data["end_age"])
     normalize_config(cfg)
 
     # Run full backtest

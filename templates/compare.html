@@ -55,6 +55,10 @@
                 <input type="number" class="form-control" id="sb-retire" value="{{ current_config.personal.retirement_age }}" step="1" min="50" max="80">
             </div>
             <div class="col-md-1">
+                <label class="form-label">End Age</label>
+                <input type="number" class="form-control" id="sb-end-age" value="{{ current_config.personal.end_age }}" step="1" min="70" max="120">
+            </div>
+            <div class="col-md-1">
                 <button type="button" class="btn btn-warning w-100" id="sb-run" title="Single projection with static growth"><i class="bi bi-lightning"></i> Project</button>
             </div>
             <div class="col-md-1">
@@ -707,6 +711,7 @@ function getSandboxPayload() {
     const order = document.getElementById('sb-order').value;
     const cpi = parseFloat(document.getElementById('sb-cpi').value);
     const retire = parseInt(document.getElementById('sb-retire').value);
+    const endAge = parseInt(document.getElementById('sb-end-age').value);
     // Collect strategy-specific params from the visible panel
     const params = {};
     const panel = document.getElementById('sb-params-' + strategy);
@@ -720,7 +725,8 @@ function getSandboxPayload() {
         drawdown_strategy_params: params,
         withdrawal_priority: order.split(',').map(s => s.trim()),
         cpi_rate: cpi,
-        retirement_age: retire
+        retirement_age: retire,
+        end_age: endAge
     };
 }
 
@@ -1005,7 +1011,7 @@ document.getElementById('incomeAnnualToggle').addEventListener('change', () => {
 });
 
 // Run on Enter key in sandbox inputs
-document.querySelectorAll('#sb-cpi, #sb-retire, .sb-sp').forEach(el => {
+document.querySelectorAll('#sb-cpi, #sb-retire, #sb-end-age, .sb-sp').forEach(el => {
     el.addEventListener('keydown', e => {
         if (e.key === 'Enter') { e.preventDefault(); runSandbox(); }
     });
