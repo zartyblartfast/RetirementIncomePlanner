@@ -145,9 +145,9 @@
                         <div class="d-flex align-items-center mb-2">
                             <h6 class="mb-0 me-2"><i class="bi bi-clock-history"></i> Period Timeline</h6>
                             <select class="form-select form-select-sm" id="stress-timeline-select" style="width: auto;">
-                                <option value="worst" selected>Worst Period</option>
-                                <option value="median">Median Period</option>
-                                <option value="best">Best Period</option>
+                                <option value="worst" selected style="color: #dc3545;">&#9679; Worst Period</option>
+                                <option value="median" style="color: #0d6efd;">&#9679; Median Period</option>
+                                <option value="best" style="color: #198754;">&#9679; Best Period</option>
                             </select>
                             <small class="text-muted ms-2" id="stress-timeline-label"></small>
                         </div>
@@ -833,6 +833,8 @@ let stressIncomeChart = null;
 let stressTimelines = {};
 
 document.getElementById('stress-timeline-select').addEventListener('change', function() {
+    const colors = { worst: '#dc3545', median: '#0d6efd', best: '#198754' };
+    this.style.color = colors[this.value] || '';
     const selected = stressTimelines[this.value];
     if (selected) renderStressTimeline(selected);
 });
@@ -914,7 +916,9 @@ function renderStressResults(data) {
         median: st.median_window,
         best: st.best_window,
     };
-    document.getElementById('stress-timeline-select').value = 'worst';
+    const tlSelect = document.getElementById('stress-timeline-select');
+    tlSelect.value = 'worst';
+    tlSelect.style.color = '#dc3545';
     renderStressTimeline(stressTimelines.worst);
 }
 
