@@ -3,6 +3,7 @@ import json
 import time
 from backtest_engine import (
     load_historical_returns, run_backtest, extract_percentiles,
+    extract_stress_test,
     compute_pot_annual_return, build_schedules, load_asset_model
 )
 from retirement_engine import load_asset_model as load_am
@@ -126,7 +127,7 @@ def test_percentile_extraction():
     elapsed_bt = time.time() - start
 
     start = time.time()
-    pcts = extract_percentiles(result)
+    pcts = extract_stress_test(result)
     elapsed_pct = time.time() - start
 
     print(f"  Backtest: {elapsed_bt:.2f}s, Percentiles: {elapsed_pct:.3f}s")
@@ -154,13 +155,18 @@ def test_percentile_extraction():
               f"Income £{t['net_income']:,.0f}/{t['target_income']:,.0f} "
               f"({t['income_ratio']*100:.0f}%){sf}")
 
-    # Percentile fan chart data
+    # Percentile fan chart data (now includes P5)
+    assert "p5" in pcts["percentile_trajectories"], "P5 percentile missing"
     p50 = pcts["percentile_trajectories"]["p50"]
     print(f"  Median capital trajectory (every 5 years):")
     for pt in p50:
         if pt["age"] % 5 == 0 or pt["age"] == pcts["ages"][-1]:
             print(f"    Age {pt['age']}: £{pt['total_capital']:,.0f}  "
                   f"income=£{pt['net_income']:,.0f}")
+
+    # Worst-window trajectory for chart overlay
+    assert "trajectory" in pcts["worst_window"], "Worst-window trajectory missing"
+    assert len(pcts["worst_window"]["trajectory"]) == len(pcts["ages"])
 
     assert pcts["n_windows"] == 10
     print("  PASS")

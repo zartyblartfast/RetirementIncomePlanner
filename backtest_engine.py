@@ -321,7 +321,7 @@ def run_backtest(cfg, max_windows=None):
 #  Stress-test analysis: percentiles + income stability + timeline
 # ------------------------------------------------------------------ #
 def extract_stress_test(backtest_result, target_income=None,
-                        percentiles=(10, 25, 50, 75, 90)):
+                        percentiles=(5, 10, 25, 50, 75, 90)):
     """Extract stress-test metrics from backtest windows.
 
     Produces:
@@ -483,6 +483,7 @@ def extract_stress_test(backtest_result, target_income=None,
             "final_capital": round(worst_final, 2),
             "depletion_age": worst_depl,
             "timeline": worst_timeline,
+            "trajectory": [round(capital_by_age[age][worst_idx], 0) for age in ages],
         },
         "best_window": {
             "label": windows[best_idx]["window_label"],

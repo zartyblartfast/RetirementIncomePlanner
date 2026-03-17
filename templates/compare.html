@@ -894,59 +894,91 @@ function renderStressResults(data) {
 
 function renderStressFanChart(st) {
     const ages = st.ages;
+    const p5  = st.percentile_trajectories.p5;
     const p10 = st.percentile_trajectories.p10;
     const p25 = st.percentile_trajectories.p25;
     const p50 = st.percentile_trajectories.p50;
     const p75 = st.percentile_trajectories.p75;
     const p90 = st.percentile_trajectories.p90;
 
+    // Color-coded bands: green (top) → amber (middle) → red (bottom)
+    // Order matters for Chart.js fill references
     const datasets = [
+        // --- Upper bands (green tones) ---
         {
-            label: 'P90 (optimistic)',
+            label: 'P90 (top 10%)',
             data: p90.map(d => d.total_capital),
-            borderColor: '#19875422',
+            borderColor: '#15803d88',
             backgroundColor: 'transparent',
             borderWidth: 1,
             borderDash: [4, 4],
             pointRadius: 0,
             fill: false,
+            order: 6,
         },
         {
-            label: 'P75',
+            label: 'P75-P90',
             data: p75.map(d => d.total_capital),
-            borderColor: '#198754aa',
-            backgroundColor: '#19875418',
-            borderWidth: 1,
-            pointRadius: 0,
-            fill: '+1',
-        },
-        {
-            label: 'P50 (median)',
-            data: p50.map(d => d.total_capital),
-            borderColor: '#0d6efd',
-            backgroundColor: '#0d6efd33',
-            borderWidth: 3,
-            pointRadius: 0,
-            fill: false,
-        },
-        {
-            label: 'P25',
-            data: p25.map(d => d.total_capital),
-            borderColor: '#dc354588',
-            backgroundColor: '#dc354518',
+            borderColor: '#15803d66',
+            backgroundColor: '#15803d18',
             borderWidth: 1,
             pointRadius: 0,
             fill: '-1',
+            order: 5,
         },
         {
-            label: 'P10 (pessimistic)',
+            label: 'P50-P75',
+            data: p50.map(d => d.total_capital),
+            borderColor: '#0d6efd',
+            backgroundColor: '#65a30d18',
+            borderWidth: 2.5,
+            pointRadius: 0,
+            fill: '-1',
+            order: 4,
+        },
+        // --- Lower bands (amber → red tones) ---
+        {
+            label: 'P25-P50',
+            data: p25.map(d => d.total_capital),
+            borderColor: '#d9770688',
+            backgroundColor: '#d9770620',
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: '-1',
+            order: 3,
+        },
+        {
+            label: 'P10-P25',
             data: p10.map(d => d.total_capital),
-            borderColor: '#dc354522',
-            backgroundColor: 'transparent',
+            borderColor: '#dc354588',
+            backgroundColor: '#dc354520',
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: '-1',
+            order: 2,
+        },
+        {
+            label: 'P5-P10 (danger)',
+            data: p5.map(d => d.total_capital),
+            borderColor: '#991b1b88',
+            backgroundColor: '#991b1b30',
             borderWidth: 1,
             borderDash: [4, 4],
             pointRadius: 0,
+            fill: '-1',
+            order: 1,
+        },
+        // --- Worst window overlay ---
+        {
+            label: 'Worst: ' + st.worst_window.label,
+            data: st.worst_window.trajectory,
+            borderColor: '#dc2626',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            borderDash: [8, 4],
+            pointRadius: 0,
             fill: false,
+            order: 0,
         },
     ];
 
@@ -962,10 +994,24 @@ function renderStressFanChart(st) {
                     mode: 'index',
                     intersect: false,
                     callbacks: {
-                        label: ctx => ctx.dataset.label + ': \u00a3' + Math.round(ctx.parsed.y).toLocaleString()
+                        label: ctx => {
+                            if (ctx.parsed.y == null) return null;
+                            return ctx.dataset.label + ': \u00a3' + Math.round(ctx.parsed.y).toLocaleString();
+                        }
                     }
                 },
-                legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 12 } }
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        usePointStyle: true,
+                        boxWidth: 12,
+                        filter: item => {
+                            // Show only key legend items to avoid clutter
+                            const l = item.text;
+                            return l.includes('P50') || l.includes('P5-P10') || l.includes('Worst');
+                        }
+                    }
+                }
             },
             scales: {
                 x: { title: { display: true, text: 'Age' } },
