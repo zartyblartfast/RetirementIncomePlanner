@@ -406,20 +406,29 @@ def extract_stress_test(backtest_result, target_income=None,
 
     median_income_ratio = float(np.median(all_income_ratios)) if all_income_ratios else 1.0
 
-    # Worst single-year income drop (as % of that year's target)
+    # Worst / best single-year income (as % of that year's target)
     worst_income_ratio = min(all_income_ratios) if all_income_ratios else 1.0
+    best_income_ratio = max(all_income_ratios) if all_income_ratios else 1.0
 
     # Per-window: average income achieved as % of target
     window_avg_ratios = []
+    window_cumul_incomes = []
     for w in windows:
         ratios = []
+        cumul = 0
         for yr in w["result"]["years"]:
             tgt = yr.get("target_net", 0)
             inc = yr.get("net_income_achieved", 0)
+            cumul += inc
             if tgt > 0:
                 ratios.append(inc / tgt)
         if ratios:
             window_avg_ratios.append(sum(ratios) / len(ratios))
+        window_cumul_incomes.append(cumul)
+
+    median_cumul_income = float(np.median(window_cumul_incomes)) if window_cumul_incomes else 0
+    worst_cumul_income = min(window_cumul_incomes) if window_cumul_incomes else 0
+    best_cumul_income = max(window_cumul_incomes) if window_cumul_incomes else 0
 
     # ── Worst / best window identification ──
     worst_idx = min(range(len(windows)),
@@ -483,7 +492,13 @@ def extract_stress_test(backtest_result, target_income=None,
         "income_stability": {
             "median_income_ratio": round(median_income_ratio, 4),
             "worst_income_ratio": round(worst_income_ratio, 4),
+            "best_income_ratio": round(best_income_ratio, 4),
             "target_income_used": round(target_income, 2) if target_income else 0,
+        },
+        "cumulative_income": {
+            "median": round(median_cumul_income, 0),
+            "worst": round(worst_cumul_income, 0),
+            "best": round(best_cumul_income, 0),
         },
         "n_windows": len(windows),
         "worst_window": {

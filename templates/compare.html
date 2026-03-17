@@ -27,7 +27,7 @@
     </div>
     <div class="card-body">
         <div class="row g-3 align-items-end">
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label">Drawdown Strategy
                     <a href="#" id="sb-strategy-info" tabindex="0" class="text-muted ms-1" data-bs-toggle="popover" data-bs-trigger="focus" data-bs-html="true" data-bs-placement="bottom" title="Strategy Info" data-bs-content=""><i class="bi bi-info-circle"></i></a>
                 </label>
@@ -58,11 +58,12 @@
                 <label class="form-label">End Age</label>
                 <input type="number" class="form-control" id="sb-end-age" value="{{ current_config.personal.end_age }}" step="1" min="70" max="120">
             </div>
-            <div class="col-md-1">
-                <button type="button" class="btn btn-warning w-100" id="sb-run" title="Single projection with static growth"><i class="bi bi-lightning"></i> Project</button>
-            </div>
-            <div class="col-md-1">
-                <button type="button" class="btn btn-outline-danger w-100" id="sb-stress" title="Test against 106 historical periods (1900-2005)"><i class="bi bi-shield-exclamation"></i> Stress</button>
+            <div class="col-md-3">
+                <div class="btn-group w-100" role="group">
+                    <button type="button" class="btn btn-outline-warning" id="sb-run" title="Single projection with static growth"><i class="bi bi-lightning"></i> Forecast</button>
+                    <button type="button" class="btn btn-outline-danger" id="sb-stress" title="Test against 106 historical periods (1900-2005)"><i class="bi bi-shield-exclamation"></i> Stress</button>
+                    <button type="button" class="btn btn-outline-info" id="sb-shootout" title="Compare all 6 strategies under historical stress"><i class="bi bi-trophy"></i> Shootout</button>
+                </div>
             </div>
         </div>
         <!-- Strategy-specific parameter fields -->
@@ -183,6 +184,65 @@
                             <p class="mb-0"><strong>Method:</strong> Each pot&rsquo;s return is weighted by its asset allocation. The projection is run for every viable historical period of the required length. Results show how the scenario would have performed across 100+ years of real market history.</p>
                         </div>
                     </details>
+                </div>
+            </div>
+        </div>
+        <!-- Strategy Shootout Results Panel -->
+        <div id="shootout-panel" class="mt-3" style="display:none;">
+            <div class="card border-info">
+                <div class="card-header bg-info bg-opacity-10 d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-trophy"></i> <strong>Strategy Shootout</strong>
+                        <a href="#" tabindex="0" class="text-muted ms-1" data-bs-toggle="popover" data-bs-trigger="focus" data-bs-html="true" data-bs-placement="right" title="What drives these results?" data-bs-content="
+                            <strong>Inputs used:</strong><br>
+                            &bull; Your current pot balances &amp; asset allocations (from Settings)<br>
+                            &bull; Drawdown order, CPI, retirement age, end age (from sandbox)<br>
+                            &bull; Income-based strategies (Fixed Target, Vanguard, GK) use your current target income<br>
+                            &bull; Each strategy uses its <em>default</em> parameters (e.g. 4% for Fixed %, 5%/2.5% caps for Vanguard)<br><br>
+                            <strong>Why do worst periods differ?</strong><br>
+                            Each strategy is vulnerable to different market conditions. The &lsquo;Worst Period&rsquo; column shows the historical period where <em>that particular strategy</em> performed worst &mdash; not a single shared bad period. This answers: &lsquo;How bad can it get for this strategy?&rsquo;
+                        "><i class="bi bi-info-circle"></i></a>
+                    </span>
+                    <small class="text-muted" id="shootout-meta"></small>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-2">
+                        <label class="form-label mb-0 me-2 small fw-bold">Rank by goal:</label>
+                        <select class="form-select form-select-sm" id="shootout-sort" style="width: auto;">
+                            <option value="none">— No sort —</option>
+                            <option value="reliable_income">Reliable Income</option>
+                            <option value="preserve_capital">Preserve Capital</option>
+                            <option value="maximise_spending">Maximise Spending</option>
+                        </select>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered table-hover mb-0" id="shootout-table" style="white-space: nowrap;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th rowspan="2" class="align-middle">Strategy</th>
+                                    <th rowspan="2" class="align-middle text-center" title="% of historical periods where capital lasted to end age">Survival</th>
+                                    <th colspan="3" class="text-center table-info" style="border-bottom: 2px solid #0dcaf0;">Income (% of target)</th>
+                                    <th colspan="3" class="text-center" style="border-bottom: 2px solid #6f42c1; background-color: #f3f0ff;">Cumulative Income</th>
+                                    <th colspan="3" class="text-center table-warning" style="border-bottom: 2px solid #ffc107;">Capital at End Age</th>
+                                    <th rowspan="2" class="align-middle" title="The historical period that performed worst">Worst Period</th>
+                                </tr>
+                                <tr>
+                                    <th class="text-center table-info small" title="Best single-year income as % of target">Best</th>
+                                    <th class="text-center table-info small" title="Median income achieved as % of target across all periods">Median</th>
+                                    <th class="text-center table-info small" title="Worst single-year income as % of target">Worst</th>
+                                    <th class="text-end small" style="background-color: #f3f0ff;" title="Total income drawn over retirement in the best period">Best</th>
+                                    <th class="text-end small" style="background-color: #f3f0ff;" title="Total income drawn over retirement in the median period">Median</th>
+                                    <th class="text-end small" style="background-color: #f3f0ff;" title="Total income drawn over retirement in the worst period">Worst</th>
+                                    <th class="text-end table-warning small" title="Capital remaining at end age in the best period">Best</th>
+                                    <th class="text-end table-warning small" title="Capital remaining at end age in the median period">Median</th>
+                                    <th class="text-end table-warning small" title="Capital remaining at end age in the worst period">Worst</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div class="mt-2 small text-muted">
+                        <i class="bi bi-info-circle"></i> All strategies tested with your current pots, drawdown order, and end age. Income-based strategies use your current target income (&pound;<span id="shootout-target"></span>/yr).
+                    </div>
                 </div>
             </div>
         </div>
@@ -1217,6 +1277,102 @@ function renderStressTimeline(win) {
 }
 
 document.getElementById('sb-stress').addEventListener('click', runStressTest);
+
+// --- Strategy Shootout ---
+function runShootout() {
+    const payload = getSandboxPayload();
+    const panel = document.getElementById('shootout-panel');
+    const summaryEl = document.getElementById('sb-summary');
+    const btn = document.getElementById('sb-shootout');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    summaryEl.innerHTML = '<small class="text-muted"><i class="bi bi-hourglass-split"></i> Running all 6 strategies across 100+ historical periods (~15s)...</small>';
+
+    fetch('{{ url_for("whatif_shootout") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-trophy"></i> Shootout';
+        summaryEl.innerHTML = '';
+        renderShootoutResults(data);
+        panel.style.display = '';
+        // Initialize info popover in the now-visible panel
+        panel.querySelectorAll('[data-bs-toggle="popover"]').forEach(el => {
+            if (!bootstrap.Popover.getInstance(el)) new bootstrap.Popover(el);
+        });
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-trophy"></i> Shootout';
+        summaryEl.innerHTML = '<small class="text-danger">Shootout error: ' + err.message + '</small>';
+    });
+}
+
+let _shootoutData = null;
+
+function renderShootoutResults(data) {
+    _shootoutData = data;
+    const meta = data.metadata;
+    document.getElementById('shootout-meta').textContent =
+        meta.n_windows + ' periods (' + meta.start_range + '-' + meta.end_range + ') \u2014 End age ' + meta.end_age;
+    document.getElementById('shootout-target').textContent = Math.round(meta.target_income).toLocaleString();
+    document.getElementById('shootout-sort').value = 'none';
+    renderShootoutTable(data.strategies, null);
+}
+
+function renderShootoutTable(strategies, goalKey) {
+    // Sort strategies if a goal is selected
+    let sorted = [...strategies];
+    if (goalKey === 'reliable_income') {
+        sorted.sort((a, b) => (b.worst_income_pct - a.worst_income_pct)
+            || (b.median_income_pct - a.median_income_pct)
+            || (b.sustainability_pct - a.sustainability_pct));
+    } else if (goalKey === 'preserve_capital') {
+        sorted.sort((a, b) => (b.median_final_capital - a.median_final_capital)
+            || (b.sustainability_pct - a.sustainability_pct));
+    } else if (goalKey === 'maximise_spending') {
+        sorted.sort((a, b) => (b.median_cumul_income - a.median_cumul_income));
+    }
+
+    const tbody = document.querySelector('#shootout-table tbody');
+    tbody.innerHTML = '';
+
+    sorted.forEach((s, idx) => {
+        const survClass = s.sustainability_pct >= 80 ? 'text-success fw-bold' : s.sustainability_pct >= 50 ? 'text-warning fw-bold' : 'text-danger fw-bold';
+        const bestIncClass = s.best_income_pct >= 100 ? 'text-success' : '';
+        const medIncClass = s.median_income_pct >= 95 ? 'text-success' : s.median_income_pct >= 80 ? 'text-warning' : 'text-danger';
+        const worstIncClass = s.worst_income_pct >= 80 ? '' : s.worst_income_pct >= 50 ? 'text-warning' : 'text-danger';
+        const deplNote = s.worst_depletion_age ? ' <small class="text-muted">(depl. ' + s.worst_depletion_age + ')</small>' : '';
+        const isWinner = goalKey && idx === 0;
+        const rankBadge = goalKey ? '<span class="badge bg-' + (idx === 0 ? 'success' : idx === 1 ? 'primary' : 'secondary') + ' me-1">#' + (idx + 1) + '</span>' : '';
+        const rowClass = isWinner ? 'table-success' : '';
+
+        tbody.innerHTML += '<tr class="' + rowClass + '">' +
+            '<td>' + rankBadge + '<strong>' + s.strategy_name + '</strong></td>' +
+            '<td class="text-center ' + survClass + '">' + s.sustainability_pct + '%</td>' +
+            '<td class="text-center ' + bestIncClass + '">' + s.best_income_pct + '%</td>' +
+            '<td class="text-center ' + medIncClass + '">' + s.median_income_pct + '%</td>' +
+            '<td class="text-center ' + worstIncClass + '">' + s.worst_income_pct + '%</td>' +
+            '<td class="text-end">\u00a3' + Math.round(s.best_cumul_income).toLocaleString() + '</td>' +
+            '<td class="text-end">\u00a3' + Math.round(s.median_cumul_income).toLocaleString() + '</td>' +
+            '<td class="text-end">\u00a3' + Math.round(s.worst_cumul_income).toLocaleString() + '</td>' +
+            '<td class="text-end">\u00a3' + Math.round(s.best_final_capital).toLocaleString() + '</td>' +
+            '<td class="text-end">\u00a3' + Math.round(s.median_final_capital).toLocaleString() + '</td>' +
+            '<td class="text-end">\u00a3' + Math.round(s.worst_final_capital).toLocaleString() + deplNote + '</td>' +
+            '<td class="small">' + s.worst_period + '</td>' +
+            '</tr>';
+    });
+}
+
+document.getElementById('sb-shootout').addEventListener('click', runShootout);
+document.getElementById('shootout-sort').addEventListener('change', function() {
+    if (_shootoutData) renderShootoutTable(_shootoutData.strategies, this.value === 'none' ? null : this.value);
+});
 
 // Annualised toggle: redraw chart from stored data when toggled
 document.getElementById('incomeAnnualToggle').addEventListener('change', () => {

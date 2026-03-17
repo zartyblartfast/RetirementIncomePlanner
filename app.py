@@ -827,6 +827,98 @@ def whatif_backtest():
     })
 
 # ------------------------------------------------------------------ #
+#  What If Sandbox — Strategy Shootout (all strategies under stress)
+# ------------------------------------------------------------------ #
+@app.route("/whatif_shootout", methods=["POST"])
+@login_required
+def whatif_shootout():
+    """Run all 6 drawdown strategies through historical stress test.
+
+    Uses the current config (with sandbox overrides for end_age, cpi_rate,
+    withdrawal_priority) but swaps the strategy for each run.
+    Returns comparative stress-test metrics for all strategies.
+    """
+    import copy as _copy
+    from backtest_engine import run_backtest, extract_stress_test
+
+    data = request.get_json(silent=True) or {}
+    base_cfg = _copy.deepcopy(get_config())
+
+    # Apply sandbox overrides (non-strategy ones only)
+    if "withdrawal_priority" in data:
+        base_cfg["withdrawal_priority"] = data["withdrawal_priority"]
+    if "cpi_rate" in data:
+        base_cfg["target_income"]["cpi_rate"] = float(data["cpi_rate"])
+    if "retirement_age" in data:
+        base_cfg["personal"]["retirement_age"] = int(data["retirement_age"])
+    if "end_age" in data:
+        base_cfg["personal"]["end_age"] = int(data["end_age"])
+
+    target_income = base_cfg["target_income"].get("net_annual", 30000)
+    end_age = base_cfg["personal"]["end_age"]
+
+    results = []
+    for sid in STRATEGY_IDS:
+        cfg = _copy.deepcopy(base_cfg)
+        cfg["drawdown_strategy"] = sid
+
+        # Build default params from registry
+        entry = STRATEGIES[sid]
+        params = {p["key"]: p["default"] for p in entry["params"]}
+
+        # Seed income-based params from current config target
+        if sid == "fixed_target":
+            params["net_annual"] = target_income
+        elif sid in ("vanguard_dynamic", "guyton_klinger"):
+            params["initial_target"] = target_income
+        elif sid in ("arva", "arva_guardrails"):
+            params["target_end_age"] = end_age
+
+        cfg["drawdown_strategy_params"] = params
+        normalize_config(cfg)
+
+        # Run backtest
+        bt_result = run_backtest(cfg)
+        stress = extract_stress_test(bt_result, target_income=target_income)
+
+        sus = stress["sustainability"]
+        inc = stress["income_stability"]
+        cumul = stress["cumulative_income"]
+        worst = stress["worst_window"]
+        median = stress["median_window"]
+        best = stress["best_window"]
+
+        results.append({
+            "strategy_id": sid,
+            "strategy_name": entry["display_name"],
+            "sustainability_pct": round(sus["rate"] * 100, 1),
+            "sustainable_count": sus["count"],
+            "total_windows": sus["total"],
+            "best_income_pct": round(inc["best_income_ratio"] * 100, 1),
+            "median_income_pct": round(inc["median_income_ratio"] * 100, 1),
+            "worst_income_pct": round(inc["worst_income_ratio"] * 100, 1),
+            "median_cumul_income": round(cumul["median"], 0),
+            "worst_cumul_income": round(cumul["worst"], 0),
+            "best_cumul_income": round(cumul["best"], 0),
+            "best_final_capital": round(best["final_capital"], 0),
+            "median_final_capital": round(median["final_capital"], 0),
+            "worst_final_capital": round(worst["final_capital"], 0),
+            "worst_period": worst["label"],
+            "worst_depletion_age": worst.get("depletion_age"),
+        })
+
+    return jsonify({
+        "strategies": results,
+        "metadata": {
+            "n_windows": bt_result["metadata"]["n_windows"],
+            "start_range": bt_result["metadata"]["start_range"],
+            "end_range": bt_result["metadata"]["end_range"],
+            "end_age": end_age,
+            "target_income": target_income,
+        },
+    })
+
+# ------------------------------------------------------------------ #
 #  Scenario monthly income data (for Income Breakdown chart)
 # ------------------------------------------------------------------ #
 @app.route("/scenario_monthly/<name>")
