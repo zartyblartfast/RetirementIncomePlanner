@@ -386,6 +386,20 @@ def extract_stress_test(backtest_result, target_income=None,
     )
     sustainability_rate = sustainable_count / len(windows) if windows else 0
 
+    # ── Depletion age distribution (for windows that depleted) ──
+    depletion_ages = {}
+    for w in windows:
+        depl_age = None
+        for yr in w["result"]["years"]:
+            if yr["total_capital"] <= DEPLETION_EPSILON:
+                depl_age = yr["age"]
+                break
+        if depl_age is not None:
+            depletion_ages[depl_age] = depletion_ages.get(depl_age, 0) + 1
+    # Sort by age ascending
+    depletion_age_dist = [{"age": a, "count": c}
+                          for a, c in sorted(depletion_ages.items())]
+
     # ── Income stability metrics ──
     # Use target_income from first year of first window if not provided
     if target_income is None:
@@ -488,6 +502,7 @@ def extract_stress_test(backtest_result, target_income=None,
             "rate": round(sustainability_rate, 4),
             "count": sustainable_count,
             "total": len(windows),
+            "depletion_age_dist": depletion_age_dist,
         },
         "income_stability": {
             "median_income_ratio": round(median_income_ratio, 4),

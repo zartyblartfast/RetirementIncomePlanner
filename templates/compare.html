@@ -385,7 +385,9 @@
                         </p>
                         <p class="mb-0">Capital at {{ sc.result.summary.end_age }}: &pound;{{ "{:,.0f}".format(sc.result.summary.remaining_capital) }}</p>
                     </div>
-                    <div class="card-footer text-end">
+                    <div class="card-footer d-flex justify-content-between align-items-center">
+                        <small class="text-muted"><i class="bi bi-box-arrow-in-up"></i> Click to load settings</small>
+                        <span>
                         {% if sc.is_unsaved %}
                         <form method="post" class="d-inline">
                             <input type="hidden" name="scenario_name" value="Current">
@@ -394,6 +396,7 @@
                         {% else %}
                         <a href="{{ url_for('delete_scenario', name=sc.name) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete {{ sc.name }}?');"><i class="bi bi-trash"></i> Delete</a>
                         {% endif %}
+                        </span>
                     </div>
                 </div>
             </div>
@@ -559,6 +562,57 @@ function highlightScenario(idx) {
     }
 }
 
+function restoreSandboxFromScenario(sc) {
+    const cfg = sc.config || {};
+    const sid = cfg.drawdown_strategy || 'fixed_target';
+    const params = cfg.drawdown_strategy_params || {};
+
+    // Strategy dropdown
+    const stratEl = document.getElementById('sb-strategy');
+    stratEl.value = sid;
+    sbShowStrategyParams();
+
+    // Strategy-specific params
+    const panel = document.getElementById('sb-params-' + sid);
+    if (panel) {
+        panel.querySelectorAll('.sb-sp').forEach(inp => {
+            const key = inp.dataset.key;
+            if (key in params) inp.value = params[key];
+        });
+    }
+
+    // Drawdown order
+    const orderEl = document.getElementById('sb-order');
+    const orderVal = (cfg.withdrawal_priority || []).join(',');
+    for (let opt of orderEl.options) {
+        if (opt.value === orderVal) { orderEl.value = orderVal; break; }
+    }
+
+    // CPI, retirement age, end age
+    if (cfg.target_income) {
+        document.getElementById('sb-cpi').value = cfg.target_income.cpi_rate || 0;
+    }
+    if (cfg.personal) {
+        document.getElementById('sb-retire').value = cfg.personal.retirement_age || 68;
+        document.getElementById('sb-end-age').value = cfg.personal.end_age || 90;
+    }
+
+    // Brief flash on the sandbox card to confirm load
+    const sbCard = document.querySelector('.border-warning');
+    if (sbCard) {
+        sbCard.style.transition = 'box-shadow 0.3s';
+        sbCard.style.boxShadow = '0 0 12px rgba(255, 193, 7, 0.6)';
+        setTimeout(() => { sbCard.style.boxShadow = ''; }, 1500);
+    }
+    // Scroll sandbox into view
+    sbCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // Show confirmation in summary area
+    const summaryEl = document.getElementById('sb-summary');
+    summaryEl.innerHTML = '<small class="text-success"><i class="bi bi-check-circle"></i> Loaded settings from <strong>' + sc.name + '</strong></small>';
+    setTimeout(() => { if (summaryEl.textContent.includes(sc.name)) summaryEl.innerHTML = ''; }, 3000);
+}
+
 document.querySelectorAll('.sc-card').forEach(card => {
     card.addEventListener('click', e => {
         if (e.target.closest('a, button, form')) return;
@@ -570,6 +624,8 @@ document.querySelectorAll('.sc-card').forEach(card => {
             const stId = (sc.config || {}).drawdown_strategy || 'fixed_target';
             const stLabel = (STRATEGY_NAMES[stId] || {}).display_name || stId;
             fetchAndRenderIncome(sc.name, sc.name, stLabel, stId);
+            // Restore sandbox settings from this scenario
+            restoreSandboxFromScenario(sc);
         }
     });
 });
@@ -962,8 +1018,18 @@ function renderStressResults(data) {
     const susPct = Math.round(sus.rate * 100);
     susEl.textContent = susPct + '%';
     susEl.className = 'fs-3 fw-bold ' + (susPct >= 80 ? 'text-success' : susPct >= 50 ? 'text-warning' : 'text-danger');
-    document.getElementById('stress-sustain-detail').textContent =
-        sus.count + ' of ' + sus.total + ' periods lasted to age ' + meta.end_age;
+    const depleted = sus.total - sus.count;
+    let deplDetail = sus.count + ' of ' + sus.total + ' periods lasted to age ' + meta.end_age;
+    if (depleted > 0 && sus.depletion_age_dist && sus.depletion_age_dist.length > 0) {
+        const dist = sus.depletion_age_dist;
+        if (dist.length === 1 && dist[0].age === meta.end_age) {
+            deplDetail += '<br>' + depleted + ' depleted at end age ' + dist[0].age + ' (final year only)';
+        } else {
+            const parts = dist.map(d => d.count + ' at age ' + d.age);
+            deplDetail += '<br>Depleted: ' + parts.join(', ');
+        }
+    }
+    document.getElementById('stress-sustain-detail').innerHTML = deplDetail;
 
     // Income stability card
     const incEl = document.getElementById('stress-income-ratio');
