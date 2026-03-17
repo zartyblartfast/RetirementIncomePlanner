@@ -218,8 +218,13 @@ def _compute_arva(params, state, portfolio_value, cpi_rate, current_age=None):
     if state is None:
         state = {}
 
-    remaining_years = max(1, target_end_age - (current_age or target_end_age - 1))
-    withdrawal = max(0, _pmt(portfolio_value, r, remaining_years))
+    # +1 so ARVA plans income THROUGH end_age (inclusive)
+    remaining_years = max(1, target_end_age - (current_age or target_end_age - 1) + 1)
+    # Use monthly PMT to match the engine's monthly execution model
+    remaining_months = remaining_years * 12
+    monthly_r = (1 + r) ** (1.0 / 12) - 1
+    monthly_pmt = _pmt(portfolio_value, monthly_r, remaining_months)
+    withdrawal = max(0, monthly_pmt * 12)
 
     state = {"prev_withdrawal": withdrawal}
     return {"mode": "pot_net", "annual_amount": withdrawal}, state
@@ -232,8 +237,13 @@ def _compute_arva_guardrails(params, state, portfolio_value, cpi_rate, current_a
     max_up = params.get("max_annual_increase_pct", 10.0) / 100.0
     max_down = params.get("max_annual_decrease_pct", 10.0) / 100.0
 
-    remaining_years = max(1, target_end_age - (current_age or target_end_age - 1))
-    raw_withdrawal = max(0, _pmt(portfolio_value, r, remaining_years))
+    # +1 so ARVA plans income THROUGH end_age (inclusive)
+    remaining_years = max(1, target_end_age - (current_age or target_end_age - 1) + 1)
+    # Use monthly PMT to match the engine's monthly execution model
+    remaining_months = remaining_years * 12
+    monthly_r = (1 + r) ** (1.0 / 12) - 1
+    monthly_pmt = _pmt(portfolio_value, monthly_r, remaining_months)
+    raw_withdrawal = max(0, monthly_pmt * 12)
 
     if state is None:
         # First year: no prior withdrawal to clamp against

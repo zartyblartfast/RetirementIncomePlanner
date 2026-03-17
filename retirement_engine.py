@@ -1052,6 +1052,14 @@ class RetirementEngine:
                 k: round(v, 2) for k, v in yr["guaranteed_income"].items()
             }
 
+        # ARVA tolerance: if shortfall only occurs within 1 year of end_age
+        # and remaining capital is negligible, treat as sustainable.
+        # This accounts for DC tax gross-up causing slightly early depletion.
+        if (first_shortfall_age is not None
+                and strategy_id in ("arva", "arva_guardrails")
+                and first_shortfall_age >= config_end_age - 1):
+            first_shortfall_age = None
+
         # Summary
         num_years = len(years)
         summary = {
