@@ -46,8 +46,8 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-2">
-                <label class="form-label">CPI Rate</label>
+            <div class="col-md-1">
+                <label class="form-label">CPI</label>
                 <input type="number" class="form-control" id="sb-cpi" value="{{ current_config.target_income.cpi_rate }}" step="0.005" min="0" max="0.2">
             </div>
             <div class="col-md-1">
@@ -70,12 +70,16 @@
         <div class="sb-strategy-params mt-2" id="sb-params-{{ sid }}" style="display:none;">
             <div class="row g-3 align-items-end">
                 {% for p in strategies[sid].params %}
+                {% if not p.get('sandbox_hidden', False) %}
                 <div class="col-md-2">
-                    <label class="form-label small">{{ p.label }}</label>
+                    <label class="form-label small">{{ p.label }}{% if p.get('tooltip') %}
+                        <a href="#" tabindex="0" class="text-muted ms-1 sb-param-tip" data-bs-toggle="popover" data-bs-trigger="focus" data-bs-html="true" data-bs-placement="top" data-bs-content="{{ p.tooltip }}"><i class="bi bi-info-circle"></i></a>
+                    {% endif %}</label>
                     <input type="number" class="form-control form-control-sm sb-sp" data-key="{{ p.key }}"
                            value="{{ current_config.drawdown_strategy_params.get(p.key, p.default) if current_config.drawdown_strategy == sid else p.default }}"
                            step="{{ p.step }}">
                 </div>
+                {% endif %}
                 {% endfor %}
             </div>
         </div>
@@ -713,7 +717,15 @@ function sbShowStrategyParams() {
     const sel = document.getElementById('sb-strategy').value;
     document.querySelectorAll('.sb-strategy-params').forEach(el => { el.style.display = 'none'; });
     const panel = document.getElementById('sb-params-' + sel);
-    if (panel) panel.style.display = '';
+    if (panel) {
+        panel.style.display = '';
+        // Initialize any param tooltip popovers in the visible panel
+        panel.querySelectorAll('.sb-param-tip').forEach(el => {
+            if (!bootstrap.Popover.getInstance(el)) {
+                new bootstrap.Popover(el);
+            }
+        });
+    }
     updateStrategyInfo();
 }
 sbShowStrategyParams();
@@ -731,6 +743,10 @@ function getSandboxPayload() {
         panel.querySelectorAll('.sb-sp').forEach(inp => {
             params[inp.dataset.key] = parseFloat(inp.value);
         });
+        // For ARVA strategies, sync target_end_age from sandbox End Age
+        if (strategy === 'arva' || strategy === 'arva_guardrails') {
+            params.target_end_age = endAge;
+        }
     }
     return {
         drawdown_strategy: strategy,
