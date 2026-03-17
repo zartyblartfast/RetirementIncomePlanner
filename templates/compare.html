@@ -464,16 +464,29 @@
                 <div id="stress-compare-insights" class="mt-2"></div>
             </div>
         </div>
-        <!-- Year-by-Year Delta Table -->
+        <!-- Year-by-Year Delta Tables -->
         <div class="mt-3">
-            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#compare-yearly" aria-expanded="false">
-                <i class="bi bi-calendar3"></i> Show Year-by-Year Detail
-            </button>
+            <div class="btn-group" role="group">
+                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#compare-yearly" aria-expanded="false">
+                    <i class="bi bi-calendar3"></i> Year-by-Year (Static)
+                </button>
+                <button class="btn btn-sm btn-outline-danger" type="button" id="btn-yearly-stress" data-bs-toggle="collapse" data-bs-target="#compare-yearly-stress" aria-expanded="false" disabled title="Run stress comparison first">
+                    <i class="bi bi-lightning"></i> Year-by-Year (Historical Median)
+                </button>
+            </div>
             <div class="collapse mt-2" id="compare-yearly">
                 <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
                     <table class="table table-sm table-bordered table-hover mb-0" id="compare-yearly-table" style="white-space: nowrap;">
                         <thead class="table-light sticky-top" id="compare-yearly-thead"></thead>
                         <tbody id="compare-yearly-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="collapse mt-2" id="compare-yearly-stress">
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-sm table-bordered table-hover mb-0" id="stress-yearly-table" style="white-space: nowrap;">
+                        <thead class="table-light sticky-top" id="stress-yearly-thead"></thead>
+                        <tbody id="stress-yearly-tbody"></tbody>
                     </table>
                 </div>
             </div>
@@ -1051,7 +1064,75 @@ function renderStressComparison(selectedScenarios, stressResults) {
         ? '<div class="alert alert-light border">' + sInsights.join('<br>') + '</div>'
         : '';
 
+    // --- Stress Year-by-Year (P50 median) ---
+    renderStressYearly(selectedScenarios, stressResults);
+
     document.getElementById('stress-compare-results').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function renderStressYearly(selectedScenarios, stressResults) {
+    const ythead = document.getElementById('stress-yearly-thead');
+    const ytbody = document.getElementById('stress-yearly-tbody');
+    const btn = document.getElementById('btn-yearly-stress');
+
+    // Get valid results with P50 data
+    const valid = stressResults.filter(sr => sr.data && sr.data.stress_test.percentile_trajectories && sr.data.stress_test.percentile_trajectories.p50);
+    if (!valid.length) {
+        btn.disabled = true;
+        btn.title = 'No stress data available';
+        return;
+    }
+
+    // Enable the button
+    btn.disabled = false;
+    btn.title = '';
+
+    // Build header: Age | [Scenario: Income / Capital] ...
+    // Also show P10 (worst) and P90 (best) bracketed
+    ythead.innerHTML = '<tr><th>Age</th>' +
+        valid.map(sr => '<th class="text-center" colspan="3">' + sr.name + '</th>').join('') +
+        '</tr>' +
+        '<tr><th></th>' +
+        valid.map(() => '<th class="text-end small text-danger">Worst Income</th><th class="text-end small">Median Income</th><th class="text-end small">Median Capital</th>').join('') +
+        '</tr>';
+
+    // Collect all ages from P50 trajectories
+    const allAges = new Set();
+    valid.forEach(sr => {
+        sr.data.stress_test.percentile_trajectories.p50.forEach(pt => allAges.add(pt.age));
+    });
+    const sortedAges = [...allAges].sort((a, b) => a - b);
+
+    // Build lookup: scenario name → age → { p10, p50 }
+    const lookup = {};
+    valid.forEach(sr => {
+        lookup[sr.name] = {};
+        const p50 = sr.data.stress_test.percentile_trajectories.p50 || [];
+        const p10 = sr.data.stress_test.percentile_trajectories.p10 || [];
+        const p10Map = {};
+        p10.forEach(pt => { p10Map[pt.age] = pt; });
+        p50.forEach(pt => {
+            lookup[sr.name][pt.age] = {
+                income50: pt.net_income,
+                capital50: pt.total_capital,
+                income10: p10Map[pt.age] ? p10Map[pt.age].net_income : null,
+            };
+        });
+    });
+
+    ytbody.innerHTML = sortedAges.map(age => {
+        return '<tr><td>' + age + '</td>' +
+            valid.map(sr => {
+                const d = lookup[sr.name][age];
+                if (!d) return '<td class="text-muted">\u2014</td><td class="text-muted">\u2014</td><td class="text-muted">\u2014</td>';
+                const inc10 = d.income10 !== null ? '\u00a3' + Math.round(d.income10).toLocaleString() : '\u2014';
+                const inc10cls = d.income10 !== null && d.income50 > 0 && d.income10 / d.income50 < 0.8 ? 'text-danger' : 'text-muted';
+                return '<td class="text-end small ' + inc10cls + '">' + inc10 + '</td>' +
+                       '<td class="text-end">\u00a3' + Math.round(d.income50).toLocaleString() + '</td>' +
+                       '<td class="text-end">\u00a3' + Math.round(d.capital50).toLocaleString() + '</td>';
+            }).join('') +
+            '</tr>';
+    }).join('');
 }
 
 // --- Income Breakdown Stacked Area Chart ---
