@@ -136,6 +136,10 @@
                     <div class="mb-3">
                         <canvas id="stressCapitalChart" height="90"></canvas>
                     </div>
+                    <!-- Fan Chart: Income Trajectory -->
+                    <div class="mb-3">
+                        <canvas id="stressIncomeChart" height="90"></canvas>
+                    </div>
                     <!-- Worst-Period Timeline -->
                     <div class="mb-2">
                         <h6 class="mb-2"><i class="bi bi-clock-history"></i> Worst-Period Timeline <small class="text-muted" id="stress-timeline-label"></small></h6>
@@ -817,6 +821,7 @@ document.getElementById('sb-run').addEventListener('click', runSandbox);
 
 // --- Historical Stress Test ---
 let stressCapitalChart = null;
+let stressIncomeChart = null;
 
 function runStressTest() {
     const payload = getSandboxPayload();
@@ -885,8 +890,9 @@ function renderStressResults(data) {
     document.getElementById('stress-worst-detail').innerHTML =
         deplText + '<br>Best: ' + best.label + ' (\u00a3' + Math.round(best.final_capital).toLocaleString() + ')';
 
-    // Fan chart
+    // Fan charts
     renderStressFanChart(st);
+    renderStressIncomeFanChart(st, inc.target_income_used);
 
     // Timeline table
     renderStressTimeline(worst);
@@ -968,18 +974,6 @@ function renderStressFanChart(st) {
             fill: '-1',
             order: 1,
         },
-        // --- Worst window overlay ---
-        {
-            label: 'Worst: ' + st.worst_window.label,
-            data: st.worst_window.trajectory,
-            borderColor: '#dc2626',
-            backgroundColor: 'transparent',
-            borderWidth: 2,
-            borderDash: [8, 4],
-            pointRadius: 0,
-            fill: false,
-            order: 0,
-        },
     ];
 
     if (stressCapitalChart) stressCapitalChart.destroy();
@@ -1008,7 +1002,7 @@ function renderStressFanChart(st) {
                         filter: item => {
                             // Show only key legend items to avoid clutter
                             const l = item.text;
-                            return l.includes('P50') || l.includes('P5-P10') || l.includes('Worst');
+                            return l.includes('P50') || l.includes('P5-P10') || l.includes('P90');
                         }
                     }
                 }
@@ -1017,6 +1011,139 @@ function renderStressFanChart(st) {
                 x: { title: { display: true, text: 'Age' } },
                 y: {
                     title: { display: true, text: 'Total Capital (\u00a3)' },
+                    ticks: { callback: v => '\u00a3' + v.toLocaleString() }
+                }
+            },
+            interaction: { mode: 'index', intersect: false }
+        }
+    });
+}
+
+function renderStressIncomeFanChart(st, targetIncome) {
+    const ages = st.ages;
+    const p5  = st.percentile_trajectories.p5;
+    const p10 = st.percentile_trajectories.p10;
+    const p25 = st.percentile_trajectories.p25;
+    const p50 = st.percentile_trajectories.p50;
+    const p75 = st.percentile_trajectories.p75;
+    const p90 = st.percentile_trajectories.p90;
+
+    const datasets = [
+        // --- Upper bands (green tones) ---
+        {
+            label: 'P90 (top 10%)',
+            data: p90.map(d => d.net_income),
+            borderColor: '#15803d88',
+            backgroundColor: 'transparent',
+            borderWidth: 1,
+            borderDash: [4, 4],
+            pointRadius: 0,
+            fill: false,
+            order: 7,
+        },
+        {
+            label: 'P75-P90',
+            data: p75.map(d => d.net_income),
+            borderColor: '#15803d66',
+            backgroundColor: '#15803d18',
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: '-1',
+            order: 6,
+        },
+        {
+            label: 'P50-P75',
+            data: p50.map(d => d.net_income),
+            borderColor: '#0d6efd',
+            backgroundColor: '#65a30d18',
+            borderWidth: 2.5,
+            pointRadius: 0,
+            fill: '-1',
+            order: 5,
+        },
+        // --- Lower bands (amber → red tones) ---
+        {
+            label: 'P25-P50',
+            data: p25.map(d => d.net_income),
+            borderColor: '#d9770688',
+            backgroundColor: '#d9770620',
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: '-1',
+            order: 4,
+        },
+        {
+            label: 'P10-P25',
+            data: p10.map(d => d.net_income),
+            borderColor: '#dc354588',
+            backgroundColor: '#dc354520',
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: '-1',
+            order: 3,
+        },
+        {
+            label: 'P5-P10 (danger)',
+            data: p5.map(d => d.net_income),
+            borderColor: '#991b1b88',
+            backgroundColor: '#991b1b30',
+            borderWidth: 1,
+            borderDash: [4, 4],
+            pointRadius: 0,
+            fill: '-1',
+            order: 2,
+        },
+    ];
+
+    // Target income reference line
+    if (targetIncome && targetIncome > 0) {
+        datasets.push({
+            label: 'Target: \u00a3' + Math.round(targetIncome).toLocaleString(),
+            data: ages.map(() => targetIncome),
+            borderColor: '#6b7280',
+            backgroundColor: 'transparent',
+            borderWidth: 1.5,
+            borderDash: [6, 3],
+            pointRadius: 0,
+            fill: false,
+            order: 1,
+        });
+    }
+
+    if (stressIncomeChart) stressIncomeChart.destroy();
+    stressIncomeChart = new Chart(document.getElementById('stressIncomeChart'), {
+        type: 'line',
+        data: { labels: ages, datasets },
+        options: {
+            responsive: true,
+            plugins: {
+                title: { display: true, text: 'Net Income \u2014 Historical Percentile Bands' },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        label: ctx => {
+                            if (ctx.parsed.y == null) return null;
+                            return ctx.dataset.label + ': \u00a3' + Math.round(ctx.parsed.y).toLocaleString();
+                        }
+                    }
+                },
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        usePointStyle: true,
+                        boxWidth: 12,
+                        filter: item => {
+                            const l = item.text;
+                            return l.includes('P50') || l.includes('P5-P10') || l.includes('Target');
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { title: { display: true, text: 'Age' } },
+                y: {
+                    title: { display: true, text: 'Net Income (\u00a3/yr)' },
                     ticks: { callback: v => '\u00a3' + v.toLocaleString() }
                 }
             },
