@@ -484,7 +484,7 @@
                 <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#compare-yearly" aria-expanded="false">
                     <i class="bi bi-calendar3"></i> Year-by-Year (Static)
                 </button>
-                <button class="btn btn-sm btn-outline-danger" type="button" id="btn-yearly-stress" data-bs-toggle="collapse" data-bs-target="#compare-yearly-stress" aria-expanded="false" disabled title="Run stress comparison first">
+                <button class="btn btn-sm btn-outline-danger" type="button" id="btn-yearly-stress" disabled title="Run stress comparison first">
                     <i class="bi bi-lightning"></i> Year-by-Year (Historical Median)
                 </button>
             </div>
@@ -1228,9 +1228,14 @@ function renderStressYearly(selectedScenarios, stressResults) {
         return;
     }
 
-    // Enable the button
+    // Enable the button and wire up manual collapse toggle
     btn.disabled = false;
     btn.title = '';
+    btn.onclick = () => {
+        const el = document.getElementById('compare-yearly-stress');
+        const bsCollapse = bootstrap.Collapse.getOrCreateInstance(el);
+        bsCollapse.toggle();
+    };
 
     // Build header: Age | [Scenario: Income / Capital] ...
     // Also show P10 (worst) and P90 (best) bracketed

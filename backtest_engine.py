@@ -192,7 +192,12 @@ def build_schedules(cfg, window_start_year, n_years, annual_returns,
             cpi_rate_schedule: {age: rate, ...}
             window_label: "1929-1951" style label
     """
-    retirement_age = cfg["personal"]["retirement_age"]
+    # Derive retirement_age from dates (consistent with engine)
+    dob_str = cfg["personal"]["date_of_birth"]
+    ret_str = cfg["personal"]["retirement_date"]
+    _dob_y, _dob_m = int(dob_str[:4]), int(dob_str[5:7])
+    _ret_y, _ret_m = int(ret_str[:4]), int(ret_str[5:7])
+    retirement_age = ((_ret_y * 12 + _ret_m - 1) - (_dob_y * 12 + _dob_m - 1)) // 12
 
     dc_schedules = {}
     for pot in cfg["dc_pots"]:
@@ -263,7 +268,12 @@ def run_backtest(cfg, max_windows=None):
     asset_model = load_asset_model()
     hist_data_mapping = asset_model.get("historical_data_mapping", {})
 
-    retirement_age = cfg["personal"]["retirement_age"]
+    # Derive retirement_age from dates (consistent with engine)
+    dob_str = cfg["personal"]["date_of_birth"]
+    ret_str = cfg["personal"]["retirement_date"]
+    _dob_y, _dob_m = int(dob_str[:4]), int(dob_str[5:7])
+    _ret_y, _ret_m = int(ret_str[:4]), int(ret_str[5:7])
+    retirement_age = ((_ret_y * 12 + _ret_m - 1) - (_dob_y * 12 + _dob_m - 1)) // 12
     end_age = cfg["personal"]["end_age"]
     n_years = end_age - retirement_age
 
