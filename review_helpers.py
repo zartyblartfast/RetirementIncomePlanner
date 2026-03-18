@@ -31,8 +31,8 @@ def compute_review_state(cfg, reviews_data=None):
     """Determine the review page state (A/B/C/D) and related metadata.
 
     States:
-      A = pre_retirement  (current_age < retirement_age, no reviews)
-      B = bootstrap_due   (current_age >= retirement_age, no reviews)
+      A = pre_retirement  (today < retirement_date, no reviews)
+      B = bootstrap_due   (today >= retirement_date, no reviews)
       C = between_reviews  (reviews exist, next review not yet due)
       D = review_due       (reviews exist, next review due or overdue)
 
@@ -90,7 +90,7 @@ def compute_review_state(cfg, reviews_data=None):
 
     # Countdown text for pre-retirement
     countdown_text = ""
-    if not has_reviews and current_age < retirement_age:
+    if not has_reviews and today < retirement_date:
         months_to_go = (retirement_date.year - today.year) * 12 + (retirement_date.month - today.month)
         years_to_go = months_to_go // 12
         rem_months = months_to_go % 12
@@ -101,9 +101,9 @@ def compute_review_state(cfg, reviews_data=None):
         else:
             countdown_text = f"{rem_months} month{'s' if rem_months != 1 else ''}"
 
-    # Determine state
+    # Determine state — keyed off retirement_date from Settings, not current_age
     if not has_reviews:
-        if current_age >= retirement_age:
+        if today >= retirement_date:
             state = "bootstrap_due"
         else:
             state = "pre_retirement"
