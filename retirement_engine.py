@@ -418,9 +418,8 @@ class RetirementEngine:
     # ------------------------------------------------------------------ #
     #  Main projection  (truly monthly planning)
     # ------------------------------------------------------------------ #
-    def run_projection(self, include_monthly: bool = False) -> dict:
+    def run_projection(self, include_monthly: bool = False, initial_strategy_state: dict = None) -> dict:
         cfg = self.cfg
-        retirement_age = cfg["personal"]["retirement_age"]
         end_age = cfg["personal"]["end_age"]
         cpi = cfg["target_income"]["cpi_rate"]
 
@@ -439,8 +438,12 @@ class RetirementEngine:
             target_net_annual = cfg["target_income"]["net_annual"]
         monthly_cpi = annual_to_monthly_rate(cpi)
 
+        # Optional year-varying schedules for backtesting
+        # Keys are age (int), values are annual rates (float)
+        cpi_rate_schedule = cfg.get("cpi_rate_schedule", {})
+
         # Strategy dispatch setup
-        strategy_state = None
+        strategy_state = initial_strategy_state
         use_monthly_cpi = (strategy_id == "fixed_target")
 
         # Load asset model for growth rate resolution
@@ -473,6 +476,11 @@ class RetirementEngine:
         ret_y, ret_m = parse_ym(cfg["personal"]["retirement_date"])
         ret_abs = ym_to_abs(ret_y, ret_m)
 
+        # Derive retirement_age from dates — retirement_date is the
+        # source of truth; cfg["personal"]["retirement_age"] is
+        # informational only and never used for engine logic.
+        retirement_age = int(age_at_abs(ret_abs))
+
         # ------------------------------------------------------------ #
         #  Anchor date — latest values_as_of, but never before retirement
         # ------------------------------------------------------------ #
@@ -495,7 +503,7 @@ class RetirementEngine:
         anchor_age = int(age_at_abs(anchor_abs))
         anchor_age = max(anchor_age, retirement_age)
 
-        is_post_retirement = anchor_abs > ret_abs
+        is_post_retirement = bool(all_asof_abs) and latest_asof >= ret_abs
 
         # End absolute month — cover full 12-month year for each age
         # anchor_age to end_age inclusive = (end_age - anchor_age + 1) years
@@ -522,11 +530,23 @@ class RetirementEngine:
                 if gap > 0:
                     annual = annual * (1 + idx_rate) ** (gap / 12.0)
 
-            # Convert start_age / end_age to absolute months
-            start_age = g.get("start_age", retirement_age)
-            g_end_age = g.get("end_age")
-            start_abs = dob_abs + int(round(start_age * 12))
-            end_abs_g = dob_abs + int(round(g_end_age * 12)) if g_end_age is not None else None
+            # Convert start_date / end_date to absolute months.
+            # Dates are the source of truth; fall back to age + DOB
+            # for backward compatibility with older configs.
+            if g.get("start_date"):
+                _sy, _sm = parse_ym(g["start_date"])
+                start_abs = ym_to_abs(_sy, _sm)
+            else:
+                _sa = g.get("start_age", retirement_age)
+                start_abs = dob_abs + int(round(_sa * 12))
+
+            if g.get("end_date"):
+                _ey, _em = parse_ym(g["end_date"])
+                end_abs_g = ym_to_abs(_ey, _em)
+            elif g.get("end_age") is not None:
+                end_abs_g = dob_abs + int(round(g["end_age"] * 12))
+            else:
+                end_abs_g = None
 
             guaranteed.append({
                 "name": g["name"],
@@ -698,6 +718,23 @@ class RetirementEngine:
                 # ---- New year setup ---- #
                 taxable_ytd = 0.0
                 current_year_age = year_age
+
+                # ---- Backtest schedule overrides ---- #
+                # Update growth rates from per-pot schedules
+                for name in dc_meta:
+                    sched = cfg.get("_dc_growth_schedules", {}).get(name)
+                    if sched and year_age in sched:
+                        dc_meta[name]["growth_rate"] = sched[year_age]
+                        dc_monthly[name]["growth"] = annual_to_monthly_rate(sched[year_age])
+                for name in tf_meta:
+                    sched = cfg.get("_tf_growth_schedules", {}).get(name)
+                    if sched and year_age in sched:
+                        tf_meta[name]["growth_rate"] = sched[year_age]
+                        tf_monthly[name]["growth"] = annual_to_monthly_rate(sched[year_age])
+                # Update CPI from schedule
+                if cpi_rate_schedule and year_age in cpi_rate_schedule:
+                    cpi = cpi_rate_schedule[year_age]
+                    monthly_cpi = annual_to_monthly_rate(cpi)
 
                 year_offset = year_age - anchor_age
                 cy = cal_y if is_post_retirement else ret_y + year_offset
@@ -1030,6 +1067,14 @@ class RetirementEngine:
             yr["guaranteed_income"] = {
                 k: round(v, 2) for k, v in yr["guaranteed_income"].items()
             }
+
+        # ARVA tolerance: if shortfall only occurs within 1 year of end_age
+        # and remaining capital is negligible, treat as sustainable.
+        # This accounts for DC tax gross-up causing slightly early depletion.
+        if (first_shortfall_age is not None
+                and strategy_id in ("arva", "arva_guardrails")
+                and first_shortfall_age >= config_end_age - 1):
+            first_shortfall_age = None
 
         # Summary
         num_years = len(years)

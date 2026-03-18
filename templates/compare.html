@@ -10,7 +10,7 @@
         <form method="post" class="row g-3 align-items-end">
             <div class="col-md-8">
                 <label class="form-label">Save your current Dashboard settings as a named scenario</label>
-                <input type="text" class="form-control" name="scenario_name" placeholder="e.g. Conservative £28k" required>
+                <input type="text" class="form-control" name="scenario_name" placeholder="e.g. Conservative £28k" autocomplete="off" required>
             </div>
             <div class="col-md-4">
                 <button type="submit" class="btn btn-primary w-100"><i class="bi bi-save"></i> Save Dashboard Scenario</button>
@@ -27,8 +27,10 @@
     </div>
     <div class="card-body">
         <div class="row g-3 align-items-end">
-            <div class="col-md-3">
-                <label class="form-label">Drawdown Strategy</label>
+            <div class="col-md-2">
+                <label class="form-label">Drawdown Strategy
+                    <a href="#" id="sb-strategy-info" tabindex="0" class="text-muted ms-1" data-bs-toggle="popover" data-bs-trigger="focus" data-bs-html="true" data-bs-placement="bottom" title="Strategy Info" data-bs-content=""><i class="bi bi-info-circle"></i></a>
+                </label>
                 <select class="form-select" id="sb-strategy" onchange="sbShowStrategyParams()">
                     {% for sid in strategy_ids %}
                     <option value="{{ sid }}" {% if current_config.drawdown_strategy == sid %}selected{% endif %}>{{ strategies[sid].display_name }}</option>
@@ -44,16 +46,24 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-2">
-                <label class="form-label">CPI Rate</label>
+            <div class="col-md-1">
+                <label class="form-label">CPI</label>
                 <input type="number" class="form-control" id="sb-cpi" value="{{ current_config.target_income.cpi_rate }}" step="0.005" min="0" max="0.2">
             </div>
             <div class="col-md-1">
                 <label class="form-label">Ret. Age</label>
                 <input type="number" class="form-control" id="sb-retire" value="{{ current_config.personal.retirement_age }}" step="1" min="50" max="80">
             </div>
-            <div class="col-md-2">
-                <button type="button" class="btn btn-warning w-100" id="sb-run"><i class="bi bi-lightning"></i> See Impact</button>
+            <div class="col-md-1">
+                <label class="form-label">End Age</label>
+                <input type="number" class="form-control" id="sb-end-age" value="{{ current_config.personal.end_age }}" step="1" min="70" max="120">
+            </div>
+            <div class="col-md-3">
+                <div class="btn-group w-100" role="group">
+                    <button type="button" class="btn btn-outline-warning" id="sb-run" title="Single projection with static growth"><i class="bi bi-lightning"></i> Forecast</button>
+                    <button type="button" class="btn btn-outline-danger" id="sb-stress" title="Test against 106 historical periods (1900-2005)"><i class="bi bi-shield-exclamation"></i> Stress</button>
+                    <button type="button" class="btn btn-outline-info" id="sb-shootout" title="Compare all 6 strategies under historical stress"><i class="bi bi-trophy"></i> Shootout</button>
+                </div>
             </div>
         </div>
         <!-- Strategy-specific parameter fields -->
@@ -61,12 +71,16 @@
         <div class="sb-strategy-params mt-2" id="sb-params-{{ sid }}" style="display:none;">
             <div class="row g-3 align-items-end">
                 {% for p in strategies[sid].params %}
+                {% if not p.get('sandbox_hidden', False) %}
                 <div class="col-md-2">
-                    <label class="form-label small">{{ p.label }}</label>
+                    <label class="form-label small">{{ p.label }}{% if p.get('tooltip') %}
+                        <a href="#" tabindex="0" class="text-muted ms-1 sb-param-tip" data-bs-toggle="popover" data-bs-trigger="focus" data-bs-html="true" data-bs-placement="top" data-bs-content="{{ p.tooltip }}"><i class="bi bi-info-circle"></i></a>
+                    {% endif %}</label>
                     <input type="number" class="form-control form-control-sm sb-sp" data-key="{{ p.key }}"
                            value="{{ current_config.drawdown_strategy_params.get(p.key, p.default) if current_config.drawdown_strategy == sid else p.default }}"
                            step="{{ p.step }}">
                 </div>
+                {% endif %}
                 {% endfor %}
             </div>
         </div>
@@ -77,12 +91,159 @@
             <div class="col-md-7">
                 <div class="input-group">
                     <span class="input-group-text"><i class="bi bi-bookmark-star"></i></span>
-                    <input type="text" class="form-control" id="sb-save-name" placeholder="Name this What If scenario">
+                    <input type="text" class="form-control" id="sb-save-name" placeholder="Name this What If scenario" autocomplete="off">
                     <button type="button" class="btn btn-outline-warning" id="sb-save-btn"><i class="bi bi-save"></i> Save What If Scenario</button>
                 </div>
             </div>
             <div class="col-md-5">
                 <small class="text-muted">Saves the sandbox inputs above as a new scenario — does not change your Dashboard settings</small>
+            </div>
+        </div>
+        <!-- Stress Test Results Panel -->
+        <div id="stress-panel" class="mt-3" style="display:none;">
+            <div class="card border-danger">
+                <div class="card-header bg-danger bg-opacity-10 d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-shield-exclamation"></i> <strong>Historical Stress Test</strong></span>
+                    <small class="text-muted" id="stress-meta"></small>
+                </div>
+                <div class="card-body">
+                    <!-- Resilience Summary -->
+                    <div class="row mb-3" id="stress-summary">
+                        <div class="col-md-4">
+                            <div class="card text-center h-100">
+                                <div class="card-body py-2">
+                                    <div class="text-muted small">Money Lasts to End?</div>
+                                    <div class="fs-3 fw-bold" id="stress-sustain"></div>
+                                    <div class="text-muted small" id="stress-sustain-detail"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card text-center h-100">
+                                <div class="card-body py-2">
+                                    <div class="text-muted small">Median Income Maintained</div>
+                                    <div class="fs-3 fw-bold" id="stress-income-ratio"></div>
+                                    <div class="text-muted small" id="stress-income-detail"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card text-center h-100">
+                                <div class="card-body py-2">
+                                    <div class="text-muted small">Worst Period</div>
+                                    <div class="fs-5 fw-bold" id="stress-worst-label"></div>
+                                    <div class="text-muted small" id="stress-worst-detail"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Fan Chart: Capital Trajectory -->
+                    <div class="mb-3">
+                        <canvas id="stressCapitalChart" height="90"></canvas>
+                    </div>
+                    <!-- Fan Chart: Income Trajectory -->
+                    <div class="mb-3">
+                        <canvas id="stressIncomeChart" height="90"></canvas>
+                    </div>
+                    <!-- Period Timeline (worst / median / best) -->
+                    <div class="mb-2">
+                        <div class="d-flex align-items-center mb-2">
+                            <h6 class="mb-0 me-2"><i class="bi bi-clock-history"></i> Period Timeline</h6>
+                            <select class="form-select form-select-sm" id="stress-timeline-select" style="width: auto;">
+                                <option value="worst" selected style="color: #dc3545;">&#9679; Worst Period</option>
+                                <option value="median" style="color: #0d6efd;">&#9679; Median Period</option>
+                                <option value="best" style="color: #198754;">&#9679; Best Period</option>
+                            </select>
+                            <small class="text-muted ms-2" id="stress-timeline-label"></small>
+                        </div>
+                        <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                            <table class="table table-sm table-bordered mb-0" id="stress-timeline-table">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>Age</th>
+                                        <th>Year</th>
+                                        <th>Market</th>
+                                        <th>Capital</th>
+                                        <th>Income</th>
+                                        <th>Target</th>
+                                        <th>% of Target</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <!-- Transparency -->
+                    <details class="mt-2">
+                        <summary class="text-muted small"><i class="bi bi-info-circle"></i> Methodology &amp; Data Sources</summary>
+                        <div class="small text-muted mt-1">
+                            <p class="mb-1"><strong>Equity returns:</strong> 70% S&amp;P 500 total return (price + dividends) + 30% UK share price return (price only, no dividends). UK component understates total return.</p>
+                            <p class="mb-1"><strong>Bond returns:</strong> UK gilt yields (BoE Millennium), approximated as yield + 10yr duration &times; (&minus;&Delta;yield).</p>
+                            <p class="mb-1"><strong>Inflation:</strong> UK CPI from BoE Millennium (to 2016) + ONS CPI (2017+).</p>
+                            <p class="mb-1"><strong>Cash:</strong> Bank of England Bank Rate.</p>
+                            <p class="mb-0"><strong>Method:</strong> Each pot&rsquo;s return is weighted by its asset allocation. The projection is run for every viable historical period of the required length. Results show how the scenario would have performed across 100+ years of real market history.</p>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        </div>
+        <!-- Strategy Shootout Results Panel -->
+        <div id="shootout-panel" class="mt-3" style="display:none;">
+            <div class="card border-info">
+                <div class="card-header bg-info bg-opacity-10 d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-trophy"></i> <strong>Strategy Shootout</strong>
+                        <a href="#" tabindex="0" class="text-muted ms-1" data-bs-toggle="popover" data-bs-trigger="focus" data-bs-html="true" data-bs-placement="right" title="What drives these results?" data-bs-content="
+                            <strong>Inputs used:</strong><br>
+                            &bull; Your current pot balances &amp; asset allocations (from Settings)<br>
+                            &bull; Drawdown order, CPI, retirement age, end age (from sandbox)<br>
+                            &bull; Income-based strategies (Fixed Target, Vanguard, GK) use your current target income<br>
+                            &bull; Each strategy uses its <em>default</em> parameters (e.g. 4% for Fixed %, 5%/2.5% caps for Vanguard)<br><br>
+                            <strong>Why do worst periods differ?</strong><br>
+                            Each strategy is vulnerable to different market conditions. The &lsquo;Worst Period&rsquo; column shows the historical period where <em>that particular strategy</em> performed worst &mdash; not a single shared bad period. This answers: &lsquo;How bad can it get for this strategy?&rsquo;
+                        "><i class="bi bi-info-circle"></i></a>
+                    </span>
+                    <small class="text-muted" id="shootout-meta"></small>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-2">
+                        <label class="form-label mb-0 me-2 small fw-bold">Rank by goal:</label>
+                        <select class="form-select form-select-sm" id="shootout-sort" style="width: auto;">
+                            <option value="none">— No sort —</option>
+                            <option value="reliable_income">Reliable Income</option>
+                            <option value="preserve_capital">Preserve Capital</option>
+                            <option value="maximise_spending">Maximise Spending</option>
+                        </select>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered table-hover mb-0" id="shootout-table" style="white-space: nowrap;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th rowspan="2" class="align-middle">Strategy</th>
+                                    <th rowspan="2" class="align-middle text-center" title="% of historical periods where capital lasted to end age">Survival</th>
+                                    <th colspan="3" class="text-center table-info" style="border-bottom: 2px solid #0dcaf0;">Income (% of target)</th>
+                                    <th colspan="3" class="text-center" style="border-bottom: 2px solid #6f42c1; background-color: #f3f0ff;">Cumulative Income</th>
+                                    <th colspan="3" class="text-center table-warning" style="border-bottom: 2px solid #ffc107;">Capital at End Age</th>
+                                    <th rowspan="2" class="align-middle" title="The historical period that performed worst">Worst Period</th>
+                                </tr>
+                                <tr>
+                                    <th class="text-center table-info small" title="Best single-year income as % of target">Best</th>
+                                    <th class="text-center table-info small" title="Median income achieved as % of target across all periods">Median</th>
+                                    <th class="text-center table-info small" title="Worst single-year income as % of target">Worst</th>
+                                    <th class="text-end small" style="background-color: #f3f0ff;" title="Total income drawn over retirement in the best period">Best</th>
+                                    <th class="text-end small" style="background-color: #f3f0ff;" title="Total income drawn over retirement in the median period">Median</th>
+                                    <th class="text-end small" style="background-color: #f3f0ff;" title="Total income drawn over retirement in the worst period">Worst</th>
+                                    <th class="text-end table-warning small" title="Capital remaining at end age in the best period">Best</th>
+                                    <th class="text-end table-warning small" title="Capital remaining at end age in the median period">Median</th>
+                                    <th class="text-end table-warning small" title="Capital remaining at end age in the worst period">Worst</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div class="mt-2 small text-muted">
+                        <i class="bi bi-info-circle"></i> All strategies tested with your current pots, drawdown order, and end age. Income-based strategies use your current target income (&pound;<span id="shootout-target"></span>/yr).
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -125,6 +286,24 @@
                     <td><strong>Drawdown Strategy</strong></td>
                     {% for sc in scenarios %}
                     <td data-sc-col="{{ loop.index0 }}">{{ strategies.get(sc.config.get('drawdown_strategy', 'fixed_target'), {}).get('display_name', 'Fixed Target') }}</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td><strong>Strategy Params</strong></td>
+                    {% for sc in scenarios %}
+                    <td data-sc-col="{{ loop.index0 }}">
+                        {% set sid = sc.config.get('drawdown_strategy', 'fixed_target') %}
+                        {% set sp = sc.config.get('drawdown_strategy_params', {}) %}
+                        {% set entry = strategies.get(sid, {}) %}
+                        {% set visible_params = [] %}
+                        {% for p in entry.get('params', []) %}
+                            {% if not p.get('sandbox_hidden', False) %}
+                                {% set val = sp.get(p.key, p.default) %}
+                                {% if visible_params.append(p.label ~ ': ' ~ val) %}{% endif %}
+                            {% endif %}
+                        {% endfor %}
+                        <small class="text-muted">{{ visible_params | join(', ') if visible_params else '—' }}</small>
+                    </td>
                     {% endfor %}
                 </tr>
                 <tr>
@@ -206,7 +385,10 @@
 <!-- Scenarios -->
 {% if scenarios %}
 <div class="card mb-4">
-    <div class="card-header"><i class="bi bi-collection"></i> Scenarios</div>
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-collection"></i> Scenarios</span>
+        <button type="button" class="btn btn-sm btn-outline-primary" id="btn-compare" disabled><i class="bi bi-arrows-angle-contract"></i> Compare Selected</button>
+    </div>
     <div class="card-body">
         {% set chart_colours = ['#0d6efd', '#dc3545', '#198754', '#fd7e14', '#6f42c1', '#20c997'] %}
         <div class="row g-3">
@@ -224,7 +406,12 @@
                         </p>
                         <p class="mb-0">Capital at {{ sc.result.summary.end_age }}: &pound;{{ "{:,.0f}".format(sc.result.summary.remaining_capital) }}</p>
                     </div>
-                    <div class="card-footer text-end">
+                    <div class="card-footer d-flex justify-content-between align-items-center">
+                        <div class="form-check mb-0" onclick="event.stopPropagation();">
+                            <input class="form-check-input sc-compare-check" type="checkbox" data-sc-name="{{ sc.name }}" id="sc-check-{{ loop.index0 }}">
+                            <label class="form-check-label small text-muted" for="sc-check-{{ loop.index0 }}">Compare</label>
+                        </div>
+                        <span>
                         {% if sc.is_unsaved %}
                         <form method="post" class="d-inline">
                             <input type="hidden" name="scenario_name" value="Current">
@@ -233,6 +420,7 @@
                         {% else %}
                         <a href="{{ url_for('delete_scenario', name=sc.name) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete {{ sc.name }}?');"><i class="bi bi-trash"></i> Delete</a>
                         {% endif %}
+                        </span>
                     </div>
                 </div>
             </div>
@@ -243,6 +431,82 @@
 {% else %}
 <div class="alert alert-secondary"><i class="bi bi-info-circle"></i> No scenarios saved yet. Adjust settings on the Dashboard or Settings page, then save a scenario here.</div>
 {% endif %}
+
+<!-- Comparison Results Panel -->
+<div id="compare-panel" class="card mb-4" style="display:none;">
+    <div class="card-header bg-primary bg-opacity-10 d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-arrows-angle-contract"></i> <strong>Scenario Comparison</strong></span>
+        <small class="text-muted" id="compare-meta"></small>
+    </div>
+    <div class="card-body">
+        <!-- Key Insights -->
+        <div id="compare-insights" class="mb-3"></div>
+        <!-- Detailed Comparison Table -->
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered table-hover mb-0" id="compare-detail-table" style="white-space: nowrap;">
+                <thead class="table-light" id="compare-detail-thead"></thead>
+                <tbody id="compare-detail-tbody"></tbody>
+            </table>
+        </div>
+        <!-- Stress Comparison -->
+        <div class="mt-3 mb-3">
+            <button class="btn btn-sm btn-outline-danger" id="btn-stress-compare">
+                <i class="bi bi-lightning"></i> Compare under Historical Stress
+            </button>
+            <span id="stress-compare-spinner" class="d-none ms-2"><span class="spinner-border spinner-border-sm text-danger"></span> <small class="text-muted" id="stress-compare-progress">Running stress tests...</small></span>
+            <div id="stress-compare-results" class="mt-2" style="display:none;">
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered table-hover mb-0" id="stress-compare-table" style="white-space: nowrap;">
+                        <thead class="table-light" id="stress-compare-thead"></thead>
+                        <tbody id="stress-compare-tbody"></tbody>
+                    </table>
+                </div>
+                <div id="stress-compare-insights" class="mt-2"></div>
+            </div>
+        </div>
+        <!-- Overlay Charts -->
+        <div class="mt-3" id="compare-charts-section">
+            <div class="row">
+                <div class="col-md-6">
+                    <canvas id="compare-income-chart" height="280"></canvas>
+                </div>
+                <div class="col-md-6">
+                    <canvas id="compare-capital-chart" height="280"></canvas>
+                </div>
+            </div>
+            <div class="text-center mt-1">
+                <small class="text-muted" id="compare-charts-label">Showing static projection data</small>
+            </div>
+        </div>
+        <!-- Year-by-Year Delta Tables -->
+        <div class="mt-3">
+            <div class="btn-group" role="group">
+                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#compare-yearly" aria-expanded="false">
+                    <i class="bi bi-calendar3"></i> Year-by-Year (Static)
+                </button>
+                <button class="btn btn-sm btn-outline-danger" type="button" id="btn-yearly-stress" disabled title="Run stress comparison first">
+                    <i class="bi bi-lightning"></i> Year-by-Year (Historical Median)
+                </button>
+            </div>
+            <div class="collapse mt-2" id="compare-yearly">
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-sm table-bordered table-hover mb-0" id="compare-yearly-table" style="white-space: nowrap;">
+                        <thead class="table-light sticky-top" id="compare-yearly-thead"></thead>
+                        <tbody id="compare-yearly-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="collapse mt-2" id="compare-yearly-stress">
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-sm table-bordered table-hover mb-0" id="stress-yearly-table" style="white-space: nowrap;">
+                        <thead class="table-light sticky-top" id="stress-yearly-thead"></thead>
+                        <tbody id="stress-yearly-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 {% endblock %}
 
@@ -264,6 +528,18 @@ function getOpeningCapital(yr) {
     return yr.total_capital;
 }
 
+// Helper: map years array to capital values, stopping (null) after depletion
+function mapCapitalWithDepletion(years, ages) {
+    let depleted = false;
+    return ages.map(age => {
+        if (depleted) return null;
+        const yr = years.find(y => y.age === age);
+        const val = getOpeningCapital(yr);
+        if (val !== null && val < 1) { depleted = true; return 0; }
+        return val;
+    });
+}
+
 // Use ext_result (extended projection) when available, fall back to result
 let allAges = [];
 scenarios.forEach(sc => {
@@ -274,15 +550,26 @@ scenarios.forEach(sc => {
 });
 allAges.sort((a, b) => a - b);
 
+// Helper: get strategy display name from config
+function getStrategyName(cfg) {
+    const sid = (cfg || {}).drawdown_strategy || 'fixed_target';
+    return (STRATEGY_NAMES[sid] || {}).display_name || 'Fixed Target';
+}
+
+// Determine if all scenarios share the same strategy for subtitle
+const allStrategies = scenarios.map(sc => getStrategyName(sc.config));
+const uniqueStrategies = [...new Set(allStrategies)];
+const compareSubtitle = uniqueStrategies.length === 1
+    ? 'Drawdown Strategy: ' + uniqueStrategies[0]
+    : '';
+
 const datasets = scenarios.map((sc, i) => {
     const years = (sc.ext_result && sc.ext_result.years) ? sc.ext_result.years : sc.result.years;
     const isCurrent = sc.is_current || false;
+    const sName = getStrategyName(sc.config);
     return {
-        label: sc.name + (isCurrent ? ' \u25C9' : ''),
-        data: allAges.map(age => {
-            const yr = years.find(y => y.age === age);
-            return getOpeningCapital(yr);
-        }),
+        label: sc.name + ' (' + sName + ')' + (isCurrent ? ' \u25C9' : ''),
+        data: mapCapitalWithDepletion(years, allAges),
         borderColor: colours[i % colours.length],
         backgroundColor: colours[i % colours.length] + '33',
         borderDash: isCurrent ? [8, 4] : [],
@@ -296,7 +583,10 @@ const chart = new Chart(document.getElementById('compareChart'), {
     data: { labels: allAges, datasets: datasets },
     options: {
         responsive: true,
-        plugins: { title: { display: true, text: 'Total Capital by Age' } },
+        plugins: {
+            title: { display: true, text: 'Total Capital by Age' },
+            subtitle: { display: !!compareSubtitle, text: compareSubtitle, font: { size: 14, weight: 'bold' }, color: '#0d6efd', padding: { bottom: 10 } },
+        },
         scales: {
             y: { ticks: { callback: v => '\u00a3' + v.toLocaleString() } }
         }
@@ -372,6 +662,57 @@ function highlightScenario(idx) {
     }
 }
 
+function restoreSandboxFromScenario(sc) {
+    const cfg = sc.config || {};
+    const sid = cfg.drawdown_strategy || 'fixed_target';
+    const params = cfg.drawdown_strategy_params || {};
+
+    // Strategy dropdown
+    const stratEl = document.getElementById('sb-strategy');
+    stratEl.value = sid;
+    sbShowStrategyParams();
+
+    // Strategy-specific params
+    const panel = document.getElementById('sb-params-' + sid);
+    if (panel) {
+        panel.querySelectorAll('.sb-sp').forEach(inp => {
+            const key = inp.dataset.key;
+            if (key in params) inp.value = params[key];
+        });
+    }
+
+    // Drawdown order
+    const orderEl = document.getElementById('sb-order');
+    const orderVal = (cfg.withdrawal_priority || []).join(',');
+    for (let opt of orderEl.options) {
+        if (opt.value === orderVal) { orderEl.value = orderVal; break; }
+    }
+
+    // CPI, retirement age, end age
+    if (cfg.target_income) {
+        document.getElementById('sb-cpi').value = cfg.target_income.cpi_rate || 0;
+    }
+    if (cfg.personal) {
+        document.getElementById('sb-retire').value = cfg.personal.retirement_age || 68;
+        document.getElementById('sb-end-age').value = cfg.personal.end_age || 90;
+    }
+
+    // Brief flash on the sandbox card to confirm load
+    const sbCard = document.querySelector('.border-warning');
+    if (sbCard) {
+        sbCard.style.transition = 'box-shadow 0.3s';
+        sbCard.style.boxShadow = '0 0 12px rgba(255, 193, 7, 0.6)';
+        setTimeout(() => { sbCard.style.boxShadow = ''; }, 1500);
+    }
+    // Scroll sandbox into view
+    sbCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // Show confirmation in summary area
+    const summaryEl = document.getElementById('sb-summary');
+    summaryEl.innerHTML = '<small class="text-success"><i class="bi bi-check-circle"></i> Loaded settings from <strong>' + sc.name + '</strong></small>';
+    setTimeout(() => { if (summaryEl.textContent.includes(sc.name)) summaryEl.innerHTML = ''; }, 3000);
+}
+
 document.querySelectorAll('.sc-card').forEach(card => {
     card.addEventListener('click', e => {
         if (e.target.closest('a, button, form')) return;
@@ -383,9 +724,566 @@ document.querySelectorAll('.sc-card').forEach(card => {
             const stId = (sc.config || {}).drawdown_strategy || 'fixed_target';
             const stLabel = (STRATEGY_NAMES[stId] || {}).display_name || stId;
             fetchAndRenderIncome(sc.name, sc.name, stLabel, stId);
+            // Restore sandbox settings from this scenario
+            restoreSandboxFromScenario(sc);
         }
     });
 });
+
+// --- Scenario Comparison ---
+const compareBtn = document.getElementById('btn-compare');
+if (compareBtn) {
+    // Enable Compare button when 2+ checkboxes are checked
+    document.querySelectorAll('.sc-compare-check').forEach(cb => {
+        cb.addEventListener('change', () => {
+            const checked = document.querySelectorAll('.sc-compare-check:checked');
+            compareBtn.disabled = checked.length < 2;
+            compareBtn.textContent = checked.length >= 2
+                ? 'Compare ' + checked.length + ' Scenarios'
+                : 'Compare Selected';
+            if (checked.length < 2) {
+                compareBtn.innerHTML = '<i class="bi bi-arrows-angle-contract"></i> Compare Selected';
+            } else {
+                compareBtn.innerHTML = '<i class="bi bi-arrows-angle-contract"></i> Compare ' + checked.length + ' Scenarios';
+            }
+        });
+    });
+
+    compareBtn.addEventListener('click', () => {
+        const checked = document.querySelectorAll('.sc-compare-check:checked');
+        const names = Array.from(checked).map(cb => cb.dataset.scName);
+        const selected = scenarios.filter(sc => names.includes(sc.name));
+        if (selected.length < 2) return;
+        renderComparison(selected);
+    });
+}
+
+function renderComparison(selectedScenarios) {
+    const panel = document.getElementById('compare-panel');
+    panel.style.display = '';
+
+    // Meta
+    document.getElementById('compare-meta').textContent =
+        selectedScenarios.length + ' scenarios compared';
+
+    // --- Key Insights ---
+    const insights = [];
+    const summaries = selectedScenarios.map(sc => ({
+        name: sc.name,
+        sustainable: sc.result.summary.sustainable,
+        shortfall_age: sc.result.summary.first_shortfall_age,
+        capital: sc.result.summary.remaining_capital,
+        tax: sc.result.summary.total_tax_paid,
+        end_age: sc.result.summary.end_age,
+        strategy: (sc.config || {}).drawdown_strategy || 'fixed_target',
+        cumul_income: (sc.result.years || []).reduce((s, yr) => s + (yr.net_income_achieved || 0), 0),
+    }));
+
+    // Best capital
+    const bestCap = summaries.reduce((a, b) => a.capital > b.capital ? a : b);
+    const worstCap = summaries.reduce((a, b) => a.capital < b.capital ? a : b);
+    if (bestCap.name !== worstCap.name) {
+        const diff = bestCap.capital - worstCap.capital;
+        insights.push('<i class="bi bi-piggy-bank text-success"></i> <strong>' + bestCap.name + '</strong> leaves £' + Math.round(diff).toLocaleString() + ' more capital than <strong>' + worstCap.name + '</strong>');
+    }
+
+    // Best cumulative income
+    const bestInc = summaries.reduce((a, b) => a.cumul_income > b.cumul_income ? a : b);
+    const worstInc = summaries.reduce((a, b) => a.cumul_income < b.cumul_income ? a : b);
+    if (bestInc.name !== worstInc.name) {
+        const diff = bestInc.cumul_income - worstInc.cumul_income;
+        insights.push('<i class="bi bi-cash-stack text-primary"></i> <strong>' + bestInc.name + '</strong> delivers £' + Math.round(diff).toLocaleString() + ' more total income than <strong>' + worstInc.name + '</strong>');
+    }
+
+    // Sustainability differences
+    const allSustainable = summaries.every(s => s.sustainable);
+    const noneSustainable = summaries.every(s => !s.sustainable);
+    if (!allSustainable && !noneSustainable) {
+        const sustNames = summaries.filter(s => s.sustainable).map(s => s.name);
+        const failNames = summaries.filter(s => !s.sustainable).map(s => '<strong>' + s.name + '</strong> (age ' + s.shortfall_age + ')');
+        insights.push('<i class="bi bi-exclamation-triangle text-warning"></i> Sustainable: ' + sustNames.map(n => '<strong>' + n + '</strong>').join(', ') + ' — Shortfall: ' + failNames.join(', '));
+    }
+
+    // Tax differences
+    const bestTax = summaries.reduce((a, b) => a.tax < b.tax ? a : b);
+    const worstTax = summaries.reduce((a, b) => a.tax > b.tax ? a : b);
+    if (bestTax.name !== worstTax.name && (worstTax.tax - bestTax.tax) > 1000) {
+        insights.push('<i class="bi bi-receipt text-info"></i> <strong>' + bestTax.name + '</strong> saves £' + Math.round(worstTax.tax - bestTax.tax).toLocaleString() + ' in tax vs <strong>' + worstTax.name + '</strong>');
+    }
+
+    document.getElementById('compare-insights').innerHTML = insights.length
+        ? '<div class="alert alert-light border">' + insights.join('<br>') + '</div>'
+        : '';
+
+    // --- Summary Detail Table ---
+    const thead = document.getElementById('compare-detail-thead');
+    const tbody = document.getElementById('compare-detail-tbody');
+    thead.innerHTML = '<tr><th>Metric</th>' + selectedScenarios.map(sc => '<th class="text-center">' + sc.name + '</th>').join('') + '</tr>';
+
+    const metrics = [
+        { label: 'Strategy', fn: sc => (STRATEGY_NAMES[sc.config.drawdown_strategy] || {}).display_name || sc.config.drawdown_strategy },
+        { label: 'Strategy Params', fn: sc => {
+            const sid = sc.config.drawdown_strategy || 'fixed_target';
+            const sp = sc.config.drawdown_strategy_params || {};
+            const entry = STRATEGY_NAMES[sid] || {};
+            const params = (entry.params || []).filter(p => !p.sandbox_hidden);
+            return params.length ? params.map(p => p.label + ': ' + (sp[p.key] !== undefined ? sp[p.key] : p.default)).join(', ') : '\u2014';
+        }},
+        { label: 'Target Income', fn: sc => '\u00a3' + Math.round(sc.config.target_income.net_annual).toLocaleString() },
+        { label: 'CPI', fn: sc => (sc.config.target_income.cpi_rate * 100).toFixed(1) + '%' },
+        { label: 'End Age', fn: sc => sc.result.summary.end_age },
+        { label: 'Drawdown Order', fn: sc => sc.config.withdrawal_priority.join(' \u2192 ') },
+        { label: 'Sustainable?', fn: sc => sc.result.summary.sustainable ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No (age ' + sc.result.summary.first_shortfall_age + ')</span>' },
+        { label: 'Remaining Capital', fn: sc => '\u00a3' + Math.round(sc.result.summary.remaining_capital).toLocaleString() },
+        { label: 'Cumulative Income', fn: sc => '\u00a3' + Math.round(sc.result.years.reduce((s, yr) => s + (yr.net_income_achieved || 0), 0)).toLocaleString() },
+        { label: 'Total Tax', fn: sc => '\u00a3' + Math.round(sc.result.summary.total_tax_paid).toLocaleString() },
+    ];
+
+    tbody.innerHTML = metrics.map(m =>
+        '<tr><td><strong>' + m.label + '</strong></td>' +
+        selectedScenarios.map(sc => '<td class="text-center">' + m.fn(sc) + '</td>').join('') +
+        '</tr>'
+    ).join('');
+
+    // --- Year-by-Year Detail ---
+    const ythead = document.getElementById('compare-yearly-thead');
+    const ytbody = document.getElementById('compare-yearly-tbody');
+    ythead.innerHTML = '<tr><th>Age</th>' +
+        selectedScenarios.map(sc => '<th class="text-center" colspan="2">' + sc.name + '</th>').join('') +
+        '</tr>' +
+        '<tr><th></th>' +
+        selectedScenarios.map(() => '<th class="text-end small">Income</th><th class="text-end small">Capital</th>').join('') +
+        '</tr>';
+
+    // Find common age range
+    const allAges = new Set();
+    selectedScenarios.forEach(sc => {
+        (sc.result.years || []).forEach(yr => allAges.add(yr.age));
+    });
+    const sortedAges = [...allAges].sort((a, b) => a - b);
+
+    // Build lookup: scenario name → age → year data
+    const lookup = {};
+    selectedScenarios.forEach(sc => {
+        lookup[sc.name] = {};
+        (sc.result.years || []).forEach(yr => { lookup[sc.name][yr.age] = yr; });
+    });
+
+    ytbody.innerHTML = sortedAges.map(age => {
+        return '<tr><td>' + age + '</td>' +
+            selectedScenarios.map(sc => {
+                const yr = lookup[sc.name][age];
+                if (!yr) return '<td class="text-muted">—</td><td class="text-muted">—</td>';
+                return '<td class="text-end">\u00a3' + Math.round(yr.net_income_achieved || 0).toLocaleString() + '</td>' +
+                       '<td class="text-end">\u00a3' + Math.round(yr.total_capital || 0).toLocaleString() + '</td>';
+            }).join('') +
+            '</tr>';
+    }).join('');
+
+    // --- Overlay Charts (static) ---
+    renderCompareOverlayCharts(selectedScenarios, sortedAges, lookup, 'static');
+
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // Wire up stress compare button for these scenarios
+    const stressBtn = document.getElementById('btn-stress-compare');
+    stressBtn.onclick = () => runStressComparison(selectedScenarios);
+}
+
+// Track current comparison scenarios
+let _compareScenarios = [];
+
+// --- Overlay Chart Instances ---
+let compareIncomeChart = null;
+let compareCapitalChart = null;
+
+function renderCompareOverlayCharts(selectedScenarios, ages, dataLookup, mode) {
+    // mode: 'static' uses dataLookup[name][age] = {net_income_achieved, total_capital}
+    //        'stress' uses dataLookup[name][age] = {income50, capital50, income10}
+    const isStress = (mode === 'stress');
+    const label = isStress ? 'Historical Median (P50)' : 'Static Projection';
+    document.getElementById('compare-charts-label').textContent = 'Showing ' + label + ' data';
+
+    // Build datasets for income chart
+    const incomeDatasets = [];
+    const capitalDatasets = [];
+    selectedScenarios.forEach((sc, i) => {
+        const colour = colours[i % colours.length];
+        const sName = getStrategyName(sc.config);
+
+        // Income line (P50 or static)
+        incomeDatasets.push({
+            label: sc.name + ' (' + sName + ')',
+            data: ages.map(age => {
+                const d = dataLookup[sc.name] ? dataLookup[sc.name][age] : null;
+                if (!d) return null;
+                return Math.round(isStress ? d.income50 : (d.net_income_achieved || 0));
+            }),
+            borderColor: colour,
+            backgroundColor: colour + '33',
+            tension: 0.2,
+            fill: false,
+            pointRadius: 0,
+            borderWidth: 2,
+        });
+
+        // P10 band (worst case) — stress only
+        if (isStress) {
+            incomeDatasets.push({
+                label: sc.name + ' (Worst)',
+                data: ages.map(age => {
+                    const d = dataLookup[sc.name] ? dataLookup[sc.name][age] : null;
+                    return d && d.income10 !== null ? Math.round(d.income10) : null;
+                }),
+                borderColor: colour + '66',
+                backgroundColor: 'transparent',
+                borderDash: [4, 4],
+                tension: 0.2,
+                fill: false,
+                pointRadius: 0,
+                borderWidth: 1,
+            });
+        }
+
+        // Capital line
+        capitalDatasets.push({
+            label: sc.name + ' (' + sName + ')',
+            data: ages.map(age => {
+                const d = dataLookup[sc.name] ? dataLookup[sc.name][age] : null;
+                if (!d) return null;
+                return Math.round(isStress ? d.capital50 : (d.total_capital || 0));
+            }),
+            borderColor: colour,
+            backgroundColor: colour + '33',
+            tension: 0.2,
+            fill: false,
+            pointRadius: 0,
+            borderWidth: 2,
+        });
+    });
+
+    const chartOpts = (title) => ({
+        responsive: true,
+        plugins: {
+            title: { display: true, text: title },
+            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+            tooltip: {
+                callbacks: {
+                    label: ctx => ctx.dataset.label + ': \u00a3' + (ctx.parsed.y || 0).toLocaleString()
+                }
+            },
+        },
+        scales: {
+            x: { title: { display: true, text: 'Age' } },
+            y: { ticks: { callback: v => '\u00a3' + v.toLocaleString() } }
+        },
+        interaction: { mode: 'index', intersect: false },
+    });
+
+    // Destroy old charts
+    if (compareIncomeChart) compareIncomeChart.destroy();
+    if (compareCapitalChart) compareCapitalChart.destroy();
+
+    compareIncomeChart = new Chart(document.getElementById('compare-income-chart'), {
+        type: 'line',
+        data: { labels: ages, datasets: incomeDatasets },
+        options: chartOpts(isStress ? 'Income Comparison (Historical Median)' : 'Income Comparison (Static)'),
+    });
+
+    compareCapitalChart = new Chart(document.getElementById('compare-capital-chart'), {
+        type: 'line',
+        data: { labels: ages, datasets: capitalDatasets },
+        options: chartOpts(isStress ? 'Capital Comparison (Historical Median)' : 'Capital Comparison (Static)'),
+    });
+}
+
+async function runStressComparison(selectedScenarios) {
+    _compareScenarios = selectedScenarios;
+    const spinner = document.getElementById('stress-compare-spinner');
+    const progress = document.getElementById('stress-compare-progress');
+    const results = document.getElementById('stress-compare-results');
+    const btn = document.getElementById('btn-stress-compare');
+
+    spinner.classList.remove('d-none');
+    btn.disabled = true;
+    results.style.display = 'none';
+
+    const stressResults = [];
+    for (let i = 0; i < selectedScenarios.length; i++) {
+        const sc = selectedScenarios[i];
+        progress.textContent = 'Running stress test ' + (i + 1) + ' of ' + selectedScenarios.length + ' (' + sc.name + ')...';
+
+        const cfg = sc.config || {};
+        const payload = {
+            drawdown_strategy: cfg.drawdown_strategy || 'fixed_target',
+            drawdown_strategy_params: cfg.drawdown_strategy_params || {},
+            withdrawal_priority: cfg.withdrawal_priority || [],
+            cpi_rate: (cfg.target_income || {}).cpi_rate || 0.03,
+            retirement_age: (cfg.personal || {}).retirement_age || 68,
+            end_age: (cfg.personal || {}).end_age || 90,
+        };
+
+        try {
+            const resp = await fetch('/whatif_backtest', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await resp.json();
+            stressResults.push({ name: sc.name, data: data });
+        } catch (e) {
+            stressResults.push({ name: sc.name, data: null, error: e.message });
+        }
+    }
+
+    spinner.classList.add('d-none');
+    btn.disabled = false;
+    renderStressComparison(selectedScenarios, stressResults);
+}
+
+function renderStressComparison(selectedScenarios, stressResults) {
+    const results = document.getElementById('stress-compare-results');
+    results.style.display = '';
+
+    const thead = document.getElementById('stress-compare-thead');
+    const tbody = document.getElementById('stress-compare-tbody');
+
+    thead.innerHTML = '<tr><th>Stress Metric</th>' +
+        selectedScenarios.map(sc => '<th class="text-center">' + sc.name + '</th>').join('') + '</tr>';
+
+    const metrics = [
+        {
+            label: 'Money Lasts to End',
+            fn: (sr) => {
+                if (!sr.data) return '<span class="text-muted">Error</span>';
+                const sus = sr.data.stress_test.sustainability;
+                const pct = Math.round(sus.rate * 100);
+                const cls = pct >= 80 ? 'text-success' : pct >= 50 ? 'text-warning' : 'text-danger';
+                return '<span class="' + cls + ' fw-bold">' + pct + '%</span> <small>(' + sus.count + '/' + sus.total + ')</small>';
+            }
+        },
+        {
+            label: 'Depletion Detail',
+            fn: (sr) => {
+                if (!sr.data) return '—';
+                const sus = sr.data.stress_test.sustainability;
+                const dist = sus.depletion_age_dist || [];
+                const depleted = sus.total - sus.count;
+                if (depleted === 0) return '<small class="text-success">No depletion</small>';
+                if (dist.length === 1 && dist[0].age === sr.data.metadata.end_age) {
+                    return '<small>' + depleted + ' at end age ' + dist[0].age + ' only</small>';
+                }
+                return '<small>' + dist.map(d => d.count + ' at ' + d.age).join(', ') + '</small>';
+            }
+        },
+        {
+            label: 'Median Income Maintained',
+            fn: (sr) => {
+                if (!sr.data) return '—';
+                const pct = Math.round(sr.data.stress_test.income_stability.median_income_ratio * 100);
+                const cls = pct >= 95 ? 'text-success' : pct >= 80 ? 'text-warning' : 'text-danger';
+                return '<span class="' + cls + ' fw-bold">' + pct + '%</span>';
+            }
+        },
+        {
+            label: 'Worst Single Year Income',
+            fn: (sr) => {
+                if (!sr.data) return '—';
+                const pct = Math.round(sr.data.stress_test.income_stability.worst_income_ratio * 100);
+                const cls = pct >= 80 ? 'text-success' : pct >= 60 ? 'text-warning' : 'text-danger';
+                return '<span class="' + cls + '">' + pct + '% of target</span>';
+            }
+        },
+        {
+            label: 'Cumulative Income (Median)',
+            fn: (sr) => {
+                if (!sr.data) return '—';
+                return '\u00a3' + Math.round(sr.data.stress_test.cumulative_income.median).toLocaleString();
+            }
+        },
+        {
+            label: 'Cumulative Income (Worst)',
+            fn: (sr) => {
+                if (!sr.data) return '—';
+                return '\u00a3' + Math.round(sr.data.stress_test.cumulative_income.worst).toLocaleString();
+            }
+        },
+        {
+            label: 'Cumulative Income (Best)',
+            fn: (sr) => {
+                if (!sr.data) return '—';
+                return '\u00a3' + Math.round(sr.data.stress_test.cumulative_income.best).toLocaleString();
+            }
+        },
+        {
+            label: 'Worst Period',
+            fn: (sr) => {
+                if (!sr.data) return '—';
+                const w = sr.data.stress_test.worst_window;
+                return '<strong>' + w.label + '</strong><br><small>' +
+                    (w.depletion_age ? 'Depleted at ' + w.depletion_age : 'Capital \u00a3' + Math.round(w.final_capital).toLocaleString()) + '</small>';
+            }
+        },
+        {
+            label: 'Windows Tested',
+            fn: (sr) => {
+                if (!sr.data) return '—';
+                const m = sr.data.metadata;
+                return m.n_windows + ' (' + m.start_range + '-' + m.end_range + ')';
+            }
+        },
+    ];
+
+    tbody.innerHTML = metrics.map(m =>
+        '<tr><td><strong>' + m.label + '</strong></td>' +
+        stressResults.map(sr => '<td class="text-center">' + m.fn(sr) + '</td>').join('') +
+        '</tr>'
+    ).join('');
+
+    // Stress insights
+    const sInsights = [];
+    const validResults = stressResults.filter(sr => sr.data);
+    if (validResults.length >= 2) {
+        // Survival comparison
+        const survRates = validResults.map(sr => ({
+            name: sr.name,
+            rate: sr.data.stress_test.sustainability.rate
+        }));
+        const bestSurv = survRates.reduce((a, b) => a.rate > b.rate ? a : b);
+        const worstSurv = survRates.reduce((a, b) => a.rate < b.rate ? a : b);
+        if (bestSurv.rate !== worstSurv.rate) {
+            const diff = Math.round((bestSurv.rate - worstSurv.rate) * 100);
+            sInsights.push('<i class="bi bi-shield-check text-success"></i> <strong>' + bestSurv.name + '</strong> survives ' + diff + ' percentage points more often than <strong>' + worstSurv.name + '</strong>');
+        }
+
+        // Median cumulative income comparison
+        const medIncomes = validResults.map(sr => ({
+            name: sr.name,
+            income: sr.data.stress_test.cumulative_income.median
+        }));
+        const bestMedInc = medIncomes.reduce((a, b) => a.income > b.income ? a : b);
+        const worstMedInc = medIncomes.reduce((a, b) => a.income < b.income ? a : b);
+        if (bestMedInc.income !== worstMedInc.income) {
+            const diff = bestMedInc.income - worstMedInc.income;
+            sInsights.push('<i class="bi bi-cash-stack text-primary"></i> <strong>' + bestMedInc.name + '</strong> delivers \u00a3' + Math.round(diff).toLocaleString() + ' more median cumulative income under stress');
+        }
+
+        // Worst-case income comparison
+        const worstIncomes = validResults.map(sr => ({
+            name: sr.name,
+            ratio: sr.data.stress_test.income_stability.worst_income_ratio
+        }));
+        const bestFloor = worstIncomes.reduce((a, b) => a.ratio > b.ratio ? a : b);
+        const worstFloor = worstIncomes.reduce((a, b) => a.ratio < b.ratio ? a : b);
+        if (bestFloor.ratio !== worstFloor.ratio) {
+            const diff = Math.round((bestFloor.ratio - worstFloor.ratio) * 100);
+            sInsights.push('<i class="bi bi-graph-down-arrow text-warning"></i> <strong>' + bestFloor.name + '</strong> has a ' + diff + ' pp higher income floor in the worst year');
+        }
+    }
+
+    document.getElementById('stress-compare-insights').innerHTML = sInsights.length
+        ? '<div class="alert alert-light border">' + sInsights.join('<br>') + '</div>'
+        : '';
+
+    // --- Stress Year-by-Year (P50 median) ---
+    renderStressYearly(selectedScenarios, stressResults);
+
+    // --- Update overlay charts with stress data ---
+    const validForCharts = stressResults.filter(sr => sr.data && sr.data.stress_test.percentile_trajectories && sr.data.stress_test.percentile_trajectories.p50);
+    if (validForCharts.length) {
+        const chartAges = new Set();
+        const chartLookup = {};
+        validForCharts.forEach(sr => {
+            chartLookup[sr.name] = {};
+            const p50 = sr.data.stress_test.percentile_trajectories.p50 || [];
+            const p10 = sr.data.stress_test.percentile_trajectories.p10 || [];
+            const p10Map = {};
+            p10.forEach(pt => { p10Map[pt.age] = pt; });
+            p50.forEach(pt => {
+                chartAges.add(pt.age);
+                chartLookup[sr.name][pt.age] = {
+                    income50: pt.net_income,
+                    capital50: pt.total_capital,
+                    income10: p10Map[pt.age] ? p10Map[pt.age].net_income : null,
+                };
+            });
+        });
+        const sortedChartAges = [...chartAges].sort((a, b) => a - b);
+        renderCompareOverlayCharts(selectedScenarios, sortedChartAges, chartLookup, 'stress');
+    }
+
+    document.getElementById('stress-compare-results').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function renderStressYearly(selectedScenarios, stressResults) {
+    const ythead = document.getElementById('stress-yearly-thead');
+    const ytbody = document.getElementById('stress-yearly-tbody');
+    const btn = document.getElementById('btn-yearly-stress');
+
+    // Get valid results with P50 data
+    const valid = stressResults.filter(sr => sr.data && sr.data.stress_test.percentile_trajectories && sr.data.stress_test.percentile_trajectories.p50);
+    if (!valid.length) {
+        btn.disabled = true;
+        btn.title = 'No stress data available';
+        return;
+    }
+
+    // Enable the button and wire up manual collapse toggle
+    btn.disabled = false;
+    btn.title = '';
+    btn.onclick = () => {
+        const el = document.getElementById('compare-yearly-stress');
+        const bsCollapse = bootstrap.Collapse.getOrCreateInstance(el);
+        bsCollapse.toggle();
+    };
+
+    // Build header: Age | [Scenario: Income / Capital] ...
+    // Also show P10 (worst) and P90 (best) bracketed
+    ythead.innerHTML = '<tr><th>Age</th>' +
+        valid.map(sr => '<th class="text-center" colspan="3">' + sr.name + '</th>').join('') +
+        '</tr>' +
+        '<tr><th></th>' +
+        valid.map(() => '<th class="text-end small text-danger">Worst Income</th><th class="text-end small">Median Income</th><th class="text-end small">Median Capital</th>').join('') +
+        '</tr>';
+
+    // Collect all ages from P50 trajectories
+    const allAges = new Set();
+    valid.forEach(sr => {
+        sr.data.stress_test.percentile_trajectories.p50.forEach(pt => allAges.add(pt.age));
+    });
+    const sortedAges = [...allAges].sort((a, b) => a - b);
+
+    // Build lookup: scenario name → age → { p10, p50 }
+    const lookup = {};
+    valid.forEach(sr => {
+        lookup[sr.name] = {};
+        const p50 = sr.data.stress_test.percentile_trajectories.p50 || [];
+        const p10 = sr.data.stress_test.percentile_trajectories.p10 || [];
+        const p10Map = {};
+        p10.forEach(pt => { p10Map[pt.age] = pt; });
+        p50.forEach(pt => {
+            lookup[sr.name][pt.age] = {
+                income50: pt.net_income,
+                capital50: pt.total_capital,
+                income10: p10Map[pt.age] ? p10Map[pt.age].net_income : null,
+            };
+        });
+    });
+
+    ytbody.innerHTML = sortedAges.map(age => {
+        return '<tr><td>' + age + '</td>' +
+            valid.map(sr => {
+                const d = lookup[sr.name][age];
+                if (!d) return '<td class="text-muted">\u2014</td><td class="text-muted">\u2014</td><td class="text-muted">\u2014</td>';
+                const inc10 = d.income10 !== null ? '\u00a3' + Math.round(d.income10).toLocaleString() : '\u2014';
+                const inc10cls = d.income10 !== null && d.income50 > 0 && d.income10 / d.income50 < 0.8 ? 'text-danger' : 'text-muted';
+                return '<td class="text-end small ' + inc10cls + '">' + inc10 + '</td>' +
+                       '<td class="text-end">\u00a3' + Math.round(d.income50).toLocaleString() + '</td>' +
+                       '<td class="text-end">\u00a3' + Math.round(d.capital50).toLocaleString() + '</td>';
+            }).join('') +
+            '</tr>';
+    }).join('');
+}
 
 // --- Income Breakdown Stacked Area Chart ---
 const INCOME_COLOURS = {
@@ -563,11 +1461,43 @@ if (scenarios.length > 0) {
 }
 
 // --- What If Sandbox ---
+const STRATEGY_INFO = {
+    fixed_target: '<strong>Fixed Target</strong><br>You set a target net income. Each year the withdrawal is adjusted upward by CPI to maintain purchasing power. Simple and predictable, but income never adapts to market conditions — if markets fall, capital depletes faster.',
+    fixed_percentage: '<strong>Fixed Percentage</strong><br>Each year you withdraw a fixed percentage of your remaining capital. There is no income target — income rises and falls directly with your portfolio value. You can never fully deplete, but income can drop sharply in bad years.',
+    vanguard_dynamic: '<strong>Vanguard Dynamic Spending</strong><br>Starts with an initial target income, adjusted by CPI each year, but with <em>caps</em> on how much income can rise or fall year-to-year. In good markets income grows (up to the ceiling); in bad markets it\'s cut (down to the floor). This smooths income while adapting to reality.',
+    guyton_klinger: '<strong>Guyton-Klinger Guardrails</strong><br>Starts with an initial target income. If your actual withdrawal rate drifts above the <em>upper guardrail</em>, income is cut by a fixed percentage. If it drifts below the <em>lower guardrail</em>, income is raised. This keeps spending in a sustainable corridor — income varies but within controlled bounds.',
+    arva: '<strong>ARVA (Annually Recalculated Virtual Annuity)</strong><br>No target income — the strategy <em>calculates</em> the optimal withdrawal each year based on your remaining capital, age, and assumed real return. Think of it as re-pricing an annuity annually. Income adjusts every year to target depleting capital exactly at your end age.',
+    arva_guardrails: '<strong>ARVA + Guardrails</strong><br>Same as ARVA, but with caps on how much income can change year-to-year (ceiling and floor limits). This reduces the volatility of pure ARVA while keeping its adaptive foundation. No target income is set — the strategy determines the withdrawal amount.',
+};
+
+let strategyPopover = null;
+
+function updateStrategyInfo() {
+    const sel = document.getElementById('sb-strategy').value;
+    const infoEl = document.getElementById('sb-strategy-info');
+    const content = STRATEGY_INFO[sel] || '';
+
+    // Dispose old popover and create new one with updated content
+    if (strategyPopover) { strategyPopover.dispose(); }
+    infoEl.setAttribute('data-bs-content', content);
+    infoEl.setAttribute('title', (STRATEGY_NAMES[sel] || {}).display_name || 'Strategy Info');
+    strategyPopover = new bootstrap.Popover(infoEl, { html: true, trigger: 'focus', placement: 'bottom' });
+}
+
 function sbShowStrategyParams() {
     const sel = document.getElementById('sb-strategy').value;
     document.querySelectorAll('.sb-strategy-params').forEach(el => { el.style.display = 'none'; });
     const panel = document.getElementById('sb-params-' + sel);
-    if (panel) panel.style.display = '';
+    if (panel) {
+        panel.style.display = '';
+        // Initialize any param tooltip popovers in the visible panel
+        panel.querySelectorAll('.sb-param-tip').forEach(el => {
+            if (!bootstrap.Popover.getInstance(el)) {
+                new bootstrap.Popover(el);
+            }
+        });
+    }
+    updateStrategyInfo();
 }
 sbShowStrategyParams();
 
@@ -576,6 +1506,7 @@ function getSandboxPayload() {
     const order = document.getElementById('sb-order').value;
     const cpi = parseFloat(document.getElementById('sb-cpi').value);
     const retire = parseInt(document.getElementById('sb-retire').value);
+    const endAge = parseInt(document.getElementById('sb-end-age').value);
     // Collect strategy-specific params from the visible panel
     const params = {};
     const panel = document.getElementById('sb-params-' + strategy);
@@ -583,13 +1514,18 @@ function getSandboxPayload() {
         panel.querySelectorAll('.sb-sp').forEach(inp => {
             params[inp.dataset.key] = parseFloat(inp.value);
         });
+        // For ARVA strategies, sync target_end_age from sandbox End Age
+        if (strategy === 'arva' || strategy === 'arva_guardrails') {
+            params.target_end_age = endAge;
+        }
     }
     return {
         drawdown_strategy: strategy,
         drawdown_strategy_params: params,
         withdrawal_priority: order.split(',').map(s => s.trim()),
         cpi_rate: cpi,
-        retirement_age: retire
+        retirement_age: retire,
+        end_age: endAge
     };
 }
 
@@ -620,17 +1556,11 @@ function runSandbox() {
         // Rebuild scenario datasets to match new allAges length
         scenarios.forEach((sc, i) => {
             const years = (sc.ext_result && sc.ext_result.years) ? sc.ext_result.years : sc.result.years;
-            chart.data.datasets[i].data = allAges.map(age => {
-                const yr = years.find(y => y.age === age);
-                return getOpeningCapital(yr);
-            });
+            chart.data.datasets[i].data = mapCapitalWithDepletion(years, allAges);
         });
 
         // Build sandbox dataset
-        const sbData = allAges.map(age => {
-            const yr = sbYears.find(y => y.age === age);
-            return getOpeningCapital(yr);
-        });
+        const sbData = mapCapitalWithDepletion(sbYears, allAges);
 
         const sbDataset = {
             label: '\u2728 What If',
@@ -653,9 +1583,18 @@ function runSandbox() {
         chart.update();
 
         const s = data.summary;
-        const sust = s.sustainable
-            ? '<span class="text-success"><i class="bi bi-check-circle"></i> Sustainable</span>'
-            : '<span class="text-danger"><i class="bi bi-x-circle"></i> Shortfall at ' + s.first_shortfall_age + '</span>';
+        // Sustainability is relative to the plan end_age, not the extended projection
+        const shortfallWithinPlan = !s.sustainable && s.first_shortfall_age && s.first_shortfall_age <= s.end_age;
+        const shortfallAfterPlan = !s.sustainable && s.first_shortfall_age && s.first_shortfall_age > s.end_age;
+        let sust;
+        if (shortfallWithinPlan) {
+            sust = '<span class="text-danger"><i class="bi bi-x-circle"></i> Shortfall at ' + s.first_shortfall_age + '</span>';
+        } else if (shortfallAfterPlan) {
+            sust = '<span class="text-success"><i class="bi bi-check-circle"></i> Sustainable to ' + s.end_age + '</span>' +
+                   '<span class="text-warning ms-2"><i class="bi bi-exclamation-triangle"></i> depletes at ' + s.first_shortfall_age + '</span>';
+        } else {
+            sust = '<span class="text-success"><i class="bi bi-check-circle"></i> Sustainable</span>';
+        }
         summaryEl.innerHTML = '<small>' + sust + ' &middot; Capital at ' + s.end_age + ': &pound;' + Math.round(s.remaining_capital).toLocaleString() + '</small>';
 
         document.getElementById('sb-save-row').style.display = '';
@@ -675,6 +1614,487 @@ function runSandbox() {
 
 document.getElementById('sb-run').addEventListener('click', runSandbox);
 
+// --- Historical Stress Test ---
+let stressCapitalChart = null;
+let stressIncomeChart = null;
+let stressTimelines = {};
+
+document.getElementById('stress-timeline-select').addEventListener('change', function() {
+    const colors = { worst: '#dc3545', median: '#0d6efd', best: '#198754' };
+    this.style.color = colors[this.value] || '';
+    const selected = stressTimelines[this.value];
+    if (selected) renderStressTimeline(selected);
+});
+
+function runStressTest() {
+    const payload = getSandboxPayload();
+    const panel = document.getElementById('stress-panel');
+    const summaryEl = document.getElementById('sb-summary');
+    const btn = document.getElementById('sb-stress');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    summaryEl.innerHTML = '<small class="text-muted"><i class="bi bi-hourglass-split"></i> Running stress test across 100+ historical periods (~3s)...</small>';
+
+    fetch('{{ url_for("whatif_backtest") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-shield-exclamation"></i> Stress';
+        summaryEl.innerHTML = '';
+        renderStressResults(data);
+        panel.style.display = '';
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-shield-exclamation"></i> Stress';
+        summaryEl.innerHTML = '<small class="text-danger">Stress test error: ' + err.message + '</small>';
+    });
+}
+
+function renderStressResults(data) {
+    const st = data.stress_test;
+    const meta = data.metadata;
+    const sus = st.sustainability;
+    const inc = st.income_stability;
+    const worst = st.worst_window;
+    const best = st.best_window;
+
+    // Meta line
+    document.getElementById('stress-meta').textContent =
+        data.strategy + ' \u2014 ' + meta.n_windows + ' periods (' + meta.start_range + '-' + meta.end_range + ')';
+
+    // Sustainability card
+    const susEl = document.getElementById('stress-sustain');
+    const susPct = Math.round(sus.rate * 100);
+    susEl.textContent = susPct + '%';
+    susEl.className = 'fs-3 fw-bold ' + (susPct >= 80 ? 'text-success' : susPct >= 50 ? 'text-warning' : 'text-danger');
+    const depleted = sus.total - sus.count;
+    let deplDetail = sus.count + ' of ' + sus.total + ' periods lasted to age ' + meta.end_age;
+    if (depleted > 0 && sus.depletion_age_dist && sus.depletion_age_dist.length > 0) {
+        const dist = sus.depletion_age_dist;
+        if (dist.length === 1 && dist[0].age === meta.end_age) {
+            deplDetail += '<br>' + depleted + ' depleted at end age ' + dist[0].age + ' (final year only)';
+        } else {
+            const parts = dist.map(d => d.count + ' at age ' + d.age);
+            deplDetail += '<br>Depleted: ' + parts.join(', ');
+        }
+    }
+    document.getElementById('stress-sustain-detail').innerHTML = deplDetail;
+
+    // Income stability card
+    const incEl = document.getElementById('stress-income-ratio');
+    const incPct = Math.round(inc.median_income_ratio * 100);
+    incEl.textContent = incPct + '%';
+    incEl.className = 'fs-3 fw-bold ' + (incPct >= 95 ? 'text-success' : incPct >= 80 ? 'text-warning' : 'text-danger');
+    const worstPct = Math.round(inc.worst_income_ratio * 100);
+    document.getElementById('stress-income-detail').textContent =
+        'Worst single year: ' + worstPct + '% of target';
+
+    // Worst period card
+    document.getElementById('stress-worst-label').textContent = worst.label;
+    const deplText = worst.depletion_age
+        ? 'Depleted at age ' + worst.depletion_age
+        : 'Final capital: \u00a3' + Math.round(worst.final_capital).toLocaleString();
+    document.getElementById('stress-worst-detail').innerHTML =
+        deplText + '<br>Best: ' + best.label + ' (\u00a3' + Math.round(best.final_capital).toLocaleString() + ')';
+
+    // Fan charts
+    renderStressFanChart(st);
+    renderStressIncomeFanChart(st, inc.target_income_used);
+
+    // Timeline table — store all three for dropdown switching
+    stressTimelines = {
+        worst: st.worst_window,
+        median: st.median_window,
+        best: st.best_window,
+    };
+    const tlSelect = document.getElementById('stress-timeline-select');
+    tlSelect.value = 'worst';
+    tlSelect.style.color = '#dc3545';
+    renderStressTimeline(stressTimelines.worst);
+}
+
+function renderStressFanChart(st) {
+    const ages = st.ages;
+    const p5  = st.percentile_trajectories.p5;
+    const p10 = st.percentile_trajectories.p10;
+    const p25 = st.percentile_trajectories.p25;
+    const p50 = st.percentile_trajectories.p50;
+    const p75 = st.percentile_trajectories.p75;
+    const p90 = st.percentile_trajectories.p90;
+
+    // Color-coded bands: green (top) → amber (middle) → red (bottom)
+    // Order matters for Chart.js fill references
+    const datasets = [
+        // --- Upper bands (green tones) ---
+        {
+            label: 'P90 (top 10%)',
+            data: p90.map(d => d.total_capital),
+            borderColor: '#15803d88',
+            backgroundColor: 'transparent',
+            borderWidth: 1,
+            borderDash: [4, 4],
+            pointRadius: 0,
+            fill: false,
+            order: 6,
+        },
+        {
+            label: 'P75-P90',
+            data: p75.map(d => d.total_capital),
+            borderColor: '#15803d66',
+            backgroundColor: '#15803d18',
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: '-1',
+            order: 5,
+        },
+        {
+            label: 'P50-P75',
+            data: p50.map(d => d.total_capital),
+            borderColor: '#0d6efd',
+            backgroundColor: '#65a30d18',
+            borderWidth: 2.5,
+            pointRadius: 0,
+            fill: '-1',
+            order: 4,
+        },
+        // --- Lower bands (amber → red tones) ---
+        {
+            label: 'P25-P50',
+            data: p25.map(d => d.total_capital),
+            borderColor: '#d9770688',
+            backgroundColor: '#d9770620',
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: '-1',
+            order: 3,
+        },
+        {
+            label: 'P10-P25',
+            data: p10.map(d => d.total_capital),
+            borderColor: '#dc354588',
+            backgroundColor: '#dc354520',
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: '-1',
+            order: 2,
+        },
+        {
+            label: 'P5-P10 (danger)',
+            data: p5.map(d => d.total_capital),
+            borderColor: '#991b1b88',
+            backgroundColor: '#991b1b30',
+            borderWidth: 1,
+            borderDash: [4, 4],
+            pointRadius: 0,
+            fill: '-1',
+            order: 1,
+        },
+    ];
+
+    if (stressCapitalChart) stressCapitalChart.destroy();
+    stressCapitalChart = new Chart(document.getElementById('stressCapitalChart'), {
+        type: 'line',
+        data: { labels: ages, datasets },
+        options: {
+            responsive: true,
+            plugins: {
+                title: { display: true, text: 'Capital Trajectory \u2014 Historical Percentile Bands' },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        label: ctx => {
+                            if (ctx.parsed.y == null) return null;
+                            return ctx.dataset.label + ': \u00a3' + Math.round(ctx.parsed.y).toLocaleString();
+                        }
+                    }
+                },
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        usePointStyle: true,
+                        boxWidth: 12,
+                        filter: item => {
+                            // Show only key legend items to avoid clutter
+                            const l = item.text;
+                            return l.includes('P50') || l.includes('P5-P10') || l.includes('P90');
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { title: { display: true, text: 'Age' } },
+                y: {
+                    title: { display: true, text: 'Total Capital (\u00a3)' },
+                    ticks: { callback: v => '\u00a3' + v.toLocaleString() }
+                }
+            },
+            interaction: { mode: 'index', intersect: false }
+        }
+    });
+}
+
+function renderStressIncomeFanChart(st, targetIncome) {
+    const ages = st.ages;
+    const p5  = st.percentile_trajectories.p5;
+    const p10 = st.percentile_trajectories.p10;
+    const p25 = st.percentile_trajectories.p25;
+    const p50 = st.percentile_trajectories.p50;
+    const p75 = st.percentile_trajectories.p75;
+    const p90 = st.percentile_trajectories.p90;
+
+    const datasets = [
+        // --- Upper bands (green tones) ---
+        {
+            label: 'P90 (top 10%)',
+            data: p90.map(d => d.net_income),
+            borderColor: '#15803d88',
+            backgroundColor: 'transparent',
+            borderWidth: 1,
+            borderDash: [4, 4],
+            pointRadius: 0,
+            fill: false,
+            order: 7,
+        },
+        {
+            label: 'P75-P90',
+            data: p75.map(d => d.net_income),
+            borderColor: '#15803d66',
+            backgroundColor: '#15803d18',
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: '-1',
+            order: 6,
+        },
+        {
+            label: 'P50-P75',
+            data: p50.map(d => d.net_income),
+            borderColor: '#0d6efd',
+            backgroundColor: '#65a30d18',
+            borderWidth: 2.5,
+            pointRadius: 0,
+            fill: '-1',
+            order: 5,
+        },
+        // --- Lower bands (amber → red tones) ---
+        {
+            label: 'P25-P50',
+            data: p25.map(d => d.net_income),
+            borderColor: '#d9770688',
+            backgroundColor: '#d9770620',
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: '-1',
+            order: 4,
+        },
+        {
+            label: 'P10-P25',
+            data: p10.map(d => d.net_income),
+            borderColor: '#dc354588',
+            backgroundColor: '#dc354520',
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: '-1',
+            order: 3,
+        },
+        {
+            label: 'P5-P10 (danger)',
+            data: p5.map(d => d.net_income),
+            borderColor: '#991b1b88',
+            backgroundColor: '#991b1b30',
+            borderWidth: 1,
+            borderDash: [4, 4],
+            pointRadius: 0,
+            fill: '-1',
+            order: 2,
+        },
+    ];
+
+    // Target income reference line
+    if (targetIncome && targetIncome > 0) {
+        datasets.push({
+            label: 'Target: \u00a3' + Math.round(targetIncome).toLocaleString(),
+            data: ages.map(() => targetIncome),
+            borderColor: '#6b7280',
+            backgroundColor: 'transparent',
+            borderWidth: 1.5,
+            borderDash: [6, 3],
+            pointRadius: 0,
+            fill: false,
+            order: 1,
+        });
+    }
+
+    if (stressIncomeChart) stressIncomeChart.destroy();
+    stressIncomeChart = new Chart(document.getElementById('stressIncomeChart'), {
+        type: 'line',
+        data: { labels: ages, datasets },
+        options: {
+            responsive: true,
+            plugins: {
+                title: { display: true, text: 'Net Income \u2014 Historical Percentile Bands' },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        label: ctx => {
+                            if (ctx.parsed.y == null) return null;
+                            return ctx.dataset.label + ': \u00a3' + Math.round(ctx.parsed.y).toLocaleString();
+                        }
+                    }
+                },
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        usePointStyle: true,
+                        boxWidth: 12,
+                        filter: item => {
+                            const l = item.text;
+                            return l.includes('P50') || l.includes('P5-P10') || l.includes('Target');
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { title: { display: true, text: 'Age' } },
+                y: {
+                    title: { display: true, text: 'Net Income (\u00a3/yr)' },
+                    ticks: { callback: v => '\u00a3' + v.toLocaleString() }
+                }
+            },
+            interaction: { mode: 'index', intersect: false }
+        }
+    });
+}
+
+function renderStressTimeline(win) {
+    const detail = win.label + ' \u2014 Final: \u00a3' + Math.round(win.final_capital).toLocaleString()
+        + (win.depletion_age ? '  (depleted age ' + win.depletion_age + ')' : '');
+    document.getElementById('stress-timeline-label').textContent = detail;
+    const tbody = document.querySelector('#stress-timeline-table tbody');
+    tbody.innerHTML = '';
+    win.timeline.forEach(t => {
+        const mkt = t.market_return !== null ? (t.market_return >= 0 ? '+' : '') + t.market_return.toFixed(1) + '%' : 'N/A';
+        const mktClass = t.market_return !== null ? (t.market_return >= 0 ? 'text-success' : 'text-danger') : '';
+        const pct = Math.round(t.income_ratio * 100);
+        const pctClass = pct >= 100 ? '' : pct >= 80 ? 'text-warning' : 'text-danger fw-bold';
+        const rowClass = t.shortfall ? 'table-danger' : '';
+        tbody.innerHTML += '<tr class="' + rowClass + '">' +
+            '<td>' + t.age + '</td>' +
+            '<td>' + t.calendar_year + '</td>' +
+            '<td class="' + mktClass + '">' + mkt + '</td>' +
+            '<td>\u00a3' + Math.round(t.total_capital).toLocaleString() + '</td>' +
+            '<td>\u00a3' + Math.round(t.net_income).toLocaleString() + '</td>' +
+            '<td>\u00a3' + Math.round(t.target_income).toLocaleString() + '</td>' +
+            '<td class="' + pctClass + '">' + pct + '%</td>' +
+            '</tr>';
+    });
+}
+
+document.getElementById('sb-stress').addEventListener('click', runStressTest);
+
+// --- Strategy Shootout ---
+function runShootout() {
+    const payload = getSandboxPayload();
+    const panel = document.getElementById('shootout-panel');
+    const summaryEl = document.getElementById('sb-summary');
+    const btn = document.getElementById('sb-shootout');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    summaryEl.innerHTML = '<small class="text-muted"><i class="bi bi-hourglass-split"></i> Running all 6 strategies across 100+ historical periods (~15s)...</small>';
+
+    fetch('{{ url_for("whatif_shootout") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-trophy"></i> Shootout';
+        summaryEl.innerHTML = '';
+        renderShootoutResults(data);
+        panel.style.display = '';
+        // Initialize info popover in the now-visible panel
+        panel.querySelectorAll('[data-bs-toggle="popover"]').forEach(el => {
+            if (!bootstrap.Popover.getInstance(el)) new bootstrap.Popover(el);
+        });
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-trophy"></i> Shootout';
+        summaryEl.innerHTML = '<small class="text-danger">Shootout error: ' + err.message + '</small>';
+    });
+}
+
+let _shootoutData = null;
+
+function renderShootoutResults(data) {
+    _shootoutData = data;
+    const meta = data.metadata;
+    document.getElementById('shootout-meta').textContent =
+        meta.n_windows + ' periods (' + meta.start_range + '-' + meta.end_range + ') \u2014 End age ' + meta.end_age;
+    document.getElementById('shootout-target').textContent = Math.round(meta.target_income).toLocaleString();
+    document.getElementById('shootout-sort').value = 'none';
+    renderShootoutTable(data.strategies, null);
+}
+
+function renderShootoutTable(strategies, goalKey) {
+    // Sort strategies if a goal is selected
+    let sorted = [...strategies];
+    if (goalKey === 'reliable_income') {
+        sorted.sort((a, b) => (b.worst_income_pct - a.worst_income_pct)
+            || (b.median_income_pct - a.median_income_pct)
+            || (b.sustainability_pct - a.sustainability_pct));
+    } else if (goalKey === 'preserve_capital') {
+        sorted.sort((a, b) => (b.median_final_capital - a.median_final_capital)
+            || (b.sustainability_pct - a.sustainability_pct));
+    } else if (goalKey === 'maximise_spending') {
+        sorted.sort((a, b) => (b.median_cumul_income - a.median_cumul_income));
+    }
+
+    const tbody = document.querySelector('#shootout-table tbody');
+    tbody.innerHTML = '';
+
+    sorted.forEach((s, idx) => {
+        const survClass = s.sustainability_pct >= 80 ? 'text-success fw-bold' : s.sustainability_pct >= 50 ? 'text-warning fw-bold' : 'text-danger fw-bold';
+        const bestIncClass = s.best_income_pct >= 100 ? 'text-success' : '';
+        const medIncClass = s.median_income_pct >= 95 ? 'text-success' : s.median_income_pct >= 80 ? 'text-warning' : 'text-danger';
+        const worstIncClass = s.worst_income_pct >= 80 ? '' : s.worst_income_pct >= 50 ? 'text-warning' : 'text-danger';
+        const deplNote = s.worst_depletion_age ? ' <small class="text-muted">(depl. ' + s.worst_depletion_age + ')</small>' : '';
+        const isWinner = goalKey && idx === 0;
+        const rankBadge = goalKey ? '<span class="badge bg-' + (idx === 0 ? 'success' : idx === 1 ? 'primary' : 'secondary') + ' me-1">#' + (idx + 1) + '</span>' : '';
+        const rowClass = isWinner ? 'table-success' : '';
+
+        tbody.innerHTML += '<tr class="' + rowClass + '">' +
+            '<td>' + rankBadge + '<strong>' + s.strategy_name + '</strong></td>' +
+            '<td class="text-center ' + survClass + '">' + s.sustainability_pct + '%</td>' +
+            '<td class="text-center ' + bestIncClass + '">' + s.best_income_pct + '%</td>' +
+            '<td class="text-center ' + medIncClass + '">' + s.median_income_pct + '%</td>' +
+            '<td class="text-center ' + worstIncClass + '">' + s.worst_income_pct + '%</td>' +
+            '<td class="text-end">\u00a3' + Math.round(s.best_cumul_income).toLocaleString() + '</td>' +
+            '<td class="text-end">\u00a3' + Math.round(s.median_cumul_income).toLocaleString() + '</td>' +
+            '<td class="text-end">\u00a3' + Math.round(s.worst_cumul_income).toLocaleString() + '</td>' +
+            '<td class="text-end">\u00a3' + Math.round(s.best_final_capital).toLocaleString() + '</td>' +
+            '<td class="text-end">\u00a3' + Math.round(s.median_final_capital).toLocaleString() + '</td>' +
+            '<td class="text-end">\u00a3' + Math.round(s.worst_final_capital).toLocaleString() + deplNote + '</td>' +
+            '<td class="small">' + s.worst_period + '</td>' +
+            '</tr>';
+    });
+}
+
+document.getElementById('sb-shootout').addEventListener('click', runShootout);
+document.getElementById('shootout-sort').addEventListener('change', function() {
+    if (_shootoutData) renderShootoutTable(_shootoutData.strategies, this.value === 'none' ? null : this.value);
+});
+
 // Annualised toggle: redraw chart from stored data when toggled
 document.getElementById('incomeAnnualToggle').addEventListener('change', () => {
     if (_lastIncomeData) {
@@ -683,7 +2103,7 @@ document.getElementById('incomeAnnualToggle').addEventListener('change', () => {
 });
 
 // Run on Enter key in sandbox inputs
-document.querySelectorAll('#sb-cpi, #sb-retire, .sb-sp').forEach(el => {
+document.querySelectorAll('#sb-cpi, #sb-retire, #sb-end-age, .sb-sp').forEach(el => {
     el.addEventListener('keydown', e => {
         if (e.key === 'Enter') { e.preventDefault(); runSandbox(); }
     });

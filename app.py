@@ -8,13 +8,34 @@ from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify)
 from retirement_engine import RetirementEngine, load_config, load_asset_model, resolve_growth_rate, resolve_growth_provenance
 from market_data import fetch_market_data, get_all_pot_intelligence
-from optimiser import Optimiser
+from optimiser import (Optimiser, find_best_drawdown_order,
+                       find_max_sustainable_income, find_max_sustainable_age,
+                       find_tax_efficient_strategy, find_income_sweep)
 from drawdown_strategies import normalize_config, STRATEGIES, STRATEGY_IDS, get_strategy_display_name
 from version import get_version_info
 from validation_runner import run_all_scenarios, ALL_SCENARIOS
+from review_helpers import (load_reviews, save_reviews, compute_review_state,
+                            build_balances_snapshot, apply_review_balances_to_config,
+                            build_recommendation_from_result, build_initial_strategy_state,
+                            backup_config_if_needed, reset_review_data, has_review_backup)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "pension-planner-secret-key-2025")
+
+
+@app.after_request
+def set_csp(response):
+    """Set Content-Security-Policy to allow CDN scripts, inline scripts,
+    and eval (required by Chart.js / Popper.js bundled with Bootstrap)."""
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "font-src 'self' https://cdn.jsdelivr.net; "
+        "img-src 'self' data:; "
+        "connect-src 'self'"
+    )
+    return response
 
 # ------------------------------------------------------------------ #
 #  Version info — available in all templates as {{ version_info }}
@@ -277,13 +298,9 @@ def dashboard():
         if yr["total_capital"] <= DEPLETION_EPSILON:
             depletion_age = yr["age"]
             break
-    # Trim extended years: always show depletion visually if it occurs
-    if depletion_age:
-        chart_end = max(plan_end_age + 5, depletion_age + 2)
-    else:
-        chart_end = plan_end_age + 5
+    # Cap extended projection at 120
     depletion_beyond_chart = False
-    ext_years_trimmed = [y for y in ext_result["years"] if y["age"] <= chart_end]
+    ext_years_trimmed = [y for y in ext_result["years"] if y["age"] <= 120]
 
 
     phase_info = compute_phase_info(cfg)
@@ -298,7 +315,8 @@ def dashboard():
                            depletion_age=depletion_age,
                            depletion_beyond_chart=depletion_beyond_chart,
                            phase_info=phase_info,
-                           market_intel=market_intel,)
+                           market_intel=market_intel,
+                           strategies=STRATEGIES,)
 
 # ------------------------------------------------------------------ #
 #  Settings — dynamic income stream management
@@ -334,14 +352,11 @@ def settings():
                 "name": request.form.get("g_name", "New Pension"),
                 "gross_annual": float(request.form.get("g_gross_annual", 0)),
                 "indexation_rate": float(request.form.get("g_indexation_rate", 0)),
-                "start_age": int(request.form.get("g_start_age", 68)),
-                "end_age": None,
+                "start_date": request.form.get("g_start_date", "").strip() or None,
+                "end_date": request.form.get("g_end_date", "").strip() or None,
                 "taxable": request.form.get("g_taxable") == "on",
                 "values_as_of": request.form.get("g_values_as_of", "").strip() or None,
             }
-            end_age_str = request.form.get("g_end_age", "").strip()
-            if end_age_str:
-                new_stream["end_age"] = int(end_age_str)
             cfg["guaranteed_income"].append(new_stream)
             flash(f"Added guaranteed income: {new_stream['name']}", "success")
 
@@ -358,9 +373,8 @@ def settings():
                 g["name"] = request.form.get("g_name", g["name"])
                 g["gross_annual"] = float(request.form.get("g_gross_annual", g["gross_annual"]))
                 g["indexation_rate"] = float(request.form.get("g_indexation_rate", g["indexation_rate"]))
-                g["start_age"] = int(request.form.get("g_start_age", g["start_age"]))
-                end_age_str = request.form.get("g_end_age", "").strip()
-                g["end_age"] = int(end_age_str) if end_age_str else None
+                g["start_date"] = request.form.get("g_start_date", g.get("start_date", "")).strip() or None
+                g["end_date"] = request.form.get("g_end_date", "").strip() or None
                 g["taxable"] = request.form.get("g_taxable") == "on"
                 g["values_as_of"] = request.form.get("g_values_as_of", "").strip() or None
                 flash(f"Updated: {g['name']}", "success")
@@ -580,18 +594,8 @@ def compare():
         ext_cfg["personal"]["end_age"] = min(120, max(plan_end_age, 120))
         engine = RetirementEngine(ext_cfg)
         ext_result = engine.run_projection()
-        # Trim: find depletion, then cap at depletion+2 or plan_end+5, max 120
-        DEPLETION_EPSILON = 1.0
-        dep_age = None
-        for yr in ext_result["years"]:
-            if yr["total_capital"] <= DEPLETION_EPSILON:
-                dep_age = yr["age"]
-                break
-        if dep_age:
-            chart_end = min(120, dep_age)
-        else:
-            chart_end = min(120, plan_end_age + 5)
-        ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= chart_end]
+        # Cap extended projection at 120
+        ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= 120]
         # Also run the normal projection for the summary stats
         result = RetirementEngine(cfg).run_projection()
         scenario = {"name": name, "config": cfg, "result": result,
@@ -652,17 +656,8 @@ def compare():
         plan_end_age = cfg["personal"]["end_age"]
         ext_cfg["personal"]["end_age"] = min(120, max(plan_end_age, 120))
         ext_result = RetirementEngine(ext_cfg).run_projection()
-        DEPLETION_EPSILON = 1.0
-        dep_age = None
-        for yr in ext_result["years"]:
-            if yr["total_capital"] <= DEPLETION_EPSILON:
-                dep_age = yr["age"]
-                break
-        if dep_age:
-            chart_end = min(120, dep_age)
-        else:
-            chart_end = min(120, plan_end_age + 5)
-        ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= chart_end]
+        # Cap extended projection at 120
+        ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= 120]
         # Normal projection for summary
         result = RetirementEngine(cfg).run_projection()
         current_sc = {
@@ -723,24 +718,17 @@ def whatif_project():
         cfg["target_income"]["cpi_rate"] = float(data["cpi_rate"])
     if "retirement_age" in data:
         cfg["personal"]["retirement_age"] = int(data["retirement_age"])
+    if "end_age" in data:
+        cfg["personal"]["end_age"] = int(data["end_age"])
+    normalize_config(cfg)  # sync target_income.net_annual from strategy params
 
     # Single projection: provides chart years, monthly income data, and summary
     plan_end_age = cfg["personal"]["end_age"]
     result = RetirementEngine(cfg).run_projection(include_monthly=True)
     years = result["years"]
 
-    # Trim chart years: include dep_age + 1 so the zero-opening point is visible
-    DEPLETION_EPSILON = 1.0
-    dep_age = None
-    for yr in years:
-        if yr["total_capital"] <= DEPLETION_EPSILON:
-            dep_age = yr["age"]
-            break
-    if dep_age:
-        chart_end = min(120, dep_age + 1)
-    else:
-        chart_end = min(120, plan_end_age + 5)
-    chart_years = [y for y in years if y["age"] <= chart_end]
+    # Cap chart years at 120
+    chart_years = [y for y in years if y["age"] <= 120]
 
     # Patch summary: remaining_capital should reflect plan end age, not loop end
     plan_year = next((y for y in years if y["age"] == plan_end_age), None)
@@ -781,21 +769,17 @@ def whatif_save():
         cfg["target_income"]["cpi_rate"] = float(data["cpi_rate"])
     if "retirement_age" in data:
         cfg["personal"]["retirement_age"] = int(data["retirement_age"])
+    if "end_age" in data:
+        cfg["personal"]["end_age"] = int(data["end_age"])
+    normalize_config(cfg)  # sync target_income.net_annual from strategy params
 
     # Extended projection for chart
     plan_end_age = cfg["personal"]["end_age"]
     ext_cfg = _copy.deepcopy(cfg)
     ext_cfg["personal"]["end_age"] = min(120, max(plan_end_age, 120))
     ext_result = RetirementEngine(ext_cfg).run_projection()
-    DEPLETION_EPSILON = 1.0
-    dep_age = None
-    for yr in ext_result["years"]:
-        if yr["total_capital"] <= DEPLETION_EPSILON:
-            dep_age = yr["age"]
-            break
-    if dep_age:
-        chart_end = min(120, dep_age)
-        ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= chart_end]
+    # Cap extended projection at 120
+    ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= 120]
 
     result = RetirementEngine(cfg).run_projection()
     scenario = {"name": name, "config": cfg, "result": result, "ext_result": ext_result}
@@ -804,6 +788,150 @@ def whatif_save():
         json.dump(scenario, f, indent=2, default=str)
 
     return jsonify({"ok": True, "name": name})
+
+# ------------------------------------------------------------------ #
+#  What If Sandbox — Historical Stress Test
+# ------------------------------------------------------------------ #
+@app.route("/whatif_backtest", methods=["POST"])
+@login_required
+def whatif_backtest():
+    """Run historical stress test with sandbox overrides.
+
+    Same sandbox overrides as /whatif_project, but runs through all
+    viable historical windows and returns stress-test metrics.
+    """
+    import copy as _copy
+    from backtest_engine import run_backtest, extract_stress_test
+
+    data = request.get_json(silent=True) or {}
+    cfg = _copy.deepcopy(get_config())
+
+    # Apply sandbox overrides (same as whatif_project)
+    if "drawdown_strategy" in data:
+        cfg["drawdown_strategy"] = data["drawdown_strategy"]
+    if "drawdown_strategy_params" in data:
+        cfg["drawdown_strategy_params"] = {
+            k: float(v) for k, v in data["drawdown_strategy_params"].items()
+        }
+    if "withdrawal_priority" in data:
+        cfg["withdrawal_priority"] = data["withdrawal_priority"]
+    if "cpi_rate" in data:
+        cfg["target_income"]["cpi_rate"] = float(data["cpi_rate"])
+    if "retirement_age" in data:
+        cfg["personal"]["retirement_age"] = int(data["retirement_age"])
+    if "end_age" in data:
+        cfg["personal"]["end_age"] = int(data["end_age"])
+    normalize_config(cfg)
+
+    # Run full backtest
+    bt_result = run_backtest(cfg)
+
+    # Extract stress-test metrics
+    target_income = cfg["target_income"].get("net_annual", 0)
+    stress = extract_stress_test(bt_result, target_income=target_income)
+
+    # Get strategy display name for the response
+    strategy_id = cfg.get("drawdown_strategy", "fixed_target")
+    strategy_name = get_strategy_display_name(strategy_id)
+
+    return jsonify({
+        "strategy": strategy_name,
+        "strategy_id": strategy_id,
+        "stress_test": stress,
+        "metadata": bt_result["metadata"],
+    })
+
+# ------------------------------------------------------------------ #
+#  What If Sandbox — Strategy Shootout (all strategies under stress)
+# ------------------------------------------------------------------ #
+@app.route("/whatif_shootout", methods=["POST"])
+@login_required
+def whatif_shootout():
+    """Run all 6 drawdown strategies through historical stress test.
+
+    Uses the current config (with sandbox overrides for end_age, cpi_rate,
+    withdrawal_priority) but swaps the strategy for each run.
+    Returns comparative stress-test metrics for all strategies.
+    """
+    import copy as _copy
+    from backtest_engine import run_backtest, extract_stress_test
+
+    data = request.get_json(silent=True) or {}
+    base_cfg = _copy.deepcopy(get_config())
+
+    # Apply sandbox overrides (non-strategy ones only)
+    if "withdrawal_priority" in data:
+        base_cfg["withdrawal_priority"] = data["withdrawal_priority"]
+    if "cpi_rate" in data:
+        base_cfg["target_income"]["cpi_rate"] = float(data["cpi_rate"])
+    if "retirement_age" in data:
+        base_cfg["personal"]["retirement_age"] = int(data["retirement_age"])
+    if "end_age" in data:
+        base_cfg["personal"]["end_age"] = int(data["end_age"])
+
+    target_income = base_cfg["target_income"].get("net_annual", 30000)
+    end_age = base_cfg["personal"]["end_age"]
+
+    results = []
+    for sid in STRATEGY_IDS:
+        cfg = _copy.deepcopy(base_cfg)
+        cfg["drawdown_strategy"] = sid
+
+        # Build default params from registry
+        entry = STRATEGIES[sid]
+        params = {p["key"]: p["default"] for p in entry["params"]}
+
+        # Seed income-based params from current config target
+        if sid == "fixed_target":
+            params["net_annual"] = target_income
+        elif sid in ("vanguard_dynamic", "guyton_klinger"):
+            params["initial_target"] = target_income
+        elif sid in ("arva", "arva_guardrails"):
+            params["target_end_age"] = end_age
+
+        cfg["drawdown_strategy_params"] = params
+        normalize_config(cfg)
+
+        # Run backtest
+        bt_result = run_backtest(cfg)
+        stress = extract_stress_test(bt_result, target_income=target_income)
+
+        sus = stress["sustainability"]
+        inc = stress["income_stability"]
+        cumul = stress["cumulative_income"]
+        worst = stress["worst_window"]
+        median = stress["median_window"]
+        best = stress["best_window"]
+
+        results.append({
+            "strategy_id": sid,
+            "strategy_name": entry["display_name"],
+            "sustainability_pct": round(sus["rate"] * 100, 1),
+            "sustainable_count": sus["count"],
+            "total_windows": sus["total"],
+            "best_income_pct": round(inc["best_income_ratio"] * 100, 1),
+            "median_income_pct": round(inc["median_income_ratio"] * 100, 1),
+            "worst_income_pct": round(inc["worst_income_ratio"] * 100, 1),
+            "median_cumul_income": round(cumul["median"], 0),
+            "worst_cumul_income": round(cumul["worst"], 0),
+            "best_cumul_income": round(cumul["best"], 0),
+            "best_final_capital": round(best["final_capital"], 0),
+            "median_final_capital": round(median["final_capital"], 0),
+            "worst_final_capital": round(worst["final_capital"], 0),
+            "worst_period": worst["label"],
+            "worst_depletion_age": worst.get("depletion_age"),
+        })
+
+    return jsonify({
+        "strategies": results,
+        "metadata": {
+            "n_windows": bt_result["metadata"]["n_windows"],
+            "start_range": bt_result["metadata"]["start_range"],
+            "end_range": bt_result["metadata"]["end_range"],
+            "end_age": end_age,
+            "target_income": target_income,
+        },
+    })
 
 # ------------------------------------------------------------------ #
 #  Scenario monthly income data (for Income Breakdown chart)
@@ -826,15 +954,57 @@ def scenario_monthly(name):
     return jsonify({"monthly_rows": result.get("monthly_rows", [])})
 
 # ------------------------------------------------------------------ #
-#  Optimiser
+#  Optimiser (progressive AJAX loading)
 # ------------------------------------------------------------------ #
 @app.route("/optimise")
 @login_required
 def optimise():
     cfg = get_config()
-    opt = Optimiser(cfg)
-    results = opt.run_all()
-    return render_template("optimise.html", config=cfg, results=results)
+    return render_template("optimise.html", config=cfg)
+
+@app.route("/api/optimise/q1")
+@login_required
+def api_optimise_q1():
+    cfg = get_config()
+    data = find_best_drawdown_order(cfg)
+    # Strip heavy projection data the JS doesn't need
+    for s in data.get('ranked', []):
+        s.pop('result', None)
+    return jsonify(data)
+
+@app.route("/api/optimise/q2")
+@login_required
+def api_optimise_q2():
+    cfg = get_config()
+    data = find_max_sustainable_income(cfg)
+    data.pop('projection', None)
+    data.pop('current_projection', None)
+    return jsonify(data)
+
+@app.route("/api/optimise/q3")
+@login_required
+def api_optimise_q3():
+    cfg = get_config()
+    data = find_max_sustainable_age(cfg)
+    data.pop('projection', None)
+    data.pop('current_projection', None)
+    return jsonify(data)
+
+@app.route("/api/optimise/q4")
+@login_required
+def api_optimise_q4():
+    cfg = get_config()
+    data = find_tax_efficient_strategy(cfg)
+    for s in data.get('ranked', []):
+        s.pop('result', None)
+    return jsonify(data)
+
+@app.route("/api/optimise/q5")
+@login_required
+def api_optimise_q5():
+    cfg = get_config()
+    max_income = float(request.args.get("max_income", 50000))
+    return jsonify(find_income_sweep(cfg, max_income))
 
 @app.route("/apply_priority", methods=["POST"])
 @login_required
@@ -874,6 +1044,152 @@ def validation():
                            results=results,
                            generated_at=generated_at,
                            scenario_count=len(ALL_SCENARIOS))
+
+# ------------------------------------------------------------------ #
+#  Annual Review
+# ------------------------------------------------------------------ #
+@app.route("/review")
+@login_required
+def review():
+    cfg = get_config()
+    reviews_data = load_reviews()
+    review_state = compute_review_state(cfg, reviews_data)
+    balances = build_balances_snapshot(cfg)
+    strategy_name = get_strategy_display_name(cfg.get("drawdown_strategy", "fixed_target"))
+    has_backup = has_review_backup()
+    return render_template("review.html", config=cfg,
+                           review_state=review_state,
+                           reviews_data=reviews_data,
+                           balances=balances,
+                           strategy_name=strategy_name,
+                           strategies=STRATEGIES,
+                           has_backup=has_backup)
+
+
+@app.route("/api/review/run_projection", methods=["POST"])
+@login_required
+def api_review_run_projection():
+    """Run projection with provided balances for review recommendation."""
+    import copy as _copy
+    data = request.get_json(silent=True) or {}
+    cfg = _copy.deepcopy(get_config())
+
+    # Apply balance overrides from the review form
+    balances = data.get("balances", {})
+    review_date = data.get("review_date", "")
+    if balances and review_date:
+        apply_review_balances_to_config(cfg, balances, review_date)
+
+    # Apply initial strategy state for stateful strategies (R4)
+    actual_drawdown = data.get("actual_drawdown")
+    strategy_id = cfg.get("drawdown_strategy", "fixed_target")
+    initial_state = build_initial_strategy_state(actual_drawdown, strategy_id, cfg)
+
+    normalize_config(cfg)
+    engine = RetirementEngine(cfg)
+    result = engine.run_projection(initial_strategy_state=initial_state)
+    recommendation = build_recommendation_from_result(result, cfg)
+
+    return jsonify({
+        "recommendation": recommendation,
+        "result_summary": result.get("summary", {}),
+    })
+
+
+@app.route("/api/review/save", methods=["POST"])
+@login_required
+def api_review_save():
+    """Save a review (bootstrap or annual) and sync balances to config."""
+    import copy as _copy
+    data = request.get_json(silent=True) or {}
+
+    review_type = data.get("review_type", "annual")  # "bootstrap" or "annual"
+    review_date = data.get("review_date", "")
+    balances = data.get("balances", {})
+    actual_drawdown = data.get("actual_drawdown")  # null for bootstrap
+    recommendation = data.get("recommendation", {})
+
+    if not review_date:
+        return jsonify({"error": "Review date is required"}), 400
+
+    # Back up config before first review save (safe testing)
+    backup_config_if_needed()
+
+    # Load existing reviews
+    reviews_data = load_reviews()
+
+    # Compute review_age
+    cfg = get_config()
+    dob_str = cfg["personal"].get("date_of_birth", "1958-07")
+    try:
+        dob_year = int(dob_str[:4])
+        review_year = int(review_date[:4])
+        review_age = review_year - dob_year
+    except (ValueError, IndexError):
+        review_age = cfg["personal"].get("retirement_age", 68)
+
+    # Build review record
+    review_record = {
+        "review_date": review_date,
+        "review_age": review_age,
+        "review_type": review_type,
+        "balances": balances,
+        "actual_drawdown": actual_drawdown,
+        "recommendation": recommendation,
+    }
+
+    # If bootstrap, run stress test to store baseline percentiles
+    if review_type == "bootstrap":
+        try:
+            from backtest_engine import run_backtest, extract_stress_test
+            cfg_copy = _copy.deepcopy(cfg)
+            if balances and review_date:
+                apply_review_balances_to_config(cfg_copy, balances, review_date)
+            normalize_config(cfg_copy)
+            bt_result = run_backtest(cfg_copy)
+            stress = extract_stress_test(bt_result)
+            pct = stress.get("percentile_trajectories", {})
+            reviews_data["baseline"] = {
+                "computed_at": review_date,
+                "start_date": review_date,
+                "strategy": cfg.get("drawdown_strategy", "fixed_target"),
+                "ages": stress.get("ages", []),
+                "capital_percentiles": {
+                    k: [pt["total_capital"] for pt in v]
+                    for k, v in pct.items()
+                },
+                "income_percentiles": {
+                    k: [pt["net_income"] for pt in v]
+                    for k, v in pct.items()
+                },
+            }
+        except Exception as e:
+            # Baseline is nice-to-have; don't block the save
+            import traceback
+            traceback.print_exc()
+
+    reviews_data["reviews"].append(review_record)
+    save_reviews(reviews_data)
+
+    # Sync balances to config_active.json
+    if balances and review_date:
+        apply_review_balances_to_config(cfg, balances, review_date)
+        save_session_config(cfg)
+
+    return jsonify({"ok": True, "review_count": len(reviews_data["reviews"])})
+
+
+@app.route("/api/review/reset", methods=["POST"])
+@login_required
+def api_review_reset():
+    """Reset all review data and restore config from pre-review backup."""
+    result = reset_review_data()
+    if result["config_restored"] or result["reviews_deleted"]:
+        flash("Review data reset. Config restored to pre-review state.", "info")
+    else:
+        flash("No review data to reset.", "warning")
+    return jsonify(result)
+
 
 # ------------------------------------------------------------------ #
 #  How It Works

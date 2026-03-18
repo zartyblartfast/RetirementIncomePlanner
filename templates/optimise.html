@@ -3,7 +3,7 @@
 {% block content %}
 
 <h2 class="mb-3"><i class="bi bi-lightning"></i> Optimiser Results</h2>
-<p class="text-muted">Four key questions answered using your current settings.</p>
+<p class="text-muted">Five key questions answered using your current settings. Results load progressively.</p>
 
 <div class="row g-4">
 
@@ -11,72 +11,13 @@
 <div class="col-lg-6">
     <div class="card h-100">
         <div class="card-header bg-primary text-white"><i class="bi bi-sort-down"></i> Q1: Best Drawdown Order</div>
-        <div class="card-body">
+        <div class="card-body" id="q1-body">
             <p class="text-muted">Which withdrawal sequence maximises remaining capital <strong>while meeting your income target every year</strong>?</p>
-            {% set q1 = results.best_drawdown %}
-            {% if q1.ranked %}
-            <table class="table table-sm table-striped">
-                <thead>
-                    <tr><th>#</th><th>Strategy</th><th>Sustainable?</th><th>Remaining Capital</th><th>Tax Paid</th></tr>
-                </thead>
-                <tbody>
-                    {% for s in q1.ranked %}
-                    <tr class="{% if loop.first %}table-success{% elif not s.sustainable %}table-light text-muted{% endif %}">
-                        <td>{{ loop.index }}</td>
-                        <td>{{ s.strategy_name }}</td>
-                        <td>
-                            {% if s.sustainable %}
-                                <span class="text-success"><i class="bi bi-check-circle-fill"></i> Yes</span>
-                            {% else %}
-                                <span class="text-danger"><i class="bi bi-x-circle-fill"></i> No (age {{ s.first_shortfall_age }})</span>
-                            {% endif %}
-                        </td>
-                        <td>&pound;{{ "{:,.0f}".format(s.remaining_capital) }}</td>
-                        <td>&pound;{{ "{:,.0f}".format(s.total_tax) }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% if q1.best %}
-            <div class="alert alert-success mb-3 d-flex justify-content-between align-items-center">
-                <div>
-                    <strong><i class="bi bi-trophy"></i> Best:</strong> {{ q1.best.strategy_name }}<br>
-                    Remaining: &pound;{{ "{:,.0f}".format(q1.best.remaining_capital) }}
-                    {% if not q1.best.sustainable %}
-                    <br><span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Note: No strategy is fully sustainable at this income level.</span>
-                    {% endif %}
-                </div>
-                {% if q1.best.priority != config.withdrawal_priority %}
-                <form method="post" action="{{ url_for('apply_priority') }}" class="ms-3">
-                    <input type="hidden" name="priority_order" value="{{ q1.best.priority | join(', ') }}">
-                    <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-check2-circle"></i> Apply this order</button>
-                </form>
-                {% else %}
-                <span class="badge bg-success ms-3"><i class="bi bi-check-lg"></i> Active</span>
-                {% endif %}
+            <div class="text-center py-4" id="q1-spinner">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="text-muted mt-2 mb-0">Computing permutations&hellip;</p>
             </div>
-            {% endif %}
-
-            <!-- Q1 Narrative -->
-            {% if q1.narrative %}
-            <div class="card bg-light border-0 mb-0">
-                <div class="card-body py-2 px-3">
-                    <p class="mb-1"><i class="bi bi-chat-left-text text-primary"></i> {{ q1.narrative.summary }}</p>
-                    <div class="mt-1">
-                        <a class="small text-muted" data-bs-toggle="collapse" href="#q1-advisor" role="button" aria-expanded="false">
-                            <i class="bi bi-mortarboard"></i> Advisor detail &#9662;
-                        </a>
-                        <div class="collapse mt-2" id="q1-advisor">
-                            <div class="small text-muted mb-0">{{ q1.narrative.advisor|safe }}</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-
-            {% else %}
-            <p class="text-muted">No drawable sources configured.</p>
-            {% endif %}
+            <div id="q1-result" style="display:none;"></div>
         </div>
     </div>
 </div>
@@ -85,39 +26,13 @@
 <div class="col-lg-6">
     <div class="card h-100">
         <div class="card-header bg-success text-white"><i class="bi bi-cash-stack"></i> Q2: Maximum Sustainable Income</div>
-        <div class="card-body">
+        <div class="card-body" id="q2-body">
             <p class="text-muted">What is the highest annual income that remains sustainable to age {{ config.personal.end_age }}?</p>
-            {% set q2 = results.max_income %}
-            <div class="row text-center">
-                <div class="col-6">
-                    <h6 class="text-muted">Current Target</h6>
-                    <h3>&pound;{{ "{:,.0f}".format(q2.current_income) }}</h3>
-                </div>
-                <div class="col-6">
-                    <h6 class="text-muted">Maximum Sustainable</h6>
-                    <h3 class="text-success">&pound;{{ "{:,.0f}".format(q2.max_income) }}</h3>
-                </div>
+            <div class="text-center py-4" id="q2-spinner">
+                <div class="spinner-border text-success" role="status"></div>
+                <p class="text-muted mt-2 mb-0">Binary searching income ceiling&hellip;</p>
             </div>
-            <div class="text-center mt-3 mb-3">
-                <span class="badge bg-success fs-6">Buffer: &pound;{{ "{:,.0f}".format(q2.headroom_amount) }} (+{{ "{:.1f}".format(q2.headroom_pct) }}%)</span>
-            </div>
-
-            <!-- Q2 Narrative -->
-            {% if q2.narrative %}
-            <div class="card bg-light border-0 mb-0">
-                <div class="card-body py-2 px-3">
-                    <p class="mb-1"><i class="bi bi-chat-left-text text-success"></i> {{ q2.narrative.summary }}</p>
-                    <div class="mt-1">
-                        <a class="small text-muted" data-bs-toggle="collapse" href="#q2-advisor" role="button" aria-expanded="false">
-                            <i class="bi bi-mortarboard"></i> Advisor detail &#9662;
-                        </a>
-                        <div class="collapse mt-2" id="q2-advisor">
-                            <div class="small text-muted mb-0">{{ q2.narrative.advisor|safe }}</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
+            <div id="q2-result" style="display:none;"></div>
         </div>
     </div>
 </div>
@@ -126,39 +41,13 @@
 <div class="col-lg-6">
     <div class="card h-100">
         <div class="card-header bg-info text-white"><i class="bi bi-hourglass-split"></i> Q3: Longevity Headroom</div>
-        <div class="card-body">
+        <div class="card-body" id="q3-body">
             <p class="text-muted">How long can your target income last?</p>
-            {% set q3 = results.max_age %}
-            <div class="row text-center">
-                <div class="col-6">
-                    <h6 class="text-muted">Current Plan End</h6>
-                    <h3>Age {{ q3.current_end_age }}</h3>
-                </div>
-                <div class="col-6">
-                    <h6 class="text-muted">Maximum Age</h6>
-                    <h3 class="text-info">Age {{ q3.max_age }}</h3>
-                </div>
+            <div class="text-center py-4" id="q3-spinner">
+                <div class="spinner-border text-info" role="status"></div>
+                <p class="text-muted mt-2 mb-0">Searching maximum age&hellip;</p>
             </div>
-            <div class="text-center mt-3 mb-3">
-                <span class="badge bg-info fs-6">+{{ q3.extra_years }} extra years of headroom</span>
-            </div>
-
-            <!-- Q3 Narrative -->
-            {% if q3.narrative %}
-            <div class="card bg-light border-0 mb-0">
-                <div class="card-body py-2 px-3">
-                    <p class="mb-1"><i class="bi bi-chat-left-text text-info"></i> {{ q3.narrative.summary }}</p>
-                    <div class="mt-1">
-                        <a class="small text-muted" data-bs-toggle="collapse" href="#q3-advisor" role="button" aria-expanded="false">
-                            <i class="bi bi-mortarboard"></i> Advisor detail &#9662;
-                        </a>
-                        <div class="collapse mt-2" id="q3-advisor">
-                            <div class="small text-muted mb-0">{{ q3.narrative.advisor|safe }}</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
+            <div id="q3-result" style="display:none;"></div>
         </div>
     </div>
 </div>
@@ -167,50 +56,13 @@
 <div class="col-lg-6">
     <div class="card h-100">
         <div class="card-header bg-warning text-dark"><i class="bi bi-receipt-cutoff"></i> Q4: Tax-Efficient Drawdown</div>
-        <div class="card-body">
+        <div class="card-body" id="q4-body">
             <p class="text-muted">Which withdrawal order minimises lifetime tax?</p>
-            {% set q4 = results.tax_efficient %}
-            <table class="table table-sm table-striped">
-                <thead>
-                    <tr><th>#</th><th>Strategy</th><th>Total Tax</th><th>Saving</th></tr>
-                </thead>
-                <tbody>
-                    {% for s in q4.ranked[:5] %}
-                    <tr class="{% if loop.first %}table-success{% endif %}">
-                        <td>{{ loop.index }}</td>
-                        <td>{{ s.name }}</td>
-                        <td>&pound;{{ "{:,.0f}".format(s.total_tax) }}</td>
-                        <td>{% if s.tax_saving_vs_current > 0 %}<span class="text-success">&pound;{{ "{:,.0f}".format(s.tax_saving_vs_current) }}</span>{% else %}&mdash;{% endif %}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% if q4.ranked %}
-            <div class="alert alert-warning mb-3">
-                <strong><i class="bi bi-trophy"></i> Most tax-efficient:</strong> {{ q4.ranked[0].name }}<br>
-                Total tax: &pound;{{ "{:,.0f}".format(q4.ranked[0].total_tax) }}
-                {% if q4.ranked[0].tax_saving_vs_current > 0 %}
-                &mdash; saves &pound;{{ "{:,.0f}".format(q4.ranked[0].tax_saving_vs_current) }}
-                {% endif %}
+            <div class="text-center py-4" id="q4-spinner">
+                <div class="spinner-border text-warning" role="status"></div>
+                <p class="text-muted mt-2 mb-0">Comparing tax strategies&hellip;</p>
             </div>
-            {% endif %}
-
-            <!-- Q4 Narrative -->
-            {% if q4.narrative %}
-            <div class="card bg-light border-0 mb-0">
-                <div class="card-body py-2 px-3">
-                    <p class="mb-1"><i class="bi bi-chat-left-text text-warning"></i> {{ q4.narrative.summary }}</p>
-                    <div class="mt-1">
-                        <a class="small text-muted" data-bs-toggle="collapse" href="#q4-advisor" role="button" aria-expanded="false">
-                            <i class="bi bi-mortarboard"></i> Advisor detail &#9662;
-                        </a>
-                        <div class="collapse mt-2" id="q4-advisor">
-                            <div class="small text-muted mb-0">{{ q4.narrative.advisor|safe }}</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
+            <div id="q4-result" style="display:none;"></div>
         </div>
     </div>
 </div>
@@ -219,46 +71,158 @@
 <div class="col-12">
     <div class="card h-100">
         <div class="card-header bg-dark text-white"><i class="bi bi-graph-up-arrow"></i> Q5: Income Sweep — Best Strategy at Each Income Level</div>
-        <div class="card-body">
-            <p class="text-muted">For each target income, the optimal drawdown order is automatically determined (end age fixed at {{ results.income_sweep.end_age }}).</p>
-            {% set q5 = results.income_sweep %}
-            {% if q5.rows %}
-            <div class="table-responsive">
-            <table class="table table-sm table-striped table-hover">
-                <thead class="table-dark">
-                    <tr>
-                        <th>Target Income</th>
-                        <th>Best Drawdown Order</th>
-                        <th>Sustainable?</th>
-                        <th>Capital at {{ q5.end_age }}</th>
-                        <th>Total Tax</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in q5.rows %}
-                    <tr class="{% if row.is_current %}table-primary fw-bold{% elif not row.sustainable %}table-light text-muted{% endif %}">
-                        <td>&pound;{{ "{:,.0f}".format(row.income) }}{% if row.is_current %} <span class="badge bg-primary">Current</span>{% endif %}</td>
-                        <td class="small">{{ row.best_order_label }}</td>
-                        <td>
-                            {% if row.sustainable %}
-                                <span class="text-success"><i class="bi bi-check-circle-fill"></i> Yes</span>
-                            {% else %}
-                                <span class="text-danger"><i class="bi bi-x-circle-fill"></i> No (age {{ row.first_shortfall_age }})</span>
-                            {% endif %}
-                        </td>
-                        <td>&pound;{{ "{:,.0f}".format(row.remaining_capital) }}</td>
-                        <td>&pound;{{ "{:,.0f}".format(row.total_tax) }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="card-body" id="q5-body">
+            <p class="text-muted">For each target income, the optimal drawdown order is automatically determined.</p>
+            <div class="text-center py-4" id="q5-spinner">
+                <div class="spinner-border text-secondary" role="status"></div>
+                <p class="text-muted mt-2 mb-0">Waiting for Q2 result&hellip;</p>
             </div>
-            {% else %}
-            <p class="text-muted">No drawable sources configured.</p>
-            {% endif %}
+            <div id="q5-result" style="display:none;"></div>
         </div>
     </div>
 </div>
 
 </div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const currentPriority = {{ config.withdrawal_priority | tojson }};
+const endAge = {{ config.personal.end_age }};
+
+function fmt(n) { return '£' + Math.round(n).toLocaleString('en-GB'); }
+
+function sustainBadge(s) {
+    if (s.sustainable) return '<span class="text-success"><i class="bi bi-check-circle-fill"></i> Yes</span>';
+    return '<span class="text-danger"><i class="bi bi-x-circle-fill"></i> No (age ' + s.first_shortfall_age + ')</span>';
+}
+
+function narrativeHTML(n, colour, id) {
+    if (!n) return '';
+    return `<div class="card bg-light border-0 mb-0">
+        <div class="card-body py-2 px-3">
+            <p class="mb-1"><i class="bi bi-chat-left-text text-${colour}"></i> ${n.summary}</p>
+            <div class="mt-1">
+                <a class="small text-muted" data-bs-toggle="collapse" href="#${id}" role="button" aria-expanded="false">
+                    <i class="bi bi-mortarboard"></i> Advisor detail &#9662;
+                </a>
+                <div class="collapse mt-2" id="${id}">
+                    <div class="small text-muted mb-0">${n.advisor}</div>
+                </div>
+            </div>
+        </div>
+    </div>`;
+}
+
+function showResult(id) {
+    document.getElementById(id + '-spinner').style.display = 'none';
+    document.getElementById(id + '-result').style.display = 'block';
+}
+
+function showError(id, msg) {
+    document.getElementById(id + '-spinner').innerHTML =
+        '<p class="text-danger"><i class="bi bi-exclamation-triangle"></i> ' + msg + '</p>';
+}
+
+// ---- Q1 ----
+fetch('/api/optimise/q1').then(r => r.json()).then(q1 => {
+    let html = '';
+    if (q1.ranked && q1.ranked.length) {
+        html += '<table class="table table-sm table-striped"><thead><tr><th>#</th><th>Strategy</th><th>Sustainable?</th><th>Remaining Capital</th><th>Tax Paid</th></tr></thead><tbody>';
+        q1.ranked.forEach((s, i) => {
+            let cls = i === 0 ? 'table-success' : (!s.sustainable ? 'table-light text-muted' : '');
+            html += `<tr class="${cls}"><td>${i+1}</td><td>${s.strategy_name}</td><td>${sustainBadge(s)}</td><td>${fmt(s.remaining_capital)}</td><td>${fmt(s.total_tax)}</td></tr>`;
+        });
+        html += '</tbody></table>';
+        if (q1.best) {
+            let samePriority = JSON.stringify(q1.best.priority) === JSON.stringify(currentPriority);
+            html += '<div class="alert alert-success mb-3 d-flex justify-content-between align-items-center"><div>';
+            html += '<strong><i class="bi bi-trophy"></i> Best:</strong> ' + q1.best.strategy_name + '<br>Remaining: ' + fmt(q1.best.remaining_capital);
+            if (!q1.best.sustainable) html += '<br><span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Note: No strategy is fully sustainable at this income level.</span>';
+            html += '</div>';
+            if (!samePriority) {
+                html += `<form method="post" action="/apply_priority" class="ms-3"><input type="hidden" name="priority_order" value="${q1.best.priority.join(', ')}"><button type="submit" class="btn btn-success btn-sm"><i class="bi bi-check2-circle"></i> Apply this order</button></form>`;
+            } else {
+                html += '<span class="badge bg-success ms-3"><i class="bi bi-check-lg"></i> Active</span>';
+            }
+            html += '</div>';
+        }
+        html += narrativeHTML(q1.narrative, 'primary', 'q1-advisor');
+    } else {
+        html = '<p class="text-muted">No drawable sources configured.</p>';
+    }
+    document.getElementById('q1-result').innerHTML = html;
+    showResult('q1');
+}).catch(() => showError('q1', 'Failed to load Q1'));
+
+// ---- Q2 (also triggers Q5) ----
+fetch('/api/optimise/q2').then(r => r.json()).then(q2 => {
+    let html = '<div class="row text-center"><div class="col-6"><h6 class="text-muted">Current Target</h6><h3>' + fmt(q2.current_income) + '</h3></div>';
+    html += '<div class="col-6"><h6 class="text-muted">Maximum Sustainable</h6><h3 class="text-success">' + fmt(q2.max_income) + '</h3></div></div>';
+    html += '<div class="text-center mt-3 mb-3"><span class="badge bg-success fs-6">Buffer: ' + fmt(q2.headroom_amount) + ' (+' + q2.headroom_pct.toFixed(1) + '%)</span></div>';
+    html += narrativeHTML(q2.narrative, 'success', 'q2-advisor');
+    document.getElementById('q2-result').innerHTML = html;
+    showResult('q2');
+
+    // Now trigger Q5 with max_income
+    if (q2.portfolio_driven) {
+        document.getElementById('q5-result').innerHTML =
+            '<div class="alert alert-info mb-0"><i class="bi bi-info-circle"></i> Income sweep does not apply — your current strategy derives income from portfolio value, not a fixed target.</div>';
+        showResult('q5');
+    } else {
+        document.getElementById('q5-spinner').querySelector('p').textContent = 'Sweeping income levels\u2026';
+        fetch('/api/optimise/q5?max_income=' + q2.max_income).then(r => r.json()).then(q5 => {
+            let h = '';
+            if (q5.portfolio_driven) {
+                h = '<div class="alert alert-info mb-0"><i class="bi bi-info-circle"></i> Income sweep does not apply — your current strategy derives income from portfolio value, not a fixed target.</div>';
+            } else if (q5.rows && q5.rows.length) {
+                h += '<div class="table-responsive"><table class="table table-sm table-striped table-hover"><thead class="table-dark"><tr>';
+                h += '<th>Target Income</th><th>Best Drawdown Order</th><th>Sustainable?</th><th>Capital at ' + q5.end_age + '</th><th>Total Tax</th></tr></thead><tbody>';
+                q5.rows.forEach(row => {
+                    let cls = row.is_current ? 'table-primary fw-bold' : (!row.sustainable ? 'table-light text-muted' : '');
+                    h += `<tr class="${cls}"><td>${fmt(row.income)}${row.is_current ? ' <span class="badge bg-primary">Current</span>' : ''}</td>`;
+                    h += `<td class="small">${row.best_order_label}</td><td>${sustainBadge(row)}</td>`;
+                    h += `<td>${fmt(row.remaining_capital)}</td><td>${fmt(row.total_tax)}</td></tr>`;
+                });
+                h += '</tbody></table></div>';
+            } else {
+                h = '<p class="text-muted">No drawable sources configured.</p>';
+            }
+            document.getElementById('q5-result').innerHTML = h;
+            showResult('q5');
+        }).catch(() => showError('q5', 'Failed to load Q5'));
+    }
+}).catch(() => { showError('q2', 'Failed to load Q2'); showError('q5', 'Q5 requires Q2 — failed'); });
+
+// ---- Q3 ----
+fetch('/api/optimise/q3').then(r => r.json()).then(q3 => {
+    let html = '<div class="row text-center"><div class="col-6"><h6 class="text-muted">Current Plan End</h6><h3>Age ' + q3.current_end_age + '</h3></div>';
+    html += '<div class="col-6"><h6 class="text-muted">Maximum Age</h6><h3 class="text-info">Age ' + q3.max_age + '</h3></div></div>';
+    html += '<div class="text-center mt-3 mb-3"><span class="badge bg-info fs-6">+' + q3.extra_years + ' extra years of headroom</span></div>';
+    html += narrativeHTML(q3.narrative, 'info', 'q3-advisor');
+    document.getElementById('q3-result').innerHTML = html;
+    showResult('q3');
+}).catch(() => showError('q3', 'Failed to load Q3'));
+
+// ---- Q4 ----
+fetch('/api/optimise/q4').then(r => r.json()).then(q4 => {
+    let html = '';
+    if (q4.ranked && q4.ranked.length) {
+        html += '<table class="table table-sm table-striped"><thead><tr><th>#</th><th>Strategy</th><th>Total Tax</th><th>Saving</th></tr></thead><tbody>';
+        q4.ranked.slice(0, 5).forEach((s, i) => {
+            let cls = i === 0 ? 'table-success' : '';
+            let saving = s.tax_saving_vs_current > 0 ? '<span class="text-success">' + fmt(s.tax_saving_vs_current) + '</span>' : '&mdash;';
+            html += `<tr class="${cls}"><td>${i+1}</td><td>${s.name}</td><td>${fmt(s.total_tax)}</td><td>${saving}</td></tr>`;
+        });
+        html += '</tbody></table>';
+        html += '<div class="alert alert-warning mb-3"><strong><i class="bi bi-trophy"></i> Most tax-efficient:</strong> ' + q4.ranked[0].name + '<br>Total tax: ' + fmt(q4.ranked[0].total_tax);
+        if (q4.ranked[0].tax_saving_vs_current > 0) html += ' &mdash; saves ' + fmt(q4.ranked[0].tax_saving_vs_current);
+        html += '</div>';
+        html += narrativeHTML(q4.narrative, 'warning', 'q4-advisor');
+    }
+    document.getElementById('q4-result').innerHTML = html;
+    showResult('q4');
+}).catch(() => showError('q4', 'Failed to load Q4'));
+</script>
 {% endblock %}

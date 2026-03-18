@@ -1,6 +1,7 @@
 """Deterministic sanity checks for the monthly-stepping projection engine."""
 import unittest
 from retirement_engine import RetirementEngine, annual_to_monthly_rate
+from drawdown_strategies import normalize_config
 
 
 def make_config(**overrides):
@@ -142,8 +143,8 @@ class TestGuaranteedIncomeCoverTarget(unittest.TestCase):
                 "name": "State Pension",
                 "gross_annual": 15000,
                 "indexation_rate": 0.0,
-                "start_age": 68,
-                "end_age": None,
+                "start_date": "2028-01",
+                "end_date": None,
                 "taxable": True,
                 "values_as_of": "2028-01",
             }],
@@ -290,8 +291,8 @@ class TestGuaranteedStartsMidYear(unittest.TestCase):
                 "name": "Deferred Pension",
                 "gross_annual": 15000,
                 "indexation_rate": 0.0,
-                "start_age": 70,
-                "end_age": None,
+                "start_date": "2030-01",
+                "end_date": None,
                 "taxable": True,
                 "values_as_of": "2028-01",
             }],
@@ -550,8 +551,8 @@ class TestGuaranteedIndexation(unittest.TestCase):
                 "name": "DB Pension",
                 "gross_annual": 10000,
                 "indexation_rate": 0.03,
-                "start_age": 68,
-                "end_age": None,
+                "start_date": "2028-01",
+                "end_date": None,
                 "taxable": True,
                 "values_as_of": "2028-01",
             }],
@@ -709,8 +710,8 @@ class TestARVA_ZeroReturn(unittest.TestCase):
     """ARVA with 0% real return → withdrawal = portfolio / remaining_years.
 
     £100,000 TF ISA, 0% growth, 0% CPI, ARVA with 0% real return.
-    Retirement age 68, end age 78 → 10 remaining years.
-    Year 1 target = £100,000 / 10 = £10,000.
+    Retirement age 68, end age 78 → 11 remaining years (inclusive).
+    Year 1 target = £100,000 / 11 ≈ £9,091.
     """
 
     def setUp(self):
@@ -734,23 +735,23 @@ class TestARVA_ZeroReturn(unittest.TestCase):
 
     def test_year1_target_is_portfolio_div_years(self):
         yr0 = self.result["years"][0]
-        # £100k / 10 years = £10k
-        self.assertAlmostEqual(yr0["target_net"], 10000, delta=50)
+        # £100k / 11 years (inclusive) ≈ £9,091
+        self.assertAlmostEqual(yr0["target_net"], 9091, delta=50)
 
     def test_year2_target_recalculates(self):
         yr1 = self.result["years"][1]
-        # After withdrawing £10k, portfolio ≈ £90k, 9 remaining years → £10k
-        self.assertAlmostEqual(yr1["target_net"], 10000, delta=50)
+        # After withdrawing £9,091, portfolio ≈ £90,909, 10 remaining → £9,091
+        self.assertAlmostEqual(yr1["target_net"], 9091, delta=50)
 
     def test_sustainable(self):
         self.assertTrue(self.result["summary"]["sustainable"])
 
 
 class TestARVA_PositiveReturn(unittest.TestCase):
-    """ARVA with positive real return uses PMT formula.
+    """ARVA with positive real return uses monthly PMT formula.
 
     £100,000 TF ISA, 5% growth, 0% CPI, ARVA with 5% real return.
-    PMT(0.05, 10, 100000) = 100000 * 0.05 / (1 - 1.05^-10) ≈ £12,950.
+    11 remaining years (inclusive), monthly PMT over 132 months ×12 ≈ £11,772.
     """
 
     def setUp(self):
@@ -776,18 +777,17 @@ class TestARVA_PositiveReturn(unittest.TestCase):
         yr0 = self.result["years"][0]
         # PMT at 5% > simple division (£10k)
         self.assertGreater(yr0["target_net"], 10000)
-        # PMT(0.05, 10, 100000) ≈ £12,950
-        self.assertAlmostEqual(yr0["target_net"], 12950, delta=200)
+        # Monthly PMT(0.004074, 132, 100000) × 12 ≈ £11,772
+        self.assertAlmostEqual(yr0["target_net"], 11772, delta=200)
 
 
 class TestARVA_DecliningYearsIncreasesWithdrawal(unittest.TestCase):
-    """With zero growth and zero return, ARVA withdrawal rate increases as years shrink.
+    """With zero growth and zero return, ARVA withdrawal rate stays flat.
 
-    £50,000 TF ISA, 0% everything. Target end age 73 (5 years).
-    Year 1: £50k / 5 = £10k → balance £40k
-    Year 2: £40k / 4 = £10k → balance £30k
-    Year 3: £30k / 3 = £10k → balance £20k
-    Each year should still be £10k (the declining years offset the declining balance).
+    £50,000 TF ISA, 0% everything. Target end age 73 → 6 remaining years (inclusive).
+    Year 1: £50k / 6 ≈ £8,333 → balance £41,667
+    Year 2: £41,667 / 5 ≈ £8,333 → balance £33,333
+    Each year targets ≈ £8,333 (declining years offset declining balance).
     """
 
     def setUp(self):
@@ -817,10 +817,10 @@ class TestARVA_DecliningYearsIncreasesWithdrawal(unittest.TestCase):
         self.result = RetirementEngine(self.cfg).run_projection()
 
     def test_withdrawal_years_same_target(self):
-        # Ages 68-72 (5 years) should all target £10k.
-        # Age 73 has near-zero target because portfolio is depleted by then.
+        # Ages 68-72 (5 years) should all target ≈ £8,333.
+        # Age 73 has a small target from the remaining capital.
         for yr in self.result["years"][:5]:
-            self.assertAlmostEqual(yr["target_net"], 10000, delta=50)
+            self.assertAlmostEqual(yr["target_net"], 8333, delta=50)
 
     def test_sustainable(self):
         self.assertTrue(self.result["summary"]["sustainable"])
@@ -933,6 +933,72 @@ class TestARVA_BackwardCompat(unittest.TestCase):
         # Should behave exactly like fixed_target: £12k/yr from £30k
         yr0 = self.result["years"][0]
         self.assertAlmostEqual(yr0["net_income_achieved"], 12000, delta=50)
+
+
+class TestInitialStrategyState_None(unittest.TestCase):
+    """Passing initial_strategy_state=None should be identical to default."""
+
+    def setUp(self):
+        self.cfg = make_config(
+            target_income={"net_annual": 12000, "cpi_rate": 0.0},
+            tax_free_accounts=[{
+                "name": "ISA",
+                "starting_balance": 100000,
+                "growth_rate": 0.0,
+                "allocation": {"mode": "manual", "manual_override": True},
+                "values_as_of": "2028-01",
+            }],
+            withdrawal_priority=["ISA"],
+        )
+        self.result_default = RetirementEngine(self.cfg).run_projection()
+        self.result_none = RetirementEngine(self.cfg).run_projection(initial_strategy_state=None)
+
+    def test_identical_results(self):
+        yr0_d = self.result_default["years"][0]
+        yr0_n = self.result_none["years"][0]
+        self.assertAlmostEqual(yr0_d["net_income_achieved"], yr0_n["net_income_achieved"], delta=0.01)
+        self.assertAlmostEqual(yr0_d["total_capital"], yr0_n["total_capital"], delta=0.01)
+
+
+class TestInitialStrategyState_ARVAGuardrails(unittest.TestCase):
+    """ARVA+Guardrails with seeded prev_withdrawal should clamp Year 1."""
+
+    def setUp(self):
+        self.cfg = make_config(
+            target_income={"net_annual": 12000, "cpi_rate": 0.0},
+            tax_free_accounts=[{
+                "name": "ISA",
+                "starting_balance": 100000,
+                "growth_rate": 0.0,
+                "allocation": {"mode": "manual", "manual_override": True},
+                "values_as_of": "2028-01",
+            }],
+            withdrawal_priority=["ISA"],
+        )
+        self.cfg["drawdown_strategy"] = "arva_guardrails"
+        self.cfg["drawdown_strategy_params"] = {
+            "assumed_real_return_pct": 0.0,
+            "target_end_age": 92,
+            "max_annual_increase_pct": 10.0,
+            "max_annual_decrease_pct": 10.0,
+        }
+        normalize_config(self.cfg)
+
+    def test_unseeded_first_year(self):
+        """Without seeding, ARVA+G Year 1 has no clamping (first year)."""
+        result = RetirementEngine(self.cfg).run_projection()
+        yr0 = result["years"][0]
+        # ARVA with 0% return on 100k over 25 years (inclusive) = 100k/25 = 4000
+        self.assertAlmostEqual(yr0["target_net"], 4000, delta=200)
+
+    def test_seeded_clamps_year1(self):
+        """With prev_withdrawal=8000, ARVA+G should clamp Year 1 within ±10% of 8000."""
+        state = {"prev_withdrawal": 8000}
+        result = RetirementEngine(self.cfg).run_projection(initial_strategy_state=state)
+        yr0 = result["years"][0]
+        # Raw ARVA = ~4000, but clamped to floor of 8000*0.9 = 7200
+        self.assertGreaterEqual(yr0["target_net"], 7200 - 50)
+        self.assertLessEqual(yr0["target_net"], 8000 + 50)
 
 
 if __name__ == "__main__":

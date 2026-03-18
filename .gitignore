@@ -16,6 +16,8 @@ scenarios/
 # Session/config overrides (user data — must not be overwritten by deploy)
 config_live.json
 config_active.json
+config_active.json.review_bak
+reviews.json
 
 # Backups
 *.bak

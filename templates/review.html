@@ -1,0 +1,723 @@
+{% extends "base.html" %}
+{% block title %}Review — Retirement Income Planner{% endblock %}
+
+{% block content %}
+<div class="row">
+<div class="col-lg-10 mx-auto">
+
+<!-- ============================================================ -->
+<!--  STATE A: Pre-Retirement                                     -->
+<!-- ============================================================ -->
+{% if review_state.state == 'pre_retirement' %}
+<div class="card border-info mb-4">
+    <div class="card-header bg-info text-white">
+        <h5 class="mb-0"><i class="bi bi-clipboard-check"></i> Review</h5>
+    </div>
+    <div class="card-body text-center py-5">
+        <div class="display-1 mb-3">&#9203;</div>
+        <h4>Retirement date: {{ review_state.retirement_date_display }}</h4>
+        <p class="text-muted fs-5">{{ review_state.countdown_text }} away</p>
+        <hr class="w-50 mx-auto">
+        <p class="text-muted">
+            Your first income review will be due at retirement.<br>
+            In the meantime, use <a href="{{ url_for('dashboard') }}">Dashboard</a>
+            and <a href="{{ url_for('compare') }}">What If</a> to plan.
+        </p>
+    </div>
+</div>
+
+<!-- ============================================================ -->
+<!--  STATE B: Bootstrap Due                                      -->
+<!-- ============================================================ -->
+{% elif review_state.state == 'bootstrap_due' %}
+<div class="card border-success mb-4">
+    <div class="card-header bg-success text-white">
+        <h5 class="mb-0"><i class="bi bi-clipboard-check"></i> Set Up Your Drawdown Plan</h5>
+    </div>
+    <div class="card-body">
+        <div class="text-center mb-4">
+            <div class="display-1">&#127881;</div>
+            <h4>Welcome to Retirement!</h4>
+            <p class="text-muted">Set up your drawdown plan to get your first income recommendation.</p>
+        </div>
+
+        <!-- Step 1: Confirm Balances -->
+        <div class="card mb-3" id="bootstrap-step1-card">
+            <div class="card-header bg-light">
+                <strong>Step 1 of 2</strong> &mdash; Confirm Current Balances
+            </div>
+            <div class="card-body" id="bootstrap-step1">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Review date</label>
+                    <input type="date" class="form-control w-auto" id="bs-review-date"
+                           value="{{ review_state.retirement_date }}">
+                </div>
+                <table class="table table-sm">
+                    <thead>
+                        <tr><th>Source</th><th>Type</th><th>Balance (&pound;)</th></tr>
+                    </thead>
+                    <tbody>
+                    {% for name, info in balances.items() %}
+                        <tr>
+                            <td>{{ name }}</td>
+                            <td>{{ 'DC Pot' if info.type == 'dc_pot' else 'Tax-Free' }}</td>
+                            <td>
+                                <input type="number" class="form-control form-control-sm bs-balance"
+                                       data-source="{{ name }}" data-type="{{ info.type }}"
+                                       value="{{ info.balance }}" step="100" style="max-width:180px">
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                <div class="text-end">
+                    <button class="btn btn-primary" id="bs-next-btn">
+                        Next &rarr; Step 2
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Recommendation -->
+        <div class="card mb-3" id="bootstrap-step2-card" style="display:none">
+            <div class="card-header bg-light">
+                <strong>Step 2 of 2</strong> &mdash; Year 1 Recommendation
+            </div>
+            <div class="card-body" id="bootstrap-step2">
+                <div id="bs-loading" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted">Running projection&hellip;</p>
+                </div>
+                <div id="bs-result" style="display:none">
+                    <table class="table table-sm">
+                        <tr><td class="fw-bold">Strategy</td><td id="bs-strategy"></td></tr>
+                        <tr><td class="fw-bold">Recommended Net Income</td><td id="bs-income"></td></tr>
+                        <tr><td class="fw-bold">Monthly</td><td id="bs-monthly" class="text-muted"></td></tr>
+                        <tr><td class="fw-bold">Withdraw From</td><td id="bs-sources"></td></tr>
+                        <tr><td class="fw-bold">Sustainable</td><td id="bs-sustainable"></td></tr>
+                    </table>
+                    <div class="text-end mt-3">
+                        <button class="btn btn-outline-secondary me-2" id="bs-back-btn">
+                            &larr; Back to Step 1
+                        </button>
+                        <button class="btn btn-success" id="bs-save-btn">
+                            <i class="bi bi-check-circle"></i> Save &amp; Complete Setup
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- ============================================================ -->
+<!--  STATE C: Between Reviews                                    -->
+<!-- ============================================================ -->
+{% elif review_state.state == 'between_reviews' %}
+<div class="card border-primary mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-clipboard-check"></i> Annual Income Review</h5>
+    </div>
+    <div class="card-body">
+        <!-- Countdown banner -->
+        <div class="alert alert-info d-flex align-items-center">
+            <span class="fs-3 me-3">&#128197;</span>
+            <div>
+                <strong>Next review due: {{ review_state.next_review_date_display }}</strong><br>
+                <span class="text-muted">{{ review_state.days_until_review }} days remaining</span>
+                &mdash; Last review: {{ review_state.last_review.review_date }} (age {{ review_state.last_review.review_age }})
+            </div>
+        </div>
+
+        <!-- Current Year Summary -->
+        {% if review_state.last_review.recommendation %}
+        {% set rec = review_state.last_review.recommendation %}
+        <div class="card mb-3">
+            <div class="card-header bg-light"><strong>Current Year Summary</strong></div>
+            <div class="card-body">
+                <table class="table table-sm mb-0">
+                    <tr><td class="fw-bold">Strategy</td><td>{{ strategy_name }}</td></tr>
+                    <tr><td class="fw-bold">Recommended Income</td><td>&pound;{{ '{:,.0f}'.format(rec.total_net_income) }} net</td></tr>
+                    <tr>
+                        <td class="fw-bold">Withdraw From</td>
+                        <td>
+                            {% for w in rec.withdrawal_plan %}
+                                {{ w.source }}: &pound;{{ '{:,.0f}'.format(w.net_amount) }}{{ ', ' if not loop.last }}
+                            {% endfor %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="fw-bold">Sustainable</td>
+                        <td>
+                            {% if rec.sustainable %}
+                                <span class="text-success">&#10003; to age {{ rec.end_age }}</span>
+                            {% else %}
+                                <span class="text-danger">&#10007; Shortfall at age {{ rec.first_shortfall_age }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Review History -->
+        {% if reviews_data.reviews|length > 0 %}
+        <div class="card mb-3">
+            <div class="card-header bg-light"><strong>Review History</strong></div>
+            <div class="card-body p-0">
+                <table class="table table-sm table-striped mb-0">
+                    <thead>
+                        <tr>
+                            <th>Date</th><th>Age</th><th>Type</th>
+                            <th>Total Balances</th><th>Actual Drawn</th><th>Recommended</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for r in reviews_data.reviews|reverse %}
+                        {% set total_bal = namespace(val=0) %}
+                        {% for name, b in r.balances.items() %}
+                            {% set total_bal.val = total_bal.val + b.balance %}
+                        {% endfor %}
+                        {% set total_drawn = namespace(val=0) %}
+                        {% if r.actual_drawdown %}
+                            {% for d in r.actual_drawdown %}
+                                {% set total_drawn.val = total_drawn.val + d.net_amount %}
+                            {% endfor %}
+                        {% endif %}
+                        <tr>
+                            <td>{{ r.review_date }}</td>
+                            <td>{{ r.review_age }}</td>
+                            <td>{{ 'Bootstrap' if r.review_type == 'bootstrap' else 'Annual' }}</td>
+                            <td>&pound;{{ '{:,.0f}'.format(total_bal.val) }}</td>
+                            <td>{{ '&pound;{:,.0f}'.format(total_drawn.val) if r.actual_drawdown else '&mdash;' }}</td>
+                            <td>&pound;{{ '{:,.0f}'.format(r.recommendation.total_net_income) if r.recommendation else '&mdash;' }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- ============================================================ -->
+<!--  STATE D: Review Due / Overdue                               -->
+<!-- ============================================================ -->
+{% elif review_state.state == 'review_due' %}
+<div class="card border-warning mb-4">
+    <div class="card-header bg-warning text-dark">
+        <h5 class="mb-0"><i class="bi bi-clipboard-check"></i> Annual Income Review</h5>
+    </div>
+    <div class="card-body">
+        <!-- Overdue banner -->
+        <div class="alert alert-warning d-flex align-items-center mb-4">
+            <span class="fs-3 me-3">&#9888;&#65039;</span>
+            <div>
+                <strong>Annual review {% if review_state.overdue_days and review_state.overdue_days > 0 %}overdue{% else %}due now{% endif %}</strong>
+                &mdash; was due {{ review_state.next_review_date_display }}
+                {% if review_state.overdue_days and review_state.overdue_days > 0 %}
+                    <br><span class="text-danger fw-bold">{{ review_state.overdue_days }} days overdue</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Step 1: Last Year's Actual Drawdown -->
+        <div class="card mb-3" id="review-step1-card">
+            <div class="card-header bg-light">
+                <strong>Step 1 of 3</strong> &mdash; Last Year's Actual Drawdown
+            </div>
+            <div class="card-body" id="review-step1">
+                {% if review_state.last_review and review_state.last_review.recommendation %}
+                <p class="text-muted">
+                    We recommended &pound;{{ '{:,.0f}'.format(review_state.last_review.recommendation.total_net_income) }}
+                    net last year. Enter what you actually drew:
+                </p>
+                {% endif %}
+                <table class="table table-sm" id="drawdown-table">
+                    <thead>
+                        <tr><th>Source</th><th>Recommended</th><th>Actually Drawn (&pound;)</th></tr>
+                    </thead>
+                    <tbody>
+                    {% if review_state.last_review and review_state.last_review.recommendation %}
+                        {% for w in review_state.last_review.recommendation.withdrawal_plan %}
+                        <tr class="drawdown-row">
+                            <td>
+                                <select class="form-select form-select-sm dd-source" style="max-width:220px">
+                                    {% for name in balances.keys() %}
+                                    <option value="{{ name }}" {{ 'selected' if name == w.source }}>{{ name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>&pound;{{ '{:,.0f}'.format(w.net_amount) }}</td>
+                            <td>
+                                <input type="number" class="form-control form-control-sm dd-amount"
+                                       value="{{ w.net_amount|round|int }}" step="100" style="max-width:180px">
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        {% for name in balances.keys() %}
+                        <tr class="drawdown-row">
+                            <td>
+                                <select class="form-select form-select-sm dd-source" style="max-width:220px">
+                                    {% for n in balances.keys() %}
+                                    <option value="{{ n }}" {{ 'selected' if n == name }}>{{ n }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>&mdash;</td>
+                            <td>
+                                <input type="number" class="form-control form-control-sm dd-amount"
+                                       value="0" step="100" style="max-width:180px">
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% endif %}
+                    </tbody>
+                </table>
+                <button class="btn btn-outline-secondary btn-sm mb-3" id="add-drawdown-row">
+                    + Add another source
+                </button>
+                <div class="text-end">
+                    <button class="btn btn-primary" id="rv-next1-btn">
+                        Next &rarr; Step 2
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Update Balances -->
+        <div class="card mb-3" id="review-step2-card" style="display:none">
+            <div class="card-header bg-light">
+                <strong>Step 2 of 3</strong> &mdash; Update Balances
+            </div>
+            <div class="card-body" id="review-step2">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Review date</label>
+                    <input type="date" class="form-control w-auto" id="rv-review-date"
+                           value="{{ review_state.next_review_date }}">
+                </div>
+                <table class="table table-sm">
+                    <thead>
+                        <tr><th>Source</th><th>Previous Balance</th><th>Current Balance (&pound;)</th></tr>
+                    </thead>
+                    <tbody>
+                    {% for name, info in balances.items() %}
+                        <tr>
+                            <td>{{ name }}</td>
+                            <td>&pound;{{ '{:,.0f}'.format(info.balance) }}</td>
+                            <td>
+                                <input type="number" class="form-control form-control-sm rv-balance"
+                                       data-source="{{ name }}" data-type="{{ info.type }}"
+                                       value="{{ info.balance }}" step="100" style="max-width:180px">
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                <div class="text-end">
+                    <button class="btn btn-outline-secondary me-2" id="rv-back1-btn">
+                        &larr; Back to Step 1
+                    </button>
+                    <button class="btn btn-primary" id="rv-next2-btn">
+                        Next &rarr; Step 3
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Recommendation -->
+        <div class="card mb-3" id="review-step3-card" style="display:none">
+            <div class="card-header bg-light">
+                <strong>Step 3 of 3</strong> &mdash; Year Ahead Recommendation
+            </div>
+            <div class="card-body" id="review-step3">
+                <div id="rv-loading" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted">Running projection&hellip;</p>
+                </div>
+                <div id="rv-result" style="display:none">
+                    <table class="table table-sm">
+                        <tr><td class="fw-bold">Strategy</td><td id="rv-strategy"></td></tr>
+                        <tr><td class="fw-bold">Recommended Net Income</td><td id="rv-income"></td></tr>
+                        <tr><td class="fw-bold">Monthly</td><td id="rv-monthly" class="text-muted"></td></tr>
+                        <tr><td class="fw-bold">Withdraw From</td><td id="rv-sources"></td></tr>
+                        <tr><td class="fw-bold">Sustainable</td><td id="rv-sustainable"></td></tr>
+                        <tr><td class="fw-bold">vs Last Year</td><td id="rv-delta"></td></tr>
+                    </table>
+                    <div class="text-end mt-3">
+                        <button class="btn btn-outline-secondary me-2" id="rv-back2-btn">
+                            &larr; Back to Step 2
+                        </button>
+                        <button class="btn btn-success" id="rv-save-btn">
+                            <i class="bi bi-check-circle"></i> Save Review &amp; Update Balances
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Review History (also shown in State D) -->
+        {% if reviews_data.reviews|length > 0 %}
+        <div class="card mb-3">
+            <div class="card-header bg-light"><strong>Review History</strong></div>
+            <div class="card-body p-0">
+                <table class="table table-sm table-striped mb-0">
+                    <thead>
+                        <tr>
+                            <th>Date</th><th>Age</th><th>Type</th>
+                            <th>Total Balances</th><th>Actual Drawn</th><th>Recommended</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for r in reviews_data.reviews|reverse %}
+                        {% set total_bal = namespace(val=0) %}
+                        {% for name, b in r.balances.items() %}
+                            {% set total_bal.val = total_bal.val + b.balance %}
+                        {% endfor %}
+                        {% set total_drawn = namespace(val=0) %}
+                        {% if r.actual_drawdown %}
+                            {% for d in r.actual_drawdown %}
+                                {% set total_drawn.val = total_drawn.val + d.net_amount %}
+                            {% endfor %}
+                        {% endif %}
+                        <tr>
+                            <td>{{ r.review_date }}</td>
+                            <td>{{ r.review_age }}</td>
+                            <td>{{ 'Bootstrap' if r.review_type == 'bootstrap' else 'Annual' }}</td>
+                            <td>&pound;{{ '{:,.0f}'.format(total_bal.val) }}</td>
+                            <td>{{ '&pound;{:,.0f}'.format(total_drawn.val) if r.actual_drawdown else '&mdash;' }}</td>
+                            <td>&pound;{{ '{:,.0f}'.format(r.recommendation.total_net_income) if r.recommendation else '&mdash;' }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- ============================================================ -->
+<!--  Reset / Safe Test Controls                                  -->
+<!-- ============================================================ -->
+{% if has_backup or reviews_data.reviews|length > 0 %}
+<div class="card border-secondary mb-4 mt-3">
+    <div class="card-header bg-secondary text-white">
+        <h6 class="mb-0"><i class="bi bi-arrow-counterclockwise"></i> Reset Review Data</h6>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-2">
+            This will delete all review records and restore your Settings
+            (pot balances, values_as_of dates) to their pre-review state.
+            {% if not has_backup %}
+            <br><strong>Note:</strong> No config backup exists &mdash; only reviews.json will be deleted.
+            Settings balances will not be restored.
+            {% endif %}
+        </p>
+        <button class="btn btn-outline-danger btn-sm" id="reset-review-btn">
+            <i class="bi bi-arrow-counterclockwise"></i> Reset All Review Data
+        </button>
+    </div>
+</div>
+{% endif %}
+
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ============================================================
+//  Strategy display names lookup
+// ============================================================
+const STRATEGY_NAMES = {{ strategies|tojson }};
+function strategyDisplayName(sid) {
+    return (STRATEGY_NAMES[sid] && STRATEGY_NAMES[sid].display_name) || sid;
+}
+function fmtMoney(v) {
+    return '\u00A3' + Math.round(v).toLocaleString();
+}
+
+// ============================================================
+//  Shared: collect balances from a set of inputs
+// ============================================================
+function collectBalances(selector) {
+    const balances = {};
+    document.querySelectorAll(selector).forEach(inp => {
+        balances[inp.dataset.source] = {
+            balance: parseFloat(inp.value) || 0,
+            type: inp.dataset.type,
+        };
+    });
+    return balances;
+}
+
+// ============================================================
+//  Shared: display recommendation
+// ============================================================
+function displayRecommendation(rec, prefix) {
+    document.getElementById(prefix + '-strategy').textContent = strategyDisplayName(rec.strategy);
+    document.getElementById(prefix + '-income').textContent = fmtMoney(rec.total_net_income) + ' net';
+    document.getElementById(prefix + '-monthly').textContent = fmtMoney(rec.total_net_income / 12) + '/month';
+    const sources = (rec.withdrawal_plan || [])
+        .filter(w => w.net_amount > 0)
+        .map(w => w.source + ': ' + fmtMoney(w.net_amount))
+        .join(', ');
+    document.getElementById(prefix + '-sources').textContent = sources || 'None';
+    const susEl = document.getElementById(prefix + '-sustainable');
+    if (rec.sustainable) {
+        susEl.innerHTML = '<span class="text-success">\u2713 to age ' + rec.end_age + '</span>';
+    } else {
+        susEl.innerHTML = '<span class="text-danger">\u2717 Shortfall at age ' + (rec.first_shortfall_age || '?') + '</span>';
+    }
+}
+
+// Store the current recommendation for saving
+let _currentRecommendation = null;
+
+// ============================================================
+//  BOOTSTRAP WIZARD (State B)
+// ============================================================
+{% if review_state.state == 'bootstrap_due' %}
+(function() {
+    const nextBtn = document.getElementById('bs-next-btn');
+    const backBtn = document.getElementById('bs-back-btn');
+    const saveBtn = document.getElementById('bs-save-btn');
+
+    nextBtn.addEventListener('click', async () => {
+        // Show Step 2, hide Step 1
+        document.getElementById('bootstrap-step1-card').style.display = 'none';
+        document.getElementById('bootstrap-step2-card').style.display = '';
+        document.getElementById('bs-loading').style.display = '';
+        document.getElementById('bs-result').style.display = 'none';
+
+        const balances = collectBalances('.bs-balance');
+        const reviewDate = document.getElementById('bs-review-date').value;
+
+        try {
+            const resp = await fetch('/api/review/run_projection', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ balances, review_date: reviewDate }),
+            });
+            const data = await resp.json();
+            _currentRecommendation = data.recommendation;
+            displayRecommendation(data.recommendation, 'bs');
+            document.getElementById('bs-loading').style.display = 'none';
+            document.getElementById('bs-result').style.display = '';
+        } catch (err) {
+            document.getElementById('bs-loading').innerHTML =
+                '<div class="alert alert-danger">Error running projection: ' + err.message + '</div>';
+        }
+    });
+
+    backBtn.addEventListener('click', () => {
+        document.getElementById('bootstrap-step2-card').style.display = 'none';
+        document.getElementById('bootstrap-step1-card').style.display = '';
+    });
+
+    saveBtn.addEventListener('click', async () => {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving\u2026';
+
+        const balances = collectBalances('.bs-balance');
+        const reviewDate = document.getElementById('bs-review-date').value;
+
+        try {
+            const resp = await fetch('/api/review/save', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    review_type: 'bootstrap',
+                    review_date: reviewDate,
+                    balances: balances,
+                    actual_drawdown: null,
+                    recommendation: _currentRecommendation,
+                }),
+            });
+            const data = await resp.json();
+            if (data.ok) {
+                window.location.href = '/review';
+            } else {
+                alert('Error saving: ' + (data.error || 'Unknown error'));
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = '<i class="bi bi-check-circle"></i> Save & Complete Setup';
+            }
+        } catch (err) {
+            alert('Error: ' + err.message);
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="bi bi-check-circle"></i> Save & Complete Setup';
+        }
+    });
+})();
+{% endif %}
+
+// ============================================================
+//  ANNUAL REVIEW WIZARD (State D)
+// ============================================================
+{% if review_state.state == 'review_due' %}
+(function() {
+    const next1 = document.getElementById('rv-next1-btn');
+    const next2 = document.getElementById('rv-next2-btn');
+    const back1 = document.getElementById('rv-back1-btn');
+    const back2 = document.getElementById('rv-back2-btn');
+    const saveBtn = document.getElementById('rv-save-btn');
+
+    // Add drawdown row
+    document.getElementById('add-drawdown-row').addEventListener('click', () => {
+        const tbody = document.querySelector('#drawdown-table tbody');
+        const sources = {{ balances.keys()|list|tojson }};
+        const opts = sources.map(s => '<option value="' + s + '">' + s + '</option>').join('');
+        const row = document.createElement('tr');
+        row.className = 'drawdown-row';
+        row.innerHTML = '<td><select class="form-select form-select-sm dd-source" style="max-width:220px">' +
+            opts + '</select></td><td>&mdash;</td>' +
+            '<td><input type="number" class="form-control form-control-sm dd-amount" value="0" step="100" style="max-width:180px"></td>';
+        tbody.appendChild(row);
+    });
+
+    // Collect actual drawdown
+    function collectDrawdown() {
+        const rows = document.querySelectorAll('.drawdown-row');
+        const result = [];
+        rows.forEach(row => {
+            const source = row.querySelector('.dd-source').value;
+            const amount = parseFloat(row.querySelector('.dd-amount').value) || 0;
+            if (amount > 0) {
+                result.push({ source, net_amount: amount });
+            }
+        });
+        return result;
+    }
+
+    // Step 1 -> Step 2
+    next1.addEventListener('click', () => {
+        document.getElementById('review-step1-card').style.display = 'none';
+        document.getElementById('review-step2-card').style.display = '';
+    });
+
+    // Step 2 -> Step 1
+    back1.addEventListener('click', () => {
+        document.getElementById('review-step2-card').style.display = 'none';
+        document.getElementById('review-step1-card').style.display = '';
+    });
+
+    // Step 2 -> Step 3 (run projection)
+    next2.addEventListener('click', async () => {
+        document.getElementById('review-step2-card').style.display = 'none';
+        document.getElementById('review-step3-card').style.display = '';
+        document.getElementById('rv-loading').style.display = '';
+        document.getElementById('rv-result').style.display = 'none';
+
+        const balances = collectBalances('.rv-balance');
+        const reviewDate = document.getElementById('rv-review-date').value;
+        const actualDrawdown = collectDrawdown();
+
+        try {
+            const resp = await fetch('/api/review/run_projection', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ balances, review_date: reviewDate, actual_drawdown: actualDrawdown }),
+            });
+            const data = await resp.json();
+            _currentRecommendation = data.recommendation;
+            displayRecommendation(data.recommendation, 'rv');
+
+            // vs Last Year delta
+            const deltaEl = document.getElementById('rv-delta');
+            {% if review_state.last_review and review_state.last_review.recommendation %}
+            const lastIncome = {{ review_state.last_review.recommendation.total_net_income }};
+            const newIncome = data.recommendation.total_net_income;
+            const diff = newIncome - lastIncome;
+            const pct = lastIncome > 0 ? ((diff / lastIncome) * 100).toFixed(1) : 0;
+            const arrow = diff >= 0 ? '\u25B2' : '\u25BC';
+            const cls = diff >= 0 ? 'text-success' : 'text-danger';
+            deltaEl.innerHTML = '<span class="' + cls + '">' + (diff >= 0 ? '+' : '') +
+                fmtMoney(Math.abs(diff)) + ' (' + (diff >= 0 ? '+' : '') + pct + '%) ' + arrow + '</span>';
+            {% else %}
+            deltaEl.textContent = '\u2014 (first annual review)';
+            {% endif %}
+
+            document.getElementById('rv-loading').style.display = 'none';
+            document.getElementById('rv-result').style.display = '';
+        } catch (err) {
+            document.getElementById('rv-loading').innerHTML =
+                '<div class="alert alert-danger">Error running projection: ' + err.message + '</div>';
+        }
+    });
+
+    // Step 3 -> Step 2
+    back2.addEventListener('click', () => {
+        document.getElementById('review-step3-card').style.display = 'none';
+        document.getElementById('review-step2-card').style.display = '';
+    });
+
+    // Save review
+    saveBtn.addEventListener('click', async () => {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving\u2026';
+
+        const balances = collectBalances('.rv-balance');
+        const reviewDate = document.getElementById('rv-review-date').value;
+        const actualDrawdown = collectDrawdown();
+
+        try {
+            const resp = await fetch('/api/review/save', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    review_type: 'annual',
+                    review_date: reviewDate,
+                    balances: balances,
+                    actual_drawdown: actualDrawdown,
+                    recommendation: _currentRecommendation,
+                }),
+            });
+            const data = await resp.json();
+            if (data.ok) {
+                window.location.href = '/review';
+            } else {
+                alert('Error saving: ' + (data.error || 'Unknown error'));
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = '<i class="bi bi-check-circle"></i> Save Review & Update Balances';
+            }
+        } catch (err) {
+            alert('Error: ' + err.message);
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="bi bi-check-circle"></i> Save Review & Update Balances';
+        }
+    });
+})();
+{% endif %}
+
+// ============================================================
+//  RESET BUTTON (all states)
+// ============================================================
+(function() {
+    const resetBtn = document.getElementById('reset-review-btn');
+    if (!resetBtn) return;
+    resetBtn.addEventListener('click', async () => {
+        if (!confirm('Reset all review data and restore Settings to pre-review state?\n\nThis cannot be undone.')) return;
+        resetBtn.disabled = true;
+        resetBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Resetting\u2026';
+        try {
+            const resp = await fetch('/api/review/reset', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+            });
+            const data = await resp.json();
+            window.location.href = '/review';
+        } catch (err) {
+            alert('Error: ' + err.message);
+            resetBtn.disabled = false;
+            resetBtn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Reset All Review Data';
+        }
+    });
+})();
+</script>
+{% endblock %}

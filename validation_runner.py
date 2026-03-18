@@ -111,7 +111,7 @@ def _scenario_01_zero_growth_depletion():
         "hand_calculation": (
             "Year 1: £12,000 withdrawn → £18,000 remaining. "
             "Year 2: £12,000 withdrawn → £6,000 remaining. "
-            "Year 3: £6,000 at £1,000/mo → depletes after month 6. "
+            "Year 3: Monthly target = £1,000. £6,000 / £1,000 = 6 full months. "
             "Depletion at age 70, month 6."
         ),
         "checks": [
@@ -164,8 +164,8 @@ def _scenario_03_guaranteed_covers_target():
             "name": "Big Pension",
             "gross_annual": 24000,
             "indexation_rate": 0.0,
-            "start_age": 68,
-            "end_age": None,
+            "start_date": "2028-01",
+            "end_date": None,
             "taxable": True,
             "values_as_of": "2028-01",
         }],
@@ -308,8 +308,8 @@ def _scenario_06_baseline_realistic():
             "name": "DB Pension",
             "gross_annual": 12000,
             "indexation_rate": 0.02,
-            "start_age": 68,
-            "end_age": None,
+            "start_date": "2028-01",
+            "end_date": None,
             "taxable": True,
             "values_as_of": "2028-01",
         }],
@@ -357,7 +357,7 @@ def _scenario_06_baseline_realistic():
             _check("Year 0 capital", r["years"][0]["total_capital"], 198617, 500),
             _check("Year 5 capital", r["years"][5]["total_capital"], 188366, 500),
             _check("Remaining capital", s["remaining_capital"], 62922, 500),
-            _check("Total IoM tax", s["total_tax_paid"], 24586, 500),
+            _check("Total IoM tax", s["total_tax_paid"], 24994, 500),
         ],
     }
 
@@ -686,8 +686,8 @@ def _scenario_13_delayed_guaranteed():
             "name": "State Pension",
             "gross_annual": 20000,
             "indexation_rate": 0.0,
-            "start_age": 70,
-            "end_age": None,
+            "start_date": "2030-01",
+            "end_date": None,
             "taxable": True,
             "values_as_of": "2028-01",
         }],

@@ -36,6 +36,11 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'review' %}active{% endif %}" href="{{ url_for('review') }}">
+                            <i class="bi bi-clipboard-check"></i> Review
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == 'optimise' %}active{% endif %}" href="{{ url_for('optimise') }}">
                             <i class="bi bi-lightning"></i> Optimise
                         </a>

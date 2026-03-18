@@ -1,0 +1,1194 @@
+{
+  "metadata": {
+    "generated": "2026-03-16",
+    "start_year": 1900,
+    "description": "Unified annual historical return series for retirement backtesting",
+    "series": {
+      "us_equity": {
+        "description": "S&P 500 total return (price change + dividends)",
+        "source": "Robert Shiller S&P 500 dataset",
+        "coverage": "1900-2026",
+        "includes_dividends": true,
+        "notes": "Monthly data annualised using December values"
+      },
+      "uk_equity_price": {
+        "description": "UK share price return (capital gains only, NO dividends)",
+        "source": "Bank of England Millennium dataset, sheet A31 col 22",
+        "coverage": "1900-2016",
+        "includes_dividends": false,
+        "notes": "Spliced annual index. Dividend yield not available in source data. Historically UK dividend yield was ~3-5%. Total return would be higher."
+      },
+      "us_bonds": {
+        "description": "US long-term bond total return (approximate)",
+        "source": "Derived from Shiller Long Interest Rate",
+        "coverage": "1900-2022",
+        "notes": "Approximated as: yield + 10yr_duration \u00d7 (\u2212\u0394yield)"
+      },
+      "uk_gilts": {
+        "description": "UK gilt total return (approximate)",
+        "source": "Derived from BoE Millennium gilt yields (A31 cols 18/19)",
+        "coverage": "1900-2016",
+        "notes": "Approximated as: yield + 10yr_duration \u00d7 (\u2212\u0394yield). Uses 10yr gilt yield where available, consol yield as fallback."
+      },
+      "cash": {
+        "description": "UK Bank Rate (cash return proxy)",
+        "source": "Bank of England Millennium dataset, sheet A31 col 1",
+        "coverage": "1900-2016",
+        "notes": "Bank Rate used as proxy for short-term cash/money market returns"
+      },
+      "uk_cpi": {
+        "description": "UK CPI annual inflation rate",
+        "source": "BoE Millennium (A47 col 4) to 2016, ONS D7BT from 2017",
+        "coverage": "1900-2026",
+        "notes": "BoE series is 'preferred CPI measure'. ONS extends to present."
+      },
+      "us_cpi": {
+        "description": "US CPI annual inflation rate",
+        "source": "Robert Shiller S&P 500 dataset (Consumer Price Index column)",
+        "coverage": "1900-2022",
+        "notes": "Annual change in monthly CPI level"
+      }
+    },
+    "asset_class_mapping": {
+      "global_equity": {
+        "method": "Weighted blend: 70% us_equity + 30% uk_equity_price",
+        "notes": "UK component understates total return due to missing dividends. US component (S&P 500) includes dividends. US weighting higher because it includes total return."
+      },
+      "diversified_growth": {
+        "method": "Synthetic: 60% global_equity + 40% uk_gilts",
+        "notes": "Approximates a balanced multi-asset fund"
+      },
+      "investment_grade_bonds": {
+        "method": "uk_gilts (primary), us_bonds (fallback)",
+        "notes": "UK gilt returns used where available"
+      },
+      "inflation_linked_bonds": {
+        "method": "uk_gilts - uk_cpi",
+        "notes": "Crude approximation: nominal gilt return minus inflation"
+      },
+      "cash": {
+        "method": "UK Bank Rate (direct)",
+        "notes": "Actual cash returns may differ from policy rate"
+      },
+      "property": {
+        "method": "Synthetic: 70% global_equity + 30% uk_gilts",
+        "notes": "Proxy for REIT-like returns. No direct UK property data in source."
+      }
+    },
+    "limitations": [
+      "UK equity returns are PRICE ONLY (no dividends). Historical UK dividend yield was ~3-5%, so actual total returns were higher than shown.",
+      "Bond returns are approximated from yield changes using 10-year duration assumption. Actual bond returns depend on the specific maturity held.",
+      "BoE Millennium data ends at 2016. 2017+ uses S&P 500 data only for equity/bonds.",
+      "Property returns are synthetic (no direct historical UK property data in sources used).",
+      "All series assume annual rebalancing and ignore transaction costs.",
+      "Historical returns are not indicative of future performance."
+    ]
+  },
+  "annual_returns": {
+    "1900": {
+      "us_equity": 0.19103,
+      "uk_equity_price": 0.0639,
+      "us_bonds": 0.0365,
+      "uk_gilts": 0.006857,
+      "cash": 0.04,
+      "uk_cpi": 0.040583,
+      "us_cpi": -0.036709
+    },
+    "1901": {
+      "us_equity": 0.203785,
+      "uk_equity_price": 0.0173,
+      "us_bonds": 0.024,
+      "uk_gilts": 0.011149,
+      "cash": 0.04,
+      "uk_cpi": -0.003,
+      "us_cpi": 0.049934
+    },
+    "1902": {
+      "us_equity": 0.054088,
+      "uk_equity_price": 0.0266,
+      "us_bonds": 0.0197,
+      "uk_gilts": 0.028423,
+      "cash": 0.04,
+      "uk_cpi": 0.0,
+      "us_cpi": 0.071339
+    },
+    "1903": {
+      "us_equity": -0.140373,
+      "uk_equity_price": -0.0183,
+      "us_bonds": 0.0229,
+      "uk_gilts": 0.015605,
+      "cash": 0.04,
+      "uk_cpi": 0.011033,
+      "us_cpi": -0.054907
+    },
+    "1904": {
+      "us_equity": 0.302892,
+      "uk_equity_price": 0.0743,
+      "us_bonds": 0.0259,
+      "uk_gilts": 0.020545,
+      "cash": 0.03,
+      "uk_cpi": -0.003968,
+      "us_cpi": 0.046972
+    },
+    "1905": {
+      "us_equity": 0.196364,
+      "uk_equity_price": 0.071,
+      "us_bonds": 0.0387,
+      "uk_gilts": 0.033577,
+      "cash": 0.04,
+      "uk_cpi": 0.003984,
+      "us_cpi": 0.0
+    },
+    "1906": {
+      "us_equity": 0.073375,
+      "uk_equity_price": 0.0631,
+      "us_bonds": 0.0123,
+      "uk_gilts": 0.023305,
+      "cash": 0.06,
+      "uk_cpi": -0.000992,
+      "us_cpi": 0.05549
+    },
+    "1907": {
+      "us_equity": -0.287602,
+      "uk_equity_price": -0.0437,
+      "us_bonds": 0.0165,
+      "uk_gilts": 0.014527,
+      "cash": 0.07,
+      "uk_cpi": 0.015889,
+      "us_cpi": -0.021253
+    },
+    "1908": {
+      "us_equity": 0.435312,
+      "uk_equity_price": 0.0449,
+      "us_bonds": 0.0465,
+      "uk_gilts": 0.037391,
+      "cash": 0.025,
+      "uk_cpi": 0.012708,
+      "us_cpi": 0.033143
+    },
+    "1909": {
+      "us_equity": 0.189369,
+      "uk_equity_price": 0.076,
+      "us_bonds": 0.0247,
+      "uk_gilts": 0.020234,
+      "cash": 0.045,
+      "uk_cpi": 0.001931,
+      "us_cpi": 0.105088
+    },
+    "1910": {
+      "us_equity": -0.075728,
+      "uk_equity_price": 0.016,
+      "us_bonds": 0.032,
+      "uk_gilts": 0.019711,
+      "cash": 0.045,
+      "uk_cpi": 0.021195,
+      "us_cpi": -0.076076
+    },
+    "1911": {
+      "us_equity": 0.058564,
+      "uk_equity_price": -0.0061,
+      "us_bonds": 0.0357,
+      "uk_gilts": 0.02448,
+      "cash": 0.04,
+      "uk_cpi": 0.00283,
+      "us_cpi": -0.020585
+    },
+    "1912": {
+      "us_equity": 0.082327,
+      "uk_equity_price": 0.021,
+      "us_bonds": 0.0001,
+      "uk_gilts": 0.01856,
+      "cash": 0.05,
+      "uk_cpi": 0.028222,
+      "us_cpi": 0.073009
+    },
+    "1913": {
+      "us_equity": -0.091684,
+      "uk_equity_price": -0.028,
+      "us_bonds": 0.0671,
+      "uk_gilts": 0.022441,
+      "cash": 0.05,
+      "uk_cpi": 0.006404,
+      "us_cpi": 0.030928
+    },
+    "1914": {
+      "us_equity": -0.033582,
+      "uk_equity_price": 0.013738,
+      "us_bonds": 0.0368,
+      "uk_gilts": 0.028792,
+      "cash": 0.05,
+      "uk_cpi": 0.025455,
+      "us_cpi": 0.01
+    },
+    "1915": {
+      "us_equity": 0.348299,
+      "uk_equity_price": -0.24674,
+      "us_bonds": 0.0583,
+      "uk_gilts": -0.002743,
+      "cash": 0.05,
+      "uk_cpi": 0.125,
+      "us_cpi": 0.019802
+    },
+    "1916": {
+      "us_equity": 0.092827,
+      "uk_equity_price": 0.113182,
+      "us_bonds": 0.0267,
+      "uk_gilts": -0.00727,
+      "cash": 0.06,
+      "uk_cpi": 0.181,
+      "us_cpi": 0.126214
+    },
+    "1917": {
+      "us_equity": -0.235714,
+      "uk_equity_price": 0.083732,
+      "us_bonds": 0.0091,
+      "uk_gilts": 0.01659,
+      "cash": 0.05,
+      "uk_cpi": 0.252,
+      "us_cpi": 0.181034
+    },
+    "1918": {
+      "us_equity": 0.245588,
+      "uk_equity_price": 0.119205,
+      "us_bonds": 0.0484,
+      "uk_gilts": 0.061181,
+      "cash": 0.05,
+      "uk_cpi": 0.22,
+      "us_cpi": 0.20438
+    },
+    "1919": {
+      "us_equity": 0.196203,
+      "uk_equity_price": 0.057199,
+      "us_bonds": 0.0031,
+      "uk_gilts": 0.023437,
+      "cash": 0.06,
+      "uk_cpi": 0.101,
+      "us_cpi": 0.145455
+    },
+    "1920": {
+      "us_equity": -0.179372,
+      "uk_equity_price": -0.293843,
+      "us_bonds": 0.0343,
+      "uk_gilts": -0.026512,
+      "cash": 0.07,
+      "uk_cpi": 0.154,
+      "us_cpi": 0.026455
+    },
+    "1921": {
+      "us_equity": 0.140969,
+      "uk_equity_price": 0.02642,
+      "us_bonds": 0.1218,
+      "uk_gilts": 0.070285,
+      "cash": 0.05,
+      "uk_cpi": -0.086,
+      "us_cpi": -0.108247
+    },
+    "1922": {
+      "us_equity": 0.270862,
+      "uk_equity_price": 0.176,
+      "us_bonds": 0.0457,
+      "uk_gilts": 0.132814,
+      "cash": 0.03,
+      "uk_cpi": -0.14,
+      "us_cpi": -0.023121
+    },
+    "1923": {
+      "us_equity": 0.034169,
+      "uk_equity_price": -0.014456,
+      "us_bonds": 0.0705,
+      "uk_gilts": 0.053458,
+      "cash": 0.04,
+      "uk_cpi": -0.06,
+      "us_cpi": 0.023669
+    },
+    "1924": {
+      "us_equity": 0.252632,
+      "uk_equity_price": 0.094909,
+      "us_bonds": 0.0608,
+      "uk_gilts": 0.035245,
+      "cash": 0.04,
+      "uk_cpi": -0.007,
+      "us_cpi": 0.0
+    },
+    "1925": {
+      "us_equity": 0.285433,
+      "uk_equity_price": 0.044129,
+      "us_bonds": 0.0568,
+      "uk_gilts": 0.037133,
+      "cash": 0.05,
+      "uk_cpi": 0.003,
+      "us_cpi": 0.034682
+    },
+    "1926": {
+      "us_equity": 0.138042,
+      "uk_equity_price": 0.024151,
+      "us_bonds": 0.07,
+      "uk_gilts": 0.035835,
+      "cash": 0.05,
+      "uk_cpi": -0.008,
+      "us_cpi": -0.011173
+    },
+    "1927": {
+      "us_equity": 0.351371,
+      "uk_equity_price": 0.082535,
+      "us_bonds": 0.0377,
+      "uk_gilts": 0.041932,
+      "cash": 0.045,
+      "uk_cpi": -0.024,
+      "us_cpi": -0.022599
+    },
+    "1928": {
+      "us_equity": 0.37457,
+      "uk_equity_price": 0.081007,
+      "us_bonds": 0.0083,
+      "uk_gilts": 0.054847,
+      "cash": 0.045,
+      "uk_cpi": -0.003,
+      "us_cpi": -0.011561
+    },
+    "1929": {
+      "us_equity": -0.033693,
+      "uk_equity_price": -0.073678,
+      "us_bonds": 0.0618,
+      "uk_gilts": 0.015196,
+      "cash": 0.05,
+      "uk_cpi": -0.009,
+      "us_cpi": 0.005848
+    },
+    "1930": {
+      "us_equity": -0.229439,
+      "uk_equity_price": -0.194426,
+      "us_bonds": 0.0312,
+      "uk_gilts": 0.0926,
+      "cash": 0.03,
+      "uk_cpi": -0.028,
+      "us_cpi": -0.063953
+    },
+    "1931": {
+      "us_equity": -0.402966,
+      "uk_equity_price": -0.234599,
+      "us_bonds": 0.0024,
+      "uk_gilts": -0.0109,
+      "cash": 0.06,
+      "uk_cpi": -0.043,
+      "us_cpi": -0.093168
+    },
+    "1932": {
+      "us_equity": -0.132701,
+      "uk_equity_price": 0.056229,
+      "us_bonds": 0.0675,
+      "uk_gilts": 0.1665,
+      "cash": 0.02,
+      "uk_cpi": -0.026,
+      "us_cpi": -0.10274
+    },
+    "1933": {
+      "us_equity": 0.526393,
+      "uk_equity_price": 0.131524,
+      "us_bonds": 0.0534,
+      "uk_gilts": 0.0587,
+      "cash": 0.02,
+      "uk_cpi": -0.021,
+      "us_cpi": 0.007634
+    },
+    "1934": {
+      "us_equity": -0.026078,
+      "uk_equity_price": 0.047048,
+      "us_bonds": 0.0634,
+      "uk_gilts": 0.0665,
+      "cash": 0.02,
+      "uk_cpi": 0.0,
+      "us_cpi": 0.015152
+    },
+    "1935": {
+      "us_equity": 0.458963,
+      "uk_equity_price": 0.05815,
+      "us_bonds": 0.0442,
+      "uk_gilts": 0.070258,
+      "cash": 0.02,
+      "uk_cpi": 0.007,
+      "us_cpi": 0.029851
+    },
+    "1936": {
+      "us_equity": 0.363497,
+      "uk_equity_price": 0.146545,
+      "us_bonds": 0.0246,
+      "uk_gilts": 0.028029,
+      "cash": 0.02,
+      "uk_cpi": 0.007,
+      "us_cpi": 0.014493
+    },
+    "1937": {
+      "us_equity": -0.307151,
+      "uk_equity_price": -0.16122,
+      "us_bonds": 0.0378,
+      "uk_gilts": -0.0092,
+      "cash": 0.02,
+      "uk_cpi": 0.034,
+      "us_cpi": 0.028571
+    },
+    "1938": {
+      "us_equity": 0.197822,
+      "uk_equity_price": -0.096104,
+      "us_bonds": 0.0447,
+      "uk_gilts": 0.04076,
+      "cash": 0.02,
+      "uk_cpi": 0.016,
+      "us_cpi": -0.027778
+    },
+    "1939": {
+      "us_equity": 0.023641,
+      "uk_equity_price": -0.034483,
+      "us_bonds": 0.0398,
+      "uk_gilts": -0.016175,
+      "cash": 0.02,
+      "uk_cpi": 0.028,
+      "us_cpi": 0.0
+    },
+    "1940": {
+      "us_equity": -0.094584,
+      "uk_equity_price": -0.072421,
+      "us_bonds": 0.0472,
+      "uk_gilts": 0.077847,
+      "cash": 0.02,
+      "uk_cpi": 0.168,
+      "us_cpi": 0.007143
+    },
+    "1941": {
+      "us_equity": -0.100665,
+      "uk_equity_price": 0.065241,
+      "us_bonds": -0.0253,
+      "uk_gilts": 0.061415,
+      "cash": 0.02,
+      "uk_cpi": 0.108,
+      "us_cpi": 0.099291
+    },
+    "1942": {
+      "us_equity": 0.15411,
+      "uk_equity_price": 0.070281,
+      "us_bonds": 0.0192,
+      "uk_gilts": 0.036667,
+      "cash": 0.02,
+      "uk_cpi": 0.071,
+      "us_cpi": 0.090323
+    },
+    "1943": {
+      "us_equity": 0.269958,
+      "uk_equity_price": 0.064728,
+      "us_bonds": 0.0237,
+      "uk_gilts": 0.016332,
+      "cash": 0.02,
+      "uk_cpi": 0.034,
+      "us_cpi": 0.029586
+    },
+    "1944": {
+      "us_equity": 0.196864,
+      "uk_equity_price": 0.056388,
+      "us_bonds": 0.0348,
+      "uk_gilts": 0.030436,
+      "cash": 0.02,
+      "uk_cpi": 0.027,
+      "us_cpi": 0.022989
+    },
+    "1945": {
+      "us_equity": 0.373282,
+      "uk_equity_price": 0.045872,
+      "us_bonds": 0.0408,
+      "uk_gilts": 0.032257,
+      "cash": 0.02,
+      "uk_cpi": 0.028,
+      "us_cpi": 0.022472
+    },
+    "1946": {
+      "us_equity": -0.085978,
+      "uk_equity_price": 0.038278,
+      "us_bonds": 0.0181,
+      "uk_gilts": 0.059836,
+      "cash": 0.02,
+      "uk_cpi": 0.031,
+      "us_cpi": 0.181319
+    },
+    "1947": {
+      "us_equity": 0.048909,
+      "uk_equity_price": -0.053763,
+      "us_bonds": 0.0055,
+      "uk_gilts": 0.012854,
+      "cash": 0.02,
+      "uk_cpi": 0.07,
+      "us_cpi": 0.088372
+    },
+    "1948": {
+      "us_equity": 0.072522,
+      "uk_equity_price": -0.012987,
+      "us_bonds": 0.0342,
+      "uk_gilts": 0.012792,
+      "cash": 0.02,
+      "uk_cpi": 0.077,
+      "us_cpi": 0.029915
+    },
+    "1949": {
+      "us_equity": 0.163924,
+      "uk_equity_price": -0.038651,
+      "us_bonds": 0.0232,
+      "uk_gilts": 0.027296,
+      "cash": 0.02,
+      "uk_cpi": 0.028,
+      "us_cpi": -0.020747
+    },
+    "1950": {
+      "us_equity": 0.28295,
+      "uk_equity_price": 0.039726,
+      "us_bonds": 0.0002,
+      "uk_gilts": 0.012838,
+      "cash": 0.02,
+      "uk_cpi": 0.039185,
+      "us_cpi": 0.059322
+    },
+    "1951": {
+      "us_equity": 0.256709,
+      "uk_equity_price": 0.024182,
+      "us_bonds": 0.0135,
+      "uk_gilts": -0.035612,
+      "cash": 0.025,
+      "uk_cpi": 0.090498,
+      "us_cpi": 0.06
+    },
+    "1952": {
+      "us_equity": 0.172576,
+      "uk_equity_price": -0.050633,
+      "us_bonds": 0.0117,
+      "uk_gilts": -0.038221,
+      "cash": 0.04,
+      "uk_cpi": 0.106501,
+      "us_cpi": 0.007547
+    },
+    "1953": {
+      "us_equity": 0.009217,
+      "uk_equity_price": 0.16,
+      "us_bonds": 0.0512,
+      "uk_gilts": 0.083717,
+      "cash": 0.035,
+      "uk_cpi": 0.03625,
+      "us_cpi": 0.007491
+    },
+    "1954": {
+      "us_equity": 0.470399,
+      "uk_equity_price": 0.344828,
+      "us_bonds": 0.0339,
+      "uk_gilts": 0.0655,
+      "cash": 0.03,
+      "uk_cpi": 0.022919,
+      "us_cpi": -0.007435
+    },
+    "1955": {
+      "us_equity": 0.344295,
+      "uk_equity_price": 0.015779,
+      "us_bonds": -0.0199,
+      "uk_gilts": -0.062504,
+      "cash": 0.045,
+      "uk_cpi": 0.050708,
+      "us_cpi": 0.003745
+    },
+    "1956": {
+      "us_equity": 0.061935,
+      "uk_equity_price": -0.089968,
+      "us_bonds": -0.0334,
+      "uk_gilts": -0.057012,
+      "cash": 0.055,
+      "uk_cpi": 0.051627,
+      "us_cpi": 0.029851
+    },
+    "1957": {
+      "us_equity": -0.093023,
+      "uk_equity_price": -0.033428,
+      "us_bonds": 0.0739,
+      "uk_gilts": 0.036542,
+      "cash": 0.07,
+      "uk_cpi": 0.03842,
+      "us_cpi": 0.028986
+    },
+    "1958": {
+      "us_equity": 0.3697,
+      "uk_equity_price": 0.332,
+      "us_bonds": -0.0329,
+      "uk_gilts": 0.036433,
+      "cash": 0.04,
+      "uk_cpi": 0.028777,
+      "us_cpi": 0.017606
+    },
+    "1959": {
+      "us_equity": 0.138344,
+      "uk_equity_price": 0.433934,
+      "us_bonds": -0.0444,
+      "uk_gilts": 0.085817,
+      "cash": 0.04,
+      "uk_cpi": 0.005994,
+      "us_cpi": 0.017301
+    },
+    "1960": {
+      "us_equity": -0.005249,
+      "uk_equity_price": -0.04712,
+      "us_bonds": 0.1319,
+      "uk_gilts": -0.017658,
+      "cash": 0.05,
+      "uk_cpi": 0.007944,
+      "us_cpi": 0.013605
+    },
+    "1961": {
+      "us_equity": 0.298592,
+      "uk_equity_price": -0.025275,
+      "us_bonds": 0.0164,
+      "uk_gilts": 0.013567,
+      "cash": 0.06,
+      "uk_cpi": 0.032512,
+      "us_cpi": 0.006711
+    },
+    "1962": {
+      "us_equity": -0.097156,
+      "uk_equity_price": -0.025449,
+      "us_bonds": 0.0606,
+      "uk_gilts": 0.10765,
+      "cash": 0.045,
+      "uk_cpi": 0.041985,
+      "us_cpi": 0.013333
+    },
+    "1963": {
+      "us_equity": 0.220466,
+      "uk_equity_price": 0.135966,
+      "us_bonds": 0.0116,
+      "uk_gilts": 0.130854,
+      "cash": 0.04,
+      "uk_cpi": 0.021062,
+      "us_cpi": 0.016447
+    },
+    "1964": {
+      "us_equity": 0.1657,
+      "uk_equity_price": -0.096699,
+      "us_bonds": 0.0363,
+      "uk_gilts": -0.001046,
+      "cash": 0.07,
+      "uk_cpi": 0.032287,
+      "us_cpi": 0.009709
+    },
+    "1965": {
+      "us_equity": 0.12494,
+      "uk_equity_price": 0.062506,
+      "us_bonds": -0.0022,
+      "uk_gilts": -0.038817,
+      "cash": 0.06,
+      "uk_cpi": 0.042572,
+      "us_cpi": 0.019231
+    },
+    "1966": {
+      "us_equity": -0.082089,
+      "uk_equity_price": -0.106646,
+      "us_bonds": 0.0242,
+      "uk_gilts": 0.032417,
+      "cash": 0.07,
+      "uk_cpi": 0.04,
+      "us_cpi": 0.034591
+    },
+    "1967": {
+      "us_equity": 0.207672,
+      "uk_equity_price": 0.321151,
+      "us_bonds": -0.0376,
+      "uk_gilts": 0.086892,
+      "cash": 0.08,
+      "uk_cpi": 0.022436,
+      "us_cpi": 0.030395
+    },
+    "1968": {
+      "us_equity": 0.149738,
+      "uk_equity_price": 0.379931,
+      "us_bonds": 0.024,
+      "uk_gilts": -0.013917,
+      "cash": 0.07,
+      "uk_cpi": 0.039969,
+      "us_cpi": 0.047198
+    },
+    "1969": {
+      "us_equity": -0.114836,
+      "uk_equity_price": -0.155931,
+      "us_bonds": -0.1017,
+      "uk_gilts": -0.056992,
+      "cash": 0.08,
+      "uk_cpi": 0.051997,
+      "us_cpi": 0.061972
+    },
+    "1970": {
+      "us_equity": 0.02283,
+      "uk_equity_price": -0.061134,
+      "us_bonds": 0.2025,
+      "uk_gilts": 0.107883,
+      "cash": 0.07,
+      "uk_cpi": 0.065186,
+      "us_cpi": 0.055703
+    },
+    "1971": {
+      "us_equity": 0.135369,
+      "uk_equity_price": 0.404536,
+      "us_bonds": 0.1099,
+      "uk_gilts": 0.143675,
+      "cash": 0.05,
+      "uk_cpi": 0.094149,
+      "us_cpi": 0.032663
+    },
+    "1972": {
+      "us_equity": 0.216598,
+      "uk_equity_price": 0.17974,
+      "us_bonds": 0.0163,
+      "uk_gilts": 0.049192,
+      "cash": 0.09,
+      "uk_cpi": 0.071911,
+      "us_cpi": 0.034063
+    },
+    "1973": {
+      "us_equity": -0.164596,
+      "uk_equity_price": -0.345183,
+      "us_bonds": 0.0256,
+      "uk_gilts": -0.134583,
+      "cash": 0.13,
+      "uk_cpi": 0.093463,
+      "us_cpi": 0.087059
+    },
+    "1974": {
+      "us_equity": -0.254379,
+      "uk_equity_price": -0.549838,
+      "us_bonds": -0.0016,
+      "uk_gilts": -0.25925,
+      "cash": 0.115,
+      "uk_cpi": 0.157315,
+      "us_cpi": 0.123377
+    },
+    "1975": {
+      "us_equity": 0.377367,
+      "uk_equity_price": 1.364082,
+      "us_bonds": 0.0173,
+      "uk_gilts": 0.244567,
+      "cash": 0.1125,
+      "uk_cpi": 0.227005,
+      "us_cpi": 0.069364
+    },
+    "1976": {
+      "us_equity": 0.226043,
+      "uk_equity_price": -0.082642,
+      "us_bonds": 0.193,
+      "uk_gilts": 0.088983,
+      "cash": 0.1425,
+      "uk_cpi": 0.156573,
+      "us_cpi": 0.048649
+    },
+    "1977": {
+      "us_equity": -0.059312,
+      "uk_equity_price": 0.494807,
+      "us_bonds": -0.0133,
+      "uk_gilts": 0.295183,
+      "cash": 0.07,
+      "uk_cpi": 0.149425,
+      "us_cpi": 0.06701
+    },
+    "1978": {
+      "us_equity": 0.078448,
+      "uk_equity_price": 0.060692,
+      "us_bonds": -0.0551,
+      "uk_gilts": 0.109775,
+      "cash": 0.125,
+      "uk_cpi": 0.074722,
+      "us_cpi": 0.090177
+    },
+    "1979": {
+      "us_equity": 0.180418,
+      "uk_equity_price": 0.028387,
+      "us_bonds": -0.0479,
+      "uk_gilts": 0.040567,
+      "cash": 0.17,
+      "uk_cpi": 0.113724,
+      "us_cpi": 0.132939
+    },
+    "1980": {
+      "us_equity": 0.295547,
+      "uk_equity_price": 0.268449,
+      "us_bonds": -0.1411,
+      "uk_gilts": 0.030883,
+      "cash": 0.14,
+      "uk_cpi": 0.151543,
+      "us_cpi": 0.125163
+    },
+    "1981": {
+      "us_equity": -0.022996,
+      "uk_equity_price": 0.059169,
+      "us_bonds": 0.0404,
+      "uk_gilts": 0.042225,
+      "cash": 0.14375,
+      "uk_cpi": 0.118098,
+      "us_cpi": 0.089224
+    },
+    "1982": {
+      "us_equity": 0.181502,
+      "uk_equity_price": 0.223713,
+      "us_bonds": 0.4552,
+      "uk_gilts": 0.328667,
+      "cash": 0.1,
+      "uk_cpi": 0.08111,
+      "us_cpi": 0.038298
+    },
+    "1983": {
+      "us_equity": 0.230201,
+      "uk_equity_price": 0.22554,
+      "us_bonds": -0.0236,
+      "uk_gilts": 0.312517,
+      "cash": 0.090625,
+      "uk_cpi": 0.04935,
+      "us_cpi": 0.03791
+    },
+    "1984": {
+      "us_equity": 0.046411,
+      "uk_equity_price": 0.242553,
+      "us_bonds": 0.1513,
+      "uk_gilts": 0.126767,
+      "cash": 0.095,
+      "uk_cpi": 0.04258,
+      "us_cpi": 0.039487
+    },
+    "1985": {
+      "us_equity": 0.308207,
+      "uk_equity_price": 0.167512,
+      "us_bonds": 0.339,
+      "uk_gilts": 0.127025,
+      "cash": 0.11375,
+      "uk_cpi": 0.049223,
+      "us_cpi": 0.037987
+    },
+    "1986": {
+      "us_equity": 0.23917,
+      "uk_equity_price": 0.212667,
+      "us_bonds": 0.3076,
+      "uk_gilts": 0.1932,
+      "cash": 0.10875,
+      "uk_cpi": 0.033261,
+      "us_cpi": 0.010979
+    },
+    "1987": {
+      "us_equity": 0.004867,
+      "uk_equity_price": 0.032715,
+      "us_bonds": -0.1169,
+      "uk_gilts": 0.157767,
+      "cash": 0.08375,
+      "uk_cpi": 0.032049,
+      "us_cpi": 0.044344
+    },
+    "1988": {
+      "us_equity": 0.187759,
+      "uk_equity_price": 0.082736,
+      "us_bonds": 0.0779,
+      "uk_gilts": 0.085208,
+      "cash": 0.12875,
+      "uk_cpi": 0.037592,
+      "us_cpi": 0.044194
+    },
+    "1989": {
+      "us_equity": 0.300759,
+      "uk_equity_price": 0.284957,
+      "us_bonds": 0.2181,
+      "uk_gilts": 0.045258,
+      "cash": 0.14875,
+      "uk_cpi": 0.052376,
+      "us_cpi": 0.046473
+    },
+    "1990": {
+      "us_equity": -0.02226,
+      "uk_equity_price": -0.114877,
+      "us_bonds": 0.0544,
+      "uk_gilts": -0.059258,
+      "cash": 0.13875,
+      "uk_cpi": 0.069727,
+      "us_cpi": 0.061063
+    },
+    "1991": {
+      "us_equity": 0.21889,
+      "uk_equity_price": 0.112137,
+      "us_bonds": 0.1798,
+      "uk_gilts": 0.287775,
+      "cash": 0.10375,
+      "uk_cpi": 0.075326,
+      "us_cpi": 0.030643
+    },
+    "1992": {
+      "us_equity": 0.153201,
+      "uk_equity_price": 0.144507,
+      "us_bonds": 0.1029,
+      "uk_gilts": 0.205217,
+      "cash": 0.06875,
+      "uk_cpi": 0.042615,
+      "us_cpi": 0.029007
+    },
+    "1993": {
+      "us_equity": 0.098453,
+      "uk_equity_price": 0.230198,
+      "us_bonds": 0.1677,
+      "uk_gilts": 0.250217,
+      "cash": 0.05375,
+      "uk_cpi": 0.025065,
+      "us_cpi": 0.027484
+    },
+    "1994": {
+      "us_equity": 0.005172,
+      "uk_equity_price": -0.077636,
+      "us_bonds": -0.1463,
+      "uk_gilts": 0.004842,
+      "cash": 0.06125,
+      "uk_cpi": 0.019785,
+      "us_cpi": 0.026749
+    },
+    "1995": {
+      "us_equity": 0.380435,
+      "uk_equity_price": 0.186952,
+      "us_bonds": 0.2881,
+      "uk_gilts": 0.074075,
+      "cash": 0.06375,
+      "uk_cpi": 0.026565,
+      "us_cpi": 0.025384
+    },
+    "1996": {
+      "us_equity": 0.233627,
+      "uk_equity_price": 0.108288,
+      "us_bonds": -0.0019,
+      "uk_gilts": 0.124333,
+      "cash": 0.059375,
+      "uk_cpi": 0.024003,
+      "us_cpi": 0.033225
+    },
+    "1997": {
+      "us_equity": 0.315668,
+      "uk_equity_price": 0.208337,
+      "us_bonds": 0.112,
+      "uk_gilts": 0.155475,
+      "cash": 0.0725,
+      "uk_cpi": 0.018246,
+      "us_cpi": 0.017024
+    },
+    "1998": {
+      "us_equity": 0.253416,
+      "uk_equity_price": 0.086975,
+      "us_bonds": 0.1741,
+      "uk_gilts": 0.223333,
+      "cash": 0.0625,
+      "uk_cpi": 0.015574,
+      "us_cpi": 0.016119
+    },
+    "1999": {
+      "us_equity": 0.214546,
+      "uk_equity_price": 0.212182,
+      "us_bonds": -0.1165,
+      "uk_gilts": 0.099217,
+      "cash": 0.055,
+      "uk_cpi": 0.013287,
+      "us_cpi": 0.026846
+    },
+    "2000": {
+      "us_equity": -0.057032,
+      "uk_equity_price": -0.049891,
+      "us_bonds": 0.1668,
+      "uk_gilts": 0.0279,
+      "cash": 0.06,
+      "uk_cpi": 0.007965,
+      "us_cpi": 0.033868
+    },
+    "2001": {
+      "us_equity": -0.127926,
+      "uk_equity_price": -0.161254,
+      "us_bonds": 0.0674,
+      "uk_gilts": 0.090608,
+      "cash": 0.04,
+      "uk_cpi": 0.012335,
+      "us_cpi": 0.015517
+    },
+    "2002": {
+      "us_equity": -0.200606,
+      "uk_equity_price": -0.242089,
+      "us_bonds": 0.1569,
+      "uk_gilts": 0.052442,
+      "cash": 0.04,
+      "uk_cpi": 0.012589,
+      "us_cpi": 0.023769
+    },
+    "2003": {
+      "us_equity": 0.221146,
+      "uk_equity_price": 0.141191,
+      "us_bonds": 0.0163,
+      "uk_gilts": 0.087388,
+      "cash": 0.0375,
+      "uk_cpi": 0.013616,
+      "us_cpi": 0.018795
+    },
+    "2004": {
+      "us_equity": 0.127711,
+      "uk_equity_price": 0.093849,
+      "us_bonds": 0.0467,
+      "uk_gilts": 0.013851,
+      "cash": 0.0475,
+      "uk_cpi": 0.013435,
+      "us_cpi": 0.032556
+    },
+    "2005": {
+      "us_equity": 0.070947,
+      "uk_equity_price": 0.182682,
+      "us_bonds": 0.0183,
+      "uk_gilts": 0.094904,
+      "cash": 0.045,
+      "uk_cpi": 0.020569,
+      "us_cpi": 0.034157
+    },
+    "2006": {
+      "us_equity": 0.142013,
+      "uk_equity_price": 0.1368,
+      "us_bonds": 0.0357,
+      "uk_gilts": 0.037611,
+      "cash": 0.05,
+      "uk_cpi": 0.023287,
+      "us_cpi": 0.025407
+    },
+    "2007": {
+      "us_equity": 0.063915,
+      "uk_equity_price": 0.024294,
+      "us_bonds": 0.0916,
+      "uk_gilts": -0.004286,
+      "cash": 0.055,
+      "uk_cpi": 0.023228,
+      "us_cpi": 0.040833
+    },
+    "2008": {
+      "us_equity": -0.387549,
+      "uk_equity_price": -0.348419,
+      "us_bonds": 0.209,
+      "uk_gilts": 0.082935,
+      "cash": 0.02,
+      "uk_cpi": 0.036019,
+      "us_cpi": 0.000905
+    },
+    "2009": {
+      "us_equity": 0.290841,
+      "uk_equity_price": 0.272122,
+      "us_bonds": -0.0928,
+      "uk_gilts": 0.129252,
+      "cash": 0.005,
+      "uk_cpi": 0.021653,
+      "us_cpi": 0.027208
+    },
+    "2010": {
+      "us_equity": 0.138583,
+      "uk_equity_price": 0.122494,
+      "us_bonds": 0.0659,
+      "uk_gilts": 0.037174,
+      "cash": 0.005,
+      "uk_cpi": 0.032982,
+      "us_cpi": 0.014957
+    },
+    "2011": {
+      "us_equity": 0.02273,
+      "uk_equity_price": -0.074224,
+      "us_bonds": 0.1639,
+      "uk_gilts": 0.089193,
+      "cash": 0.005,
+      "uk_cpi": 0.044637,
+      "us_cpi": 0.02961
+    },
+    "2012": {
+      "us_equity": 0.16908,
+      "uk_equity_price": 0.101233,
+      "us_bonds": 0.0458,
+      "uk_gilts": 0.159271,
+      "cash": 0.005,
+      "uk_cpi": 0.028282,
+      "us_cpi": 0.017415
+    },
+    "2013": {
+      "us_equity": 0.295636,
+      "uk_equity_price": 0.134073,
+      "us_bonds": -0.1008,
+      "uk_gilts": -0.030791,
+      "cash": 0.005,
+      "uk_cpi": 0.025648,
+      "us_cpi": 0.015026
+    },
+    "2014": {
+      "us_equity": 0.158166,
+      "uk_equity_price": -0.000911,
+      "us_bonds": 0.098,
+      "uk_gilts": 0.009469,
+      "cash": 0.005,
+      "uk_cpi": 0.01461,
+      "us_cpi": 0.007552
+    },
+    "2015": {
+      "us_equity": 0.021029,
+      "uk_equity_price": -0.031384,
+      "us_bonds": 0.0191,
+      "uk_gilts": 0.098062,
+      "cash": 0.005,
+      "uk_cpi": 0.000401,
+      "us_cpi": 0.007325
+    },
+    "2016": {
+      "us_equity": 0.115989,
+      "uk_equity_price": 0.111172,
+      "us_bonds": -0.0026,
+      "uk_gilts": 0.078301,
+      "cash": 0.0025,
+      "uk_cpi": 0.006597,
+      "us_cpi": 0.020716
+    },
+    "2017": {
+      "us_equity": 0.207707,
+      "us_bonds": 0.0339,
+      "uk_cpi": 0.029441,
+      "us_cpi": 0.021083
+    },
+    "2018": {
+      "us_equity": -0.016244,
+      "us_bonds": -0.019,
+      "uk_cpi": 0.020972,
+      "us_cpi": 0.019106
+    },
+    "2019": {
+      "us_equity": 0.26007,
+      "us_bonds": 0.1253,
+      "uk_cpi": 0.013072,
+      "us_cpi": 0.022848
+    },
+    "2020": {
+      "us_equity": 0.181582,
+      "us_bonds": 0.1116,
+      "uk_cpi": 0.006452,
+      "us_cpi": 0.01362
+    },
+    "2021": {
+      "us_equity": 0.2814,
+      "us_bonds": -0.0447,
+      "uk_cpi": 0.054029,
+      "us_cpi": 0.070373
+    },
+    "2022": {
+      "us_equity": -0.148771,
+      "us_bonds": -0.2003,
+      "uk_cpi": 0.105126,
+      "us_cpi": 0.064562
+    },
+    "2023": {
+      "us_equity": 0.197493,
+      "uk_cpi": 0.039308
+    },
+    "2024": {
+      "us_equity": 0.282998,
+      "uk_cpi": 0.025719
+    },
+    "2025": {
+      "us_equity": 0.140099,
+      "uk_cpi": 0.033186
+    },
+    "2026": {
+      "us_equity": 0.005951,
+      "uk_cpi": -0.004283
+    }
+  }
+}

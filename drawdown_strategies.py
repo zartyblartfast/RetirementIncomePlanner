@@ -47,9 +47,11 @@ STRATEGIES = {
             {"key": "initial_target", "label": "Initial Target Income (£)", "type": "number",
              "step": 500, "default": 30000},
             {"key": "max_increase_pct", "label": "Max Annual Increase (%)", "type": "number",
-             "step": 0.5, "default": 5.0},
+             "step": 0.5, "default": 5.0,
+             "tooltip": "Ceiling: the maximum percentage income can rise in a single year, even if markets boom. Prevents over-spending in good years."},
             {"key": "max_decrease_pct", "label": "Max Annual Decrease (%)", "type": "number",
-             "step": 0.5, "default": 2.5},
+             "step": 0.5, "default": 2.5,
+             "tooltip": "Floor: the maximum percentage income can fall in a single year, even if markets crash. Smooths income during downturns."},
         ],
     },
     "guyton_klinger": {
@@ -59,13 +61,17 @@ STRATEGIES = {
             {"key": "initial_target", "label": "Initial Target Income (£)", "type": "number",
              "step": 500, "default": 30000},
             {"key": "upper_guardrail_pct", "label": "Upper Guardrail (%)", "type": "number",
-             "step": 0.5, "default": 5.5},
+             "step": 0.5, "default": 5.5,
+             "tooltip": "If your actual withdrawal rate exceeds this percentage of your portfolio, income is cut. Signals you are spending too fast."},
             {"key": "lower_guardrail_pct", "label": "Lower Guardrail (%)", "type": "number",
-             "step": 0.5, "default": 3.5},
+             "step": 0.5, "default": 3.5,
+             "tooltip": "If your actual withdrawal rate drops below this percentage of your portfolio, income is raised. Signals you can afford to spend more."},
             {"key": "raise_pct", "label": "Raise (%)", "type": "number",
-             "step": 0.5, "default": 10.0},
+             "step": 0.5, "default": 10.0,
+             "tooltip": "When the lower guardrail triggers, income is increased by this percentage. A 10% raise on \u00a330k = \u00a333k."},
             {"key": "cut_pct", "label": "Cut (%)", "type": "number",
-             "step": 0.5, "default": 10.0},
+             "step": 0.5, "default": 10.0,
+             "tooltip": "When the upper guardrail triggers, income is reduced by this percentage. A 10% cut on £30k = £27k."},
         ],
     },
     "arva": {
@@ -73,9 +79,10 @@ STRATEGIES = {
         "description": "Annually Recalculated Virtual Annuity — withdrawal recalculated each year to target depletion by end age.",
         "params": [
             {"key": "assumed_real_return_pct", "label": "Assumed Real Return (%)", "type": "number",
-             "step": 0.5, "default": 3.0},
+             "step": 0.5, "default": 3.0,
+             "tooltip": "The real (after-inflation) return ARVA assumes when calculating withdrawals. Higher = larger withdrawals but more risk of depletion if actual returns are lower."},
             {"key": "target_end_age", "label": "Target End Age", "type": "number",
-             "step": 1, "default": 90},
+             "step": 1, "default": 90, "sandbox_hidden": True},
         ],
     },
     "arva_guardrails": {
@@ -83,13 +90,16 @@ STRATEGIES = {
         "description": "ARVA with caps on year-to-year spending changes to reduce volatility.",
         "params": [
             {"key": "assumed_real_return_pct", "label": "Assumed Real Return (%)", "type": "number",
-             "step": 0.5, "default": 3.0},
+             "step": 0.5, "default": 3.0,
+             "tooltip": "The real (after-inflation) return ARVA assumes when calculating withdrawals. Higher = larger withdrawals but more risk of depletion if actual returns are lower."},
             {"key": "target_end_age", "label": "Target End Age", "type": "number",
-             "step": 1, "default": 90},
+             "step": 1, "default": 90, "sandbox_hidden": True},
             {"key": "max_annual_increase_pct", "label": "Max Annual Increase (%)", "type": "number",
-             "step": 1.0, "default": 10.0},
+             "step": 1.0, "default": 10.0,
+             "tooltip": "Ceiling: the maximum percentage ARVA income can rise year-to-year. Prevents over-spending after a single strong year."},
             {"key": "max_annual_decrease_pct", "label": "Max Annual Decrease (%)", "type": "number",
-             "step": 1.0, "default": 10.0},
+             "step": 1.0, "default": 10.0,
+             "tooltip": "Floor: the maximum percentage ARVA income can fall year-to-year. Smooths the impact of bad years on your income."},
         ],
     },
 }
@@ -208,8 +218,13 @@ def _compute_arva(params, state, portfolio_value, cpi_rate, current_age=None):
     if state is None:
         state = {}
 
-    remaining_years = max(1, target_end_age - (current_age or target_end_age - 1))
-    withdrawal = max(0, _pmt(portfolio_value, r, remaining_years))
+    # +1 so ARVA plans income THROUGH end_age (inclusive)
+    remaining_years = max(1, target_end_age - (current_age or target_end_age - 1) + 1)
+    # Use monthly PMT to match the engine's monthly execution model
+    remaining_months = remaining_years * 12
+    monthly_r = (1 + r) ** (1.0 / 12) - 1
+    monthly_pmt = _pmt(portfolio_value, monthly_r, remaining_months)
+    withdrawal = max(0, monthly_pmt * 12)
 
     state = {"prev_withdrawal": withdrawal}
     return {"mode": "pot_net", "annual_amount": withdrawal}, state
@@ -222,8 +237,13 @@ def _compute_arva_guardrails(params, state, portfolio_value, cpi_rate, current_a
     max_up = params.get("max_annual_increase_pct", 10.0) / 100.0
     max_down = params.get("max_annual_decrease_pct", 10.0) / 100.0
 
-    remaining_years = max(1, target_end_age - (current_age or target_end_age - 1))
-    raw_withdrawal = max(0, _pmt(portfolio_value, r, remaining_years))
+    # +1 so ARVA plans income THROUGH end_age (inclusive)
+    remaining_years = max(1, target_end_age - (current_age or target_end_age - 1) + 1)
+    # Use monthly PMT to match the engine's monthly execution model
+    remaining_months = remaining_years * 12
+    monthly_r = (1 + r) ** (1.0 / 12) - 1
+    monthly_pmt = _pmt(portfolio_value, monthly_r, remaining_months)
+    raw_withdrawal = max(0, monthly_pmt * 12)
 
     if state is None:
         # First year: no prior withdrawal to clamp against
@@ -313,5 +333,24 @@ def normalize_config(cfg):
         cfg.setdefault("target_income", {})["net_annual"] = params.get(
             "initial_target", fallback_target)
     # ARVA: no initial_target param; target_income.net_annual left as-is
+
+    # Migrate guaranteed income from start_age/end_age to start_date/end_date.
+    # Dates are the source of truth; age fields are informational only.
+    dob_str = cfg.get("personal", {}).get("date_of_birth", "1960-01")
+    try:
+        _dob_y, _dob_m = int(dob_str[:4]), int(dob_str[5:7])
+    except (ValueError, IndexError):
+        _dob_y, _dob_m = 1960, 1
+    for g in cfg.get("guaranteed_income", []):
+        if "start_date" not in g and "start_age" in g:
+            sa = g["start_age"]
+            total_m = _dob_y * 12 + (_dob_m - 1) + int(round(sa * 12))
+            sy, sm = divmod(total_m, 12)
+            g["start_date"] = f"{sy:04d}-{sm + 1:02d}"
+        if "end_date" not in g and g.get("end_age") is not None:
+            ea = g["end_age"]
+            total_m = _dob_y * 12 + (_dob_m - 1) + int(round(ea * 12))
+            ey, em = divmod(total_m, 12)
+            g["end_date"] = f"{ey:04d}-{em + 1:02d}"
 
     return cfg

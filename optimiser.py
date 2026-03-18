@@ -19,6 +19,27 @@ import copy
 import itertools
 from retirement_engine import RetirementEngine
 
+# Strategies where the withdrawal is computed from portfolio value,
+# not from a user-specified income target.  Q2/Q5 income sweeps
+# are not meaningful for these.
+PORTFOLIO_DRIVEN_STRATEGIES = {'arva', 'arva_guardrails', 'fixed_percentage'}
+
+
+def _set_income_target(cfg: dict, income: float) -> None:
+    """Set the income target in *both* target_income and strategy params.
+
+    Different strategies store the authoritative target in different keys
+    inside drawdown_strategy_params.  This helper keeps them in sync.
+    """
+    cfg.setdefault('target_income', {})['net_annual'] = income
+    sid = cfg.get('drawdown_strategy', 'fixed_target')
+    params = cfg.get('drawdown_strategy_params', {})
+    if sid == 'fixed_target':
+        params['net_annual'] = income
+    elif sid in ('vanguard_dynamic', 'guyton_klinger'):
+        params['initial_target'] = income
+    # Portfolio-driven strategies: nothing to set — income is derived.
+
 
 def _get_all_drawable_sources(config: dict) -> list:
     """Get all drawable source names from dc_pots and tax_free_accounts."""
@@ -108,15 +129,35 @@ def find_max_sustainable_income(base_config: dict) -> dict:
         }
     """
     current_income = base_config['target_income']['net_annual']
+    sid = base_config.get('drawdown_strategy', 'fixed_target')
     tolerance = 100.0
 
     # Run current projection for comparison
     engine_current = RetirementEngine(copy.deepcopy(base_config))
     current_result = engine_current.run_projection()
 
+    # Portfolio-driven strategies: income is derived, not user-set
+    if sid in PORTFOLIO_DRIVEN_STRATEGIES:
+        result_dict = {
+            'max_income': current_income,
+            'current_income': current_income,
+            'headroom_amount': 0,
+            'headroom_pct': 0,
+            'projection': current_result,
+            'current_projection': current_result,
+            'question': 'What is the maximum sustainable annual net income?',
+            'portfolio_driven': True,
+        }
+        result_dict['narrative'] = {
+            'summary': f'This question does not apply to your current strategy. '
+                       f'Income is derived from portfolio value, not a fixed target.',
+            'advisor': '',
+        }
+        return result_dict
+
     def is_sustainable(income: float) -> bool:
         cfg = copy.deepcopy(base_config)
-        cfg['target_income']['net_annual'] = income
+        _set_income_target(cfg, income)
         engine = RetirementEngine(cfg)
         result = engine.run_projection()
         return result['summary']['sustainable']
@@ -144,7 +185,7 @@ def find_max_sustainable_income(base_config: dict) -> dict:
 
     # Run projection at max income
     cfg_max = copy.deepcopy(base_config)
-    cfg_max['target_income']['net_annual'] = max_income
+    _set_income_target(cfg_max, max_income)
     engine_max = RetirementEngine(cfg_max)
     max_result = engine_max.run_projection()
 
@@ -767,8 +808,11 @@ if __name__ == '__main__':
 # =====================================================================
 def find_income_sweep(base_config: dict, max_sustainable_income: float) -> dict:
     """
-    Sweep target income from 70% of current up to the max sustainable level,
-    auto-finding the best drawdown order at each step.
+    Sweep target income around the current level, auto-finding the best
+    drawdown order at each step.
+
+    Range: ±33 % of current income (capped at max_sustainable on the high end).
+    Steps: ~£2 000 for a manageable number of rows (~10).
 
     Returns:
         {
@@ -776,31 +820,41 @@ def find_income_sweep(base_config: dict, max_sustainable_income: float) -> dict:
                       remaining_capital, total_tax, is_current}],
             'current_income': float,
             'end_age': int,
+            'portfolio_driven': bool   (True when sweep is not applicable),
         }
     """
     current_income = base_config['target_income']['net_annual']
     end_age = base_config['personal']['end_age']
+    sid = base_config.get('drawdown_strategy', 'fixed_target')
     all_sources = _get_all_drawable_sources(base_config)
 
-    # Determine sweep range
-    lo = max(1000, round(current_income * 0.7, -3))  # round to nearest £1k
-    hi = round(max_sustainable_income, -3)
+    # Portfolio-driven strategies: income sweep is not meaningful
+    if sid in PORTFOLIO_DRIVEN_STRATEGIES:
+        return {
+            'rows': [],
+            'current_income': current_income,
+            'end_age': end_age,
+            'portfolio_driven': True,
+        }
+
+    # Determine sweep range: ±33% of current, capped at max sustainable
+    lo = max(1000, round(current_income * 0.67, -3))
+    hi = round(min(current_income * 1.33, max(max_sustainable_income, current_income * 1.1)), -3)
     if hi <= lo:
         hi = lo + 5000
 
-    # Pick step size to keep ~10-20 rows
+    # Pick step size — £1k increments for typical ranges
     span = hi - lo
-    if span <= 10000:
+    if span <= 20000:
         step = 1000
-    elif span <= 30000:
-        step = 2000
     else:
-        step = 5000
+        step = 2000
 
     incomes = list(range(int(lo), int(hi) + 1, int(step)))
     # Ensure current income is included
-    if current_income not in incomes:
-        incomes.append(current_income)
+    rounded_current = round(current_income, -3)
+    if rounded_current not in incomes:
+        incomes.append(rounded_current)
         incomes.sort()
 
     rows = []
@@ -809,7 +863,7 @@ def find_income_sweep(base_config: dict, max_sustainable_income: float) -> dict:
         for perm in itertools.permutations(all_sources):
             perm_list = list(perm)
             cfg = copy.deepcopy(base_config)
-            cfg['target_income']['net_annual'] = income
+            _set_income_target(cfg, income)
             cfg['withdrawal_priority'] = perm_list
             result = RetirementEngine(cfg).run_projection()
             s = result['summary']
@@ -837,13 +891,14 @@ def find_income_sweep(base_config: dict, max_sustainable_income: float) -> dict:
             'first_shortfall_age': best['first_shortfall_age'],
             'remaining_capital': best['remaining_capital'],
             'total_tax': best['total_tax'],
-            'is_current': (income == current_income),
+            'is_current': (income == rounded_current),
         })
 
     return {
         'rows': rows,
         'current_income': current_income,
         'end_age': end_age,
+        'portfolio_driven': False,
     }
 
 
