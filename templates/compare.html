@@ -464,6 +464,20 @@
                 <div id="stress-compare-insights" class="mt-2"></div>
             </div>
         </div>
+        <!-- Overlay Charts -->
+        <div class="mt-3" id="compare-charts-section">
+            <div class="row">
+                <div class="col-md-6">
+                    <canvas id="compare-income-chart" height="280"></canvas>
+                </div>
+                <div class="col-md-6">
+                    <canvas id="compare-capital-chart" height="280"></canvas>
+                </div>
+            </div>
+            <div class="text-center mt-1">
+                <small class="text-muted" id="compare-charts-label">Showing static projection data</small>
+            </div>
+        </div>
         <!-- Year-by-Year Delta Tables -->
         <div class="mt-3">
             <div class="btn-group" role="group">
@@ -866,6 +880,9 @@ function renderComparison(selectedScenarios) {
             '</tr>';
     }).join('');
 
+    // --- Overlay Charts (static) ---
+    renderCompareOverlayCharts(selectedScenarios, sortedAges, lookup, 'static');
+
     panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
     // Wire up stress compare button for these scenarios
@@ -875,6 +892,110 @@ function renderComparison(selectedScenarios) {
 
 // Track current comparison scenarios
 let _compareScenarios = [];
+
+// --- Overlay Chart Instances ---
+let compareIncomeChart = null;
+let compareCapitalChart = null;
+
+function renderCompareOverlayCharts(selectedScenarios, ages, dataLookup, mode) {
+    // mode: 'static' uses dataLookup[name][age] = {net_income_achieved, total_capital}
+    //        'stress' uses dataLookup[name][age] = {income50, capital50, income10}
+    const isStress = (mode === 'stress');
+    const label = isStress ? 'Historical Median (P50)' : 'Static Projection';
+    document.getElementById('compare-charts-label').textContent = 'Showing ' + label + ' data';
+
+    // Build datasets for income chart
+    const incomeDatasets = [];
+    const capitalDatasets = [];
+    selectedScenarios.forEach((sc, i) => {
+        const colour = colours[i % colours.length];
+        const sName = getStrategyName(sc.config);
+
+        // Income line (P50 or static)
+        incomeDatasets.push({
+            label: sc.name + ' (' + sName + ')',
+            data: ages.map(age => {
+                const d = dataLookup[sc.name] ? dataLookup[sc.name][age] : null;
+                if (!d) return null;
+                return Math.round(isStress ? d.income50 : (d.net_income_achieved || 0));
+            }),
+            borderColor: colour,
+            backgroundColor: colour + '33',
+            tension: 0.2,
+            fill: false,
+            pointRadius: 0,
+            borderWidth: 2,
+        });
+
+        // P10 band (worst case) — stress only
+        if (isStress) {
+            incomeDatasets.push({
+                label: sc.name + ' (Worst)',
+                data: ages.map(age => {
+                    const d = dataLookup[sc.name] ? dataLookup[sc.name][age] : null;
+                    return d && d.income10 !== null ? Math.round(d.income10) : null;
+                }),
+                borderColor: colour + '66',
+                backgroundColor: 'transparent',
+                borderDash: [4, 4],
+                tension: 0.2,
+                fill: false,
+                pointRadius: 0,
+                borderWidth: 1,
+            });
+        }
+
+        // Capital line
+        capitalDatasets.push({
+            label: sc.name + ' (' + sName + ')',
+            data: ages.map(age => {
+                const d = dataLookup[sc.name] ? dataLookup[sc.name][age] : null;
+                if (!d) return null;
+                return Math.round(isStress ? d.capital50 : (d.total_capital || 0));
+            }),
+            borderColor: colour,
+            backgroundColor: colour + '33',
+            tension: 0.2,
+            fill: false,
+            pointRadius: 0,
+            borderWidth: 2,
+        });
+    });
+
+    const chartOpts = (title) => ({
+        responsive: true,
+        plugins: {
+            title: { display: true, text: title },
+            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+            tooltip: {
+                callbacks: {
+                    label: ctx => ctx.dataset.label + ': \u00a3' + (ctx.parsed.y || 0).toLocaleString()
+                }
+            },
+        },
+        scales: {
+            x: { title: { display: true, text: 'Age' } },
+            y: { ticks: { callback: v => '\u00a3' + v.toLocaleString() } }
+        },
+        interaction: { mode: 'index', intersect: false },
+    });
+
+    // Destroy old charts
+    if (compareIncomeChart) compareIncomeChart.destroy();
+    if (compareCapitalChart) compareCapitalChart.destroy();
+
+    compareIncomeChart = new Chart(document.getElementById('compare-income-chart'), {
+        type: 'line',
+        data: { labels: ages, datasets: incomeDatasets },
+        options: chartOpts(isStress ? 'Income Comparison (Historical Median)' : 'Income Comparison (Static)'),
+    });
+
+    compareCapitalChart = new Chart(document.getElementById('compare-capital-chart'), {
+        type: 'line',
+        data: { labels: ages, datasets: capitalDatasets },
+        options: chartOpts(isStress ? 'Capital Comparison (Historical Median)' : 'Capital Comparison (Static)'),
+    });
+}
 
 async function runStressComparison(selectedScenarios) {
     _compareScenarios = selectedScenarios;
@@ -1066,6 +1187,30 @@ function renderStressComparison(selectedScenarios, stressResults) {
 
     // --- Stress Year-by-Year (P50 median) ---
     renderStressYearly(selectedScenarios, stressResults);
+
+    // --- Update overlay charts with stress data ---
+    const validForCharts = stressResults.filter(sr => sr.data && sr.data.stress_test.percentile_trajectories && sr.data.stress_test.percentile_trajectories.p50);
+    if (validForCharts.length) {
+        const chartAges = new Set();
+        const chartLookup = {};
+        validForCharts.forEach(sr => {
+            chartLookup[sr.name] = {};
+            const p50 = sr.data.stress_test.percentile_trajectories.p50 || [];
+            const p10 = sr.data.stress_test.percentile_trajectories.p10 || [];
+            const p10Map = {};
+            p10.forEach(pt => { p10Map[pt.age] = pt; });
+            p50.forEach(pt => {
+                chartAges.add(pt.age);
+                chartLookup[sr.name][pt.age] = {
+                    income50: pt.net_income,
+                    capital50: pt.total_capital,
+                    income10: p10Map[pt.age] ? p10Map[pt.age].net_income : null,
+                };
+            });
+        });
+        const sortedChartAges = [...chartAges].sort((a, b) => a - b);
+        renderCompareOverlayCharts(selectedScenarios, sortedChartAges, chartLookup, 'stress');
+    }
 
     document.getElementById('stress-compare-results').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
