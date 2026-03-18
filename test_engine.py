@@ -1,6 +1,7 @@
 """Deterministic sanity checks for the monthly-stepping projection engine."""
 import unittest
 from retirement_engine import RetirementEngine, annual_to_monthly_rate
+from drawdown_strategies import normalize_config
 
 
 def make_config(**overrides):
@@ -932,6 +933,72 @@ class TestARVA_BackwardCompat(unittest.TestCase):
         # Should behave exactly like fixed_target: £12k/yr from £30k
         yr0 = self.result["years"][0]
         self.assertAlmostEqual(yr0["net_income_achieved"], 12000, delta=50)
+
+
+class TestInitialStrategyState_None(unittest.TestCase):
+    """Passing initial_strategy_state=None should be identical to default."""
+
+    def setUp(self):
+        self.cfg = make_config(
+            target_income={"net_annual": 12000, "cpi_rate": 0.0},
+            tax_free_accounts=[{
+                "name": "ISA",
+                "starting_balance": 100000,
+                "growth_rate": 0.0,
+                "allocation": {"mode": "manual", "manual_override": True},
+                "values_as_of": "2028-01",
+            }],
+            withdrawal_priority=["ISA"],
+        )
+        self.result_default = RetirementEngine(self.cfg).run_projection()
+        self.result_none = RetirementEngine(self.cfg).run_projection(initial_strategy_state=None)
+
+    def test_identical_results(self):
+        yr0_d = self.result_default["years"][0]
+        yr0_n = self.result_none["years"][0]
+        self.assertAlmostEqual(yr0_d["net_income_achieved"], yr0_n["net_income_achieved"], delta=0.01)
+        self.assertAlmostEqual(yr0_d["total_capital"], yr0_n["total_capital"], delta=0.01)
+
+
+class TestInitialStrategyState_ARVAGuardrails(unittest.TestCase):
+    """ARVA+Guardrails with seeded prev_withdrawal should clamp Year 1."""
+
+    def setUp(self):
+        self.cfg = make_config(
+            target_income={"net_annual": 12000, "cpi_rate": 0.0},
+            tax_free_accounts=[{
+                "name": "ISA",
+                "starting_balance": 100000,
+                "growth_rate": 0.0,
+                "allocation": {"mode": "manual", "manual_override": True},
+                "values_as_of": "2028-01",
+            }],
+            withdrawal_priority=["ISA"],
+        )
+        self.cfg["drawdown_strategy"] = "arva_guardrails"
+        self.cfg["drawdown_strategy_params"] = {
+            "assumed_real_return_pct": 0.0,
+            "target_end_age": 92,
+            "max_annual_increase_pct": 10.0,
+            "max_annual_decrease_pct": 10.0,
+        }
+        normalize_config(self.cfg)
+
+    def test_unseeded_first_year(self):
+        """Without seeding, ARVA+G Year 1 has no clamping (first year)."""
+        result = RetirementEngine(self.cfg).run_projection()
+        yr0 = result["years"][0]
+        # ARVA with 0% return on 100k over 25 years (inclusive) = 100k/25 = 4000
+        self.assertAlmostEqual(yr0["target_net"], 4000, delta=200)
+
+    def test_seeded_clamps_year1(self):
+        """With prev_withdrawal=8000, ARVA+G should clamp Year 1 within ±10% of 8000."""
+        state = {"prev_withdrawal": 8000}
+        result = RetirementEngine(self.cfg).run_projection(initial_strategy_state=state)
+        yr0 = result["years"][0]
+        # Raw ARVA = ~4000, but clamped to floor of 8000*0.9 = 7200
+        self.assertGreaterEqual(yr0["target_net"], 7200 - 50)
+        self.assertLessEqual(yr0["target_net"], 8000 + 50)
 
 
 if __name__ == "__main__":

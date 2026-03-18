@@ -14,6 +14,9 @@ from optimiser import (Optimiser, find_best_drawdown_order,
 from drawdown_strategies import normalize_config, STRATEGIES, STRATEGY_IDS, get_strategy_display_name
 from version import get_version_info
 from validation_runner import run_all_scenarios, ALL_SCENARIOS
+from review_helpers import (load_reviews, save_reviews, compute_review_state,
+                            build_balances_snapshot, apply_review_balances_to_config,
+                            build_recommendation_from_result, build_initial_strategy_state)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "pension-planner-secret-key-2025")
@@ -1029,6 +1032,135 @@ def validation():
                            results=results,
                            generated_at=generated_at,
                            scenario_count=len(ALL_SCENARIOS))
+
+# ------------------------------------------------------------------ #
+#  Annual Review
+# ------------------------------------------------------------------ #
+@app.route("/review")
+@login_required
+def review():
+    cfg = get_config()
+    reviews_data = load_reviews()
+    review_state = compute_review_state(cfg, reviews_data)
+    balances = build_balances_snapshot(cfg)
+    strategy_name = get_strategy_display_name(cfg.get("drawdown_strategy", "fixed_target"))
+    return render_template("review.html", config=cfg,
+                           review_state=review_state,
+                           reviews_data=reviews_data,
+                           balances=balances,
+                           strategy_name=strategy_name,
+                           strategies=STRATEGIES)
+
+
+@app.route("/api/review/run_projection", methods=["POST"])
+@login_required
+def api_review_run_projection():
+    """Run projection with provided balances for review recommendation."""
+    import copy as _copy
+    data = request.get_json(silent=True) or {}
+    cfg = _copy.deepcopy(get_config())
+
+    # Apply balance overrides from the review form
+    balances = data.get("balances", {})
+    review_date = data.get("review_date", "")
+    if balances and review_date:
+        apply_review_balances_to_config(cfg, balances, review_date)
+
+    # Apply initial strategy state for stateful strategies (R4)
+    actual_drawdown = data.get("actual_drawdown")
+    strategy_id = cfg.get("drawdown_strategy", "fixed_target")
+    initial_state = build_initial_strategy_state(actual_drawdown, strategy_id, cfg)
+
+    normalize_config(cfg)
+    engine = RetirementEngine(cfg)
+    result = engine.run_projection(initial_strategy_state=initial_state)
+    recommendation = build_recommendation_from_result(result, cfg)
+
+    return jsonify({
+        "recommendation": recommendation,
+        "result_summary": result.get("summary", {}),
+    })
+
+
+@app.route("/api/review/save", methods=["POST"])
+@login_required
+def api_review_save():
+    """Save a review (bootstrap or annual) and sync balances to config."""
+    import copy as _copy
+    data = request.get_json(silent=True) or {}
+
+    review_type = data.get("review_type", "annual")  # "bootstrap" or "annual"
+    review_date = data.get("review_date", "")
+    balances = data.get("balances", {})
+    actual_drawdown = data.get("actual_drawdown")  # null for bootstrap
+    recommendation = data.get("recommendation", {})
+
+    if not review_date:
+        return jsonify({"error": "Review date is required"}), 400
+
+    # Load existing reviews
+    reviews_data = load_reviews()
+
+    # Compute review_age
+    cfg = get_config()
+    dob_str = cfg["personal"].get("date_of_birth", "1958-07")
+    try:
+        dob_year = int(dob_str[:4])
+        review_year = int(review_date[:4])
+        review_age = review_year - dob_year
+    except (ValueError, IndexError):
+        review_age = cfg["personal"].get("retirement_age", 68)
+
+    # Build review record
+    review_record = {
+        "review_date": review_date,
+        "review_age": review_age,
+        "review_type": review_type,
+        "balances": balances,
+        "actual_drawdown": actual_drawdown,
+        "recommendation": recommendation,
+    }
+
+    # If bootstrap, run stress test to store baseline percentiles
+    if review_type == "bootstrap":
+        try:
+            from backtest_engine import run_backtest, extract_stress_test
+            cfg_copy = _copy.deepcopy(cfg)
+            if balances and review_date:
+                apply_review_balances_to_config(cfg_copy, balances, review_date)
+            normalize_config(cfg_copy)
+            bt_result = run_backtest(cfg_copy)
+            stress = extract_stress_test(bt_result)
+            pct = stress.get("percentile_trajectories", {})
+            reviews_data["baseline"] = {
+                "computed_at": review_date,
+                "start_age": review_age,
+                "strategy": cfg.get("drawdown_strategy", "fixed_target"),
+                "ages": stress.get("ages", []),
+                "capital_percentiles": {
+                    k: [pt["total_capital"] for pt in v]
+                    for k, v in pct.items()
+                },
+                "income_percentiles": {
+                    k: [pt["net_income"] for pt in v]
+                    for k, v in pct.items()
+                },
+            }
+        except Exception as e:
+            # Baseline is nice-to-have; don't block the save
+            import traceback
+            traceback.print_exc()
+
+    reviews_data["reviews"].append(review_record)
+    save_reviews(reviews_data)
+
+    # Sync balances to config_active.json
+    if balances and review_date:
+        apply_review_balances_to_config(cfg, balances, review_date)
+        save_session_config(cfg)
+
+    return jsonify({"ok": True, "review_count": len(reviews_data["reviews"])})
+
 
 # ------------------------------------------------------------------ #
 #  How It Works

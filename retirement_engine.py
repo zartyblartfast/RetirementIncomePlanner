@@ -418,7 +418,7 @@ class RetirementEngine:
     # ------------------------------------------------------------------ #
     #  Main projection  (truly monthly planning)
     # ------------------------------------------------------------------ #
-    def run_projection(self, include_monthly: bool = False) -> dict:
+    def run_projection(self, include_monthly: bool = False, initial_strategy_state: dict = None) -> dict:
         cfg = self.cfg
         retirement_age = cfg["personal"]["retirement_age"]
         end_age = cfg["personal"]["end_age"]
@@ -444,7 +444,7 @@ class RetirementEngine:
         cpi_rate_schedule = cfg.get("cpi_rate_schedule", {})
 
         # Strategy dispatch setup
-        strategy_state = None
+        strategy_state = initial_strategy_state
         use_monthly_cpi = (strategy_id == "fixed_target")
 
         # Load asset model for growth rate resolution
