@@ -16,7 +16,8 @@ from version import get_version_info
 from validation_runner import run_all_scenarios, ALL_SCENARIOS
 from review_helpers import (load_reviews, save_reviews, compute_review_state,
                             build_balances_snapshot, apply_review_balances_to_config,
-                            build_recommendation_from_result, build_initial_strategy_state)
+                            build_recommendation_from_result, build_initial_strategy_state,
+                            backup_config_if_needed, reset_review_data, has_review_backup)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "pension-planner-secret-key-2025")
@@ -1044,12 +1045,14 @@ def review():
     review_state = compute_review_state(cfg, reviews_data)
     balances = build_balances_snapshot(cfg)
     strategy_name = get_strategy_display_name(cfg.get("drawdown_strategy", "fixed_target"))
+    has_backup = has_review_backup()
     return render_template("review.html", config=cfg,
                            review_state=review_state,
                            reviews_data=reviews_data,
                            balances=balances,
                            strategy_name=strategy_name,
-                           strategies=STRATEGIES)
+                           strategies=STRATEGIES,
+                           has_backup=has_backup)
 
 
 @app.route("/api/review/run_projection", methods=["POST"])
@@ -1097,6 +1100,9 @@ def api_review_save():
 
     if not review_date:
         return jsonify({"error": "Review date is required"}), 400
+
+    # Back up config before first review save (safe testing)
+    backup_config_if_needed()
 
     # Load existing reviews
     reviews_data = load_reviews()
@@ -1160,6 +1166,18 @@ def api_review_save():
         save_session_config(cfg)
 
     return jsonify({"ok": True, "review_count": len(reviews_data["reviews"])})
+
+
+@app.route("/api/review/reset", methods=["POST"])
+@login_required
+def api_review_reset():
+    """Reset all review data and restore config from pre-review backup."""
+    result = reset_review_data()
+    if result["config_restored"] or result["reviews_deleted"]:
+        flash("Review data reset. Config restored to pre-review state.", "info")
+    else:
+        flash("No review data to reset.", "warning")
+    return jsonify(result)
 
 
 # ------------------------------------------------------------------ #

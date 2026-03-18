@@ -4,6 +4,52 @@ import json
 from datetime import date, datetime
 
 REVIEWS_PATH = os.path.join(os.path.dirname(__file__), "reviews.json")
+ACTIVE_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config_active.json")
+CONFIG_BACKUP_PATH = os.path.join(os.path.dirname(__file__), "config_active.json.review_bak")
+
+# ------------------------------------------------------------------ #
+#  Backup / Restore (safe testing)
+# ------------------------------------------------------------------ #
+
+def backup_config_if_needed():
+    """Back up config_active.json before the first review save.
+
+    Only creates a backup if one doesn't already exist, so repeated
+    saves don't overwrite the original pre-review config.
+    """
+    if not os.path.exists(CONFIG_BACKUP_PATH) and os.path.exists(ACTIVE_CONFIG_PATH):
+        import shutil
+        shutil.copy2(ACTIVE_CONFIG_PATH, CONFIG_BACKUP_PATH)
+        return True
+    return False
+
+
+def reset_review_data():
+    """Undo all review changes: restore config backup and delete reviews.json.
+
+    Returns a dict describing what was restored/deleted.
+    """
+    result = {"config_restored": False, "reviews_deleted": False}
+
+    # Restore config from backup
+    if os.path.exists(CONFIG_BACKUP_PATH):
+        import shutil
+        shutil.copy2(CONFIG_BACKUP_PATH, ACTIVE_CONFIG_PATH)
+        os.remove(CONFIG_BACKUP_PATH)
+        result["config_restored"] = True
+
+    # Delete reviews.json
+    if os.path.exists(REVIEWS_PATH):
+        os.remove(REVIEWS_PATH)
+        result["reviews_deleted"] = True
+
+    return result
+
+
+def has_review_backup():
+    """Check if a config backup exists (i.e. review data can be reset)."""
+    return os.path.exists(CONFIG_BACKUP_PATH)
+
 
 # ------------------------------------------------------------------ #
 #  Load / Save

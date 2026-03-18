@@ -400,6 +400,30 @@
 </div>
 {% endif %}
 
+<!-- ============================================================ -->
+<!--  Reset / Safe Test Controls                                  -->
+<!-- ============================================================ -->
+{% if has_backup or reviews_data.reviews|length > 0 %}
+<div class="card border-secondary mb-4 mt-3">
+    <div class="card-header bg-secondary text-white">
+        <h6 class="mb-0"><i class="bi bi-arrow-counterclockwise"></i> Reset Review Data</h6>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-2">
+            This will delete all review records and restore your Settings
+            (pot balances, values_as_of dates) to their pre-review state.
+            {% if not has_backup %}
+            <br><strong>Note:</strong> No config backup exists &mdash; only reviews.json will be deleted.
+            Settings balances will not be restored.
+            {% endif %}
+        </p>
+        <button class="btn btn-outline-danger btn-sm" id="reset-review-btn">
+            <i class="bi bi-arrow-counterclockwise"></i> Reset All Review Data
+        </button>
+    </div>
+</div>
+{% endif %}
+
 </div>
 </div>
 {% endblock %}
@@ -667,5 +691,30 @@ let _currentRecommendation = null;
     });
 })();
 {% endif %}
+
+// ============================================================
+//  RESET BUTTON (all states)
+// ============================================================
+(function() {
+    const resetBtn = document.getElementById('reset-review-btn');
+    if (!resetBtn) return;
+    resetBtn.addEventListener('click', async () => {
+        if (!confirm('Reset all review data and restore Settings to pre-review state?\n\nThis cannot be undone.')) return;
+        resetBtn.disabled = true;
+        resetBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Resetting\u2026';
+        try {
+            const resp = await fetch('/api/review/reset', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+            });
+            const data = await resp.json();
+            window.location.href = '/review';
+        } catch (err) {
+            alert('Error: ' + err.message);
+            resetBtn.disabled = false;
+            resetBtn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Reset All Review Data';
+        }
+    });
+})();
 </script>
 {% endblock %}
