@@ -823,23 +823,27 @@ def whatif_backtest():
         cfg["personal"]["end_age"] = int(data["end_age"])
     normalize_config(cfg)
 
-    # Run full backtest
-    bt_result = run_backtest(cfg)
+    try:
+        # Run full backtest
+        bt_result = run_backtest(cfg)
 
-    # Extract stress-test metrics
-    target_income = cfg["target_income"].get("net_annual", 0)
-    stress = extract_stress_test(bt_result, target_income=target_income)
+        # Extract stress-test metrics
+        target_income = cfg["target_income"].get("net_annual", 0)
+        stress = extract_stress_test(bt_result, target_income=target_income)
 
-    # Get strategy display name for the response
-    strategy_id = cfg.get("drawdown_strategy", "fixed_target")
-    strategy_name = get_strategy_display_name(strategy_id)
+        # Get strategy display name for the response
+        strategy_id = cfg.get("drawdown_strategy", "fixed_target")
+        strategy_name = get_strategy_display_name(strategy_id)
 
-    return jsonify({
-        "strategy": strategy_name,
-        "strategy_id": strategy_id,
-        "stress_test": stress,
-        "metadata": bt_result["metadata"],
-    })
+        return jsonify({
+            "strategy": strategy_name,
+            "strategy_id": strategy_id,
+            "stress_test": stress,
+            "metadata": bt_result["metadata"],
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
 
 # ------------------------------------------------------------------ #
 #  What If Sandbox — Strategy Shootout (all strategies under stress)

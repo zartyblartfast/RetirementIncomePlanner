@@ -1640,7 +1640,10 @@ function runStressTest() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     })
-    .then(r => r.json())
+    .then(r => {
+        if (!r.ok) return r.json().catch(() => ({ error: 'Server error ' + r.status })).then(d => { throw new Error(d.error || 'Server error ' + r.status); });
+        return r.json();
+    })
     .then(data => {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-shield-exclamation"></i> Stress';
