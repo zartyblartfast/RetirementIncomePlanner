@@ -420,7 +420,6 @@ class RetirementEngine:
     # ------------------------------------------------------------------ #
     def run_projection(self, include_monthly: bool = False, initial_strategy_state: dict = None) -> dict:
         cfg = self.cfg
-        retirement_age = cfg["personal"]["retirement_age"]
         end_age = cfg["personal"]["end_age"]
         cpi = cfg["target_income"]["cpi_rate"]
 
@@ -477,6 +476,11 @@ class RetirementEngine:
         ret_y, ret_m = parse_ym(cfg["personal"]["retirement_date"])
         ret_abs = ym_to_abs(ret_y, ret_m)
 
+        # Derive retirement_age from dates — retirement_date is the
+        # source of truth; cfg["personal"]["retirement_age"] is
+        # informational only and never used for engine logic.
+        retirement_age = int(age_at_abs(ret_abs))
+
         # ------------------------------------------------------------ #
         #  Anchor date — latest values_as_of, but never before retirement
         # ------------------------------------------------------------ #
@@ -499,7 +503,7 @@ class RetirementEngine:
         anchor_age = int(age_at_abs(anchor_abs))
         anchor_age = max(anchor_age, retirement_age)
 
-        is_post_retirement = anchor_abs > ret_abs
+        is_post_retirement = bool(all_asof_abs) and latest_asof >= ret_abs
 
         # End absolute month — cover full 12-month year for each age
         # anchor_age to end_age inclusive = (end_age - anchor_age + 1) years

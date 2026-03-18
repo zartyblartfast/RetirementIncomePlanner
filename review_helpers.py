@@ -82,8 +82,10 @@ def compute_review_state(cfg, reviews_data=None):
       C = between_reviews  (reviews exist, next review not yet due)
       D = review_due       (reviews exist, next review due or overdue)
 
+    All logic is date-driven — retirement_age is informational only.
+
     Returns dict with keys:
-      state, retirement_date, current_age, has_reviews,
+      state, retirement_date, has_reviews,
       last_review, next_review_date, days_until_review, overdue_days,
       countdown_text
     """
@@ -99,18 +101,6 @@ def compute_review_state(cfg, reviews_data=None):
         retirement_date = date(ret_year, ret_month, 1)
     except (ValueError, IndexError):
         retirement_date = date(2027, 4, 1)
-
-    # Parse DOB to compute current age
-    dob_str = cfg["personal"].get("date_of_birth", "1958-07")
-    try:
-        dob_year, dob_month = int(dob_str[:4]), int(dob_str[5:7])
-        dob_date = date(dob_year, dob_month, 1)
-    except (ValueError, IndexError):
-        dob_date = date(1958, 7, 1)
-
-    # Current age in whole years
-    current_age = (today.year - dob_date.year) - (1 if (today.month, today.day) < (dob_date.month, 1) else 0)
-    retirement_age = cfg["personal"].get("retirement_age", 68)
 
     reviews = reviews_data.get("reviews", [])
     has_reviews = len(reviews) > 0
@@ -163,8 +153,6 @@ def compute_review_state(cfg, reviews_data=None):
         "state": state,
         "retirement_date": retirement_date.isoformat(),
         "retirement_date_display": retirement_date.strftime("%d %B %Y"),
-        "current_age": current_age,
-        "retirement_age": retirement_age,
         "has_reviews": has_reviews,
         "review_count": len(reviews),
         "last_review": last_review,
