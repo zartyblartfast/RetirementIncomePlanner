@@ -1196,6 +1196,34 @@ def api_review_reset():
 
 
 # ------------------------------------------------------------------ #
+#  Health Check — Market Data API
+# ------------------------------------------------------------------ #
+@app.route("/api/health/market-data")
+@login_required
+def api_health_market_data():
+    """Check MarketDataAPI connectivity and return status."""
+    import time
+    t0 = time.time()
+    try:
+        data = fetch_market_data()
+        latency_ms = round((time.time() - t0) * 1000)
+        if data:
+            return jsonify({
+                "status": "ok",
+                "as_of": data.get("as_of"),
+                "benchmarks": len(data.get("benchmarks", {})),
+                "uk_cpi": data.get("uk_cpi"),
+                "uk_sonia": data.get("uk_sonia"),
+                "latency_ms": latency_ms,
+            })
+        else:
+            return jsonify({"status": "error", "error": "API returned no data", "latency_ms": latency_ms}), 502
+    except Exception as e:
+        latency_ms = round((time.time() - t0) * 1000)
+        return jsonify({"status": "error", "error": str(e), "latency_ms": latency_ms}), 502
+
+
+# ------------------------------------------------------------------ #
 #  How It Works
 # ------------------------------------------------------------------ #
 @app.route("/how-it-works")
