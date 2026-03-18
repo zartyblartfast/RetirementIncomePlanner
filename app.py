@@ -22,6 +22,21 @@ from review_helpers import (load_reviews, save_reviews, compute_review_state,
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "pension-planner-secret-key-2025")
 
+
+@app.after_request
+def set_csp(response):
+    """Set Content-Security-Policy to allow CDN scripts, inline scripts,
+    and eval (required by Chart.js / Popper.js bundled with Bootstrap)."""
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "font-src 'self' https://cdn.jsdelivr.net; "
+        "img-src 'self' data:; "
+        "connect-src 'self'"
+    )
+    return response
+
 # ------------------------------------------------------------------ #
 #  Version info — available in all templates as {{ version_info }}
 # ------------------------------------------------------------------ #
