@@ -334,4 +334,23 @@ def normalize_config(cfg):
             "initial_target", fallback_target)
     # ARVA: no initial_target param; target_income.net_annual left as-is
 
+    # Migrate guaranteed income from start_age/end_age to start_date/end_date.
+    # Dates are the source of truth; age fields are informational only.
+    dob_str = cfg.get("personal", {}).get("date_of_birth", "1960-01")
+    try:
+        _dob_y, _dob_m = int(dob_str[:4]), int(dob_str[5:7])
+    except (ValueError, IndexError):
+        _dob_y, _dob_m = 1960, 1
+    for g in cfg.get("guaranteed_income", []):
+        if "start_date" not in g and "start_age" in g:
+            sa = g["start_age"]
+            total_m = _dob_y * 12 + (_dob_m - 1) + int(round(sa * 12))
+            sy, sm = divmod(total_m, 12)
+            g["start_date"] = f"{sy:04d}-{sm + 1:02d}"
+        if "end_date" not in g and g.get("end_age") is not None:
+            ea = g["end_age"]
+            total_m = _dob_y * 12 + (_dob_m - 1) + int(round(ea * 12))
+            ey, em = divmod(total_m, 12)
+            g["end_date"] = f"{ey:04d}-{em + 1:02d}"
+
     return cfg
