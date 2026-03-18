@@ -92,6 +92,7 @@
                     <table class="table table-sm">
                         <tr><td class="fw-bold">Strategy</td><td id="bs-strategy"></td></tr>
                         <tr><td class="fw-bold">Recommended Net Income</td><td id="bs-income"></td></tr>
+                        <tr><td class="fw-bold">Monthly</td><td id="bs-monthly" class="text-muted"></td></tr>
                         <tr><td class="fw-bold">Withdraw From</td><td id="bs-sources"></td></tr>
                         <tr><td class="fw-bold">Sustainable</td><td id="bs-sustainable"></td></tr>
                     </table>
@@ -342,6 +343,7 @@
                     <table class="table table-sm">
                         <tr><td class="fw-bold">Strategy</td><td id="rv-strategy"></td></tr>
                         <tr><td class="fw-bold">Recommended Net Income</td><td id="rv-income"></td></tr>
+                        <tr><td class="fw-bold">Monthly</td><td id="rv-monthly" class="text-muted"></td></tr>
                         <tr><td class="fw-bold">Withdraw From</td><td id="rv-sources"></td></tr>
                         <tr><td class="fw-bold">Sustainable</td><td id="rv-sustainable"></td></tr>
                         <tr><td class="fw-bold">vs Last Year</td><td id="rv-delta"></td></tr>
@@ -461,6 +463,7 @@ function collectBalances(selector) {
 function displayRecommendation(rec, prefix) {
     document.getElementById(prefix + '-strategy').textContent = strategyDisplayName(rec.strategy);
     document.getElementById(prefix + '-income').textContent = fmtMoney(rec.total_net_income) + ' net';
+    document.getElementById(prefix + '-monthly').textContent = fmtMoney(rec.total_net_income / 12) + '/month';
     const sources = (rec.withdrawal_plan || [])
         .filter(w => w.net_amount > 0)
         .map(w => w.source + ': ' + fmtMoney(w.net_amount))
