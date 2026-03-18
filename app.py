@@ -337,14 +337,11 @@ def settings():
                 "name": request.form.get("g_name", "New Pension"),
                 "gross_annual": float(request.form.get("g_gross_annual", 0)),
                 "indexation_rate": float(request.form.get("g_indexation_rate", 0)),
-                "start_age": int(request.form.get("g_start_age", 68)),
-                "end_age": None,
+                "start_date": request.form.get("g_start_date", "").strip() or None,
+                "end_date": request.form.get("g_end_date", "").strip() or None,
                 "taxable": request.form.get("g_taxable") == "on",
                 "values_as_of": request.form.get("g_values_as_of", "").strip() or None,
             }
-            end_age_str = request.form.get("g_end_age", "").strip()
-            if end_age_str:
-                new_stream["end_age"] = int(end_age_str)
             cfg["guaranteed_income"].append(new_stream)
             flash(f"Added guaranteed income: {new_stream['name']}", "success")
 
@@ -361,9 +358,8 @@ def settings():
                 g["name"] = request.form.get("g_name", g["name"])
                 g["gross_annual"] = float(request.form.get("g_gross_annual", g["gross_annual"]))
                 g["indexation_rate"] = float(request.form.get("g_indexation_rate", g["indexation_rate"]))
-                g["start_age"] = int(request.form.get("g_start_age", g["start_age"]))
-                end_age_str = request.form.get("g_end_age", "").strip()
-                g["end_age"] = int(end_age_str) if end_age_str else None
+                g["start_date"] = request.form.get("g_start_date", g.get("start_date", "")).strip() or None
+                g["end_date"] = request.form.get("g_end_date", "").strip() or None
                 g["taxable"] = request.form.get("g_taxable") == "on"
                 g["values_as_of"] = request.form.get("g_values_as_of", "").strip() or None
                 flash(f"Updated: {g['name']}", "success")
@@ -1140,7 +1136,7 @@ def api_review_save():
             pct = stress.get("percentile_trajectories", {})
             reviews_data["baseline"] = {
                 "computed_at": review_date,
-                "start_age": review_age,
+                "start_date": review_date,
                 "strategy": cfg.get("drawdown_strategy", "fixed_target"),
                 "ages": stress.get("ages", []),
                 "capital_percentiles": {

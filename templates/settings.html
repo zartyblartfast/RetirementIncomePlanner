@@ -171,8 +171,8 @@
                             <div class="col-md-6"><input type="text" class="form-control form-control-sm" name="g_name" placeholder="Name" required></div>
                             <div class="col-md-6"><input type="number" class="form-control form-control-sm" name="g_gross_annual" placeholder="Gross Annual (&pound;)" step="100" required></div>
                             <div class="col-md-4"><input type="number" class="form-control form-control-sm" name="g_indexation_rate" placeholder="Indexation" step="0.0001" value="0.03"></div>
-                            <div class="col-md-4"><input type="number" class="form-control form-control-sm" name="g_start_age" placeholder="Start Age" value="68"></div>
-                            <div class="col-md-4"><input type="number" class="form-control form-control-sm" name="g_end_age" placeholder="End Age (blank=never)"></div>
+                            <div class="col-md-4"><input type="month" class="form-control form-control-sm" name="g_start_date" placeholder="Start Date" title="Month income starts (YYYY-MM)"></div>
+                            <div class="col-md-4"><input type="month" class="form-control form-control-sm" name="g_end_date" placeholder="End Date (blank=never)" title="Month income ends (blank=never)"></div>
                             <div class="col-md-4"><input type="month" class="form-control form-control-sm" name="g_values_as_of" placeholder="Values as of" title="Date these values are accurate as of (auto-indexes to retirement)"></div>
                             <div class="col-md-4 d-flex align-items-center"><small class="text-muted">Values as of</small></div>
                             <div class="col-12">
@@ -205,7 +205,7 @@
                     <div class="row text-muted small">
                         <div class="col"><i class="bi bi-cash"></i> &pound;{{ "{:,.2f}".format(g.gross_annual) }}/yr</div>
                         <div class="col"><i class="bi bi-graph-up"></i> {{ (g.indexation_rate * 100) | round(1) }}%</div>
-                        <div class="col"><i class="bi bi-calendar"></i> Age {{ g.start_age }}{% if g.end_age %}-{{ g.end_age }}{% endif %}</div>
+                        <div class="col"><i class="bi bi-calendar"></i> {{ g.start_date or 'N/A' }}{% if g.end_date %} to {{ g.end_date }}{% endif %}</div>
                         <div class="col">{% if g.taxable %}<span class="badge bg-warning text-dark">Taxable</span>{% else %}<span class="badge bg-success">Tax-free</span>{% endif %}</div>
                         <div class="col">{% if g.values_as_of %}<i class="bi bi-clock-history"></i> As of {{ g.values_as_of }}{% endif %}</div>
                     </div>
@@ -218,8 +218,8 @@
                                 <div class="col-md-6"><input type="text" class="form-control form-control-sm" name="g_name" value="{{ g.name }}"></div>
                                 <div class="col-md-6"><input type="number" class="form-control form-control-sm" name="g_gross_annual" value="{{ g.gross_annual }}" step="100"></div>
                                 <div class="col-md-4"><input type="number" class="form-control form-control-sm" name="g_indexation_rate" value="{{ g.indexation_rate }}" step="0.0001"></div>
-                                <div class="col-md-4"><input type="number" class="form-control form-control-sm" name="g_start_age" value="{{ g.start_age }}"></div>
-                                <div class="col-md-4"><input type="number" class="form-control form-control-sm" name="g_end_age" value="{{ g.end_age or '' }}"></div>
+                                <div class="col-md-4"><input type="month" class="form-control form-control-sm" name="g_start_date" value="{{ g.start_date or '' }}" title="Month income starts"></div>
+                                <div class="col-md-4"><input type="month" class="form-control form-control-sm" name="g_end_date" value="{{ g.end_date or '' }}" title="Month income ends (blank=never)"></div>
                                 <div class="col-md-4"><input type="month" class="form-control form-control-sm" name="g_values_as_of" value="{{ g.values_as_of or '' }}" title="Date these values are accurate as of"></div>
                                 <div class="col-md-4 d-flex align-items-center"><small class="text-muted">Values as of</small></div>
                                 <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="g_taxable" {% if g.taxable %}checked{% endif %}><label class="form-check-label">Taxable</label></div></div>

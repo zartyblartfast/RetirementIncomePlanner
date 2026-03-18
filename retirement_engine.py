@@ -530,11 +530,23 @@ class RetirementEngine:
                 if gap > 0:
                     annual = annual * (1 + idx_rate) ** (gap / 12.0)
 
-            # Convert start_age / end_age to absolute months
-            start_age = g.get("start_age", retirement_age)
-            g_end_age = g.get("end_age")
-            start_abs = dob_abs + int(round(start_age * 12))
-            end_abs_g = dob_abs + int(round(g_end_age * 12)) if g_end_age is not None else None
+            # Convert start_date / end_date to absolute months.
+            # Dates are the source of truth; fall back to age + DOB
+            # for backward compatibility with older configs.
+            if g.get("start_date"):
+                _sy, _sm = parse_ym(g["start_date"])
+                start_abs = ym_to_abs(_sy, _sm)
+            else:
+                _sa = g.get("start_age", retirement_age)
+                start_abs = dob_abs + int(round(_sa * 12))
+
+            if g.get("end_date"):
+                _ey, _em = parse_ym(g["end_date"])
+                end_abs_g = ym_to_abs(_ey, _em)
+            elif g.get("end_age") is not None:
+                end_abs_g = dob_abs + int(round(g["end_age"] * 12))
+            else:
+                end_abs_g = None
 
             guaranteed.append({
                 "name": g["name"],

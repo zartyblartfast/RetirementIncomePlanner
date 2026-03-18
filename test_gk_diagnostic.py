@@ -29,8 +29,8 @@ def make_gk_config(**overrides):
             {
                 "name": "UK State Pension",
                 "gross_annual": 11500,
-                "start_age": 68,
-                "end_age": None,
+                "start_date": "2028-01",
+                "end_date": None,
                 "taxable": True,
                 "indexation_rate": 0.025,
                 "values_as_of": "2028-01",
@@ -38,8 +38,8 @@ def make_gk_config(**overrides):
             {
                 "name": "BP Pension (DB)",
                 "gross_annual": 8000,
-                "start_age": 68,
-                "end_age": None,
+                "start_date": "2028-01",
+                "end_date": None,
                 "taxable": True,
                 "indexation_rate": 0.025,
                 "values_as_of": "2028-01",
