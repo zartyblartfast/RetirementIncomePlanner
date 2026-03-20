@@ -308,7 +308,7 @@
     <div class="card-header"><i class="bi bi-table"></i> Year-by-Year Projection</div>
     <div class="card-body table-responsive">
         {% set num_cols = 6 + config.guaranteed_income|length + 2 * config.dc_pots|length + 2 * config.tax_free_accounts|length %}
-        <table class="table table-sm table-striped table-hover">
+        <table class="table table-sm table-striped table-hover" style="white-space:nowrap;">
             <thead class="table-dark">
                 <tr>
                     <th>Age</th>
