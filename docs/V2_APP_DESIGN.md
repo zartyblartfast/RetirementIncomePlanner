@@ -101,12 +101,37 @@ Sandbox environment for scenario analysis. Four clear tabs:
 - Run all 6 strategies under historical stress on the current scenario
 - Comparison table: strategy × median income × worst income × depletion age × volatility
 - Recommendation badge on the "best fit" strategy
+- **"Optimise" button** — launches a guided wizard (modal/drawer):
+
+#### Optimise Wizard (modal, launched from Strategy Shootout or Adjust tab)
+
+Replaces V1's standalone Optimise page with a streamlined 3-step modal:
+
+```
+Step 1: "What matters most?"
+  → Maximise income / Preserve capital / Balance both
+  → Sets the objective function for the recommendation
+
+Step 2: "Your risk comfort"
+  → Shows Strategy Shootout results filtered by Step 1 preference
+  → User picks a comfort level: Conservative / Moderate / Aggressive
+  → Or accepts the auto-recommendation
+
+Step 3: "Recommendation"
+  → Best strategy + recommended income target
+  → Mini projection chart showing the outcome
+  → "Apply to What If" button (updates Adjust tab overrides)
+  → "Apply to Dashboard" button (saves to real config)
+```
+
+This keeps all exploration on the What If page — no separate Optimise page needed.
 
 **Key UX improvements over V1:**
 - Tabs make the workflow sequential and discoverable
 - "Adjust" tab replaces the confusing "sandbox overrides" scattered across the page
 - Compare tab replaces the checkbox-based overlay which was hard to discover
 - Each tab is self-contained with a clear purpose
+- Optimise is contextual — launched from within the exploration flow, not a separate page
 
 ### 3.3 Review — "Annual Review"
 
@@ -289,7 +314,7 @@ For the public JS app, the Market Data API URL could be:
 Features deliberately excluded from the first release:
 
 - **Authentication/login** — no server, no accounts; single-user browser storage
-- **Optimise page** — V1's auto-optimiser is a power feature; defer to V2.1
+- ~~Optimise page~~ — integrated as a guided wizard modal within What If (see §3.2)
 - **Validation page** — developer tool, not needed in the public app
 - **Email reminders** — requires a server; out of scope for client-only app
 - **Multi-user / sharing** — single browser instance; export/import covers collaboration
