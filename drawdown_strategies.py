@@ -324,10 +324,6 @@ def normalize_config(cfg):
                 p["key"]: p["default"] for p in entry.get("params", [])
             }
 
-    # Always keep ARVA target_end_age in sync with personal.end_age
-    if sid in ("arva", "arva_guardrails"):
-        cfg["drawdown_strategy_params"]["target_end_age"] = cfg.get("personal", {}).get("end_age", 90)
-
     # Sync target_income.net_annual from the strategy's authoritative value
     params = cfg["drawdown_strategy_params"]
     if sid == "fixed_target":

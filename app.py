@@ -283,6 +283,9 @@ def dashboard():
     import copy as _copy
     ext_cfg = _copy.deepcopy(cfg)
     ext_cfg["personal"]["end_age"] = 120
+    # Preserve ARVA target_end_age so it still plans to deplete by original plan end
+    if ext_cfg.get("drawdown_strategy") in ("arva", "arva_guardrails"):
+        ext_cfg.setdefault("drawdown_strategy_params", {})["target_end_age"] = cfg["personal"]["end_age"]
     ext_engine = RetirementEngine(ext_cfg)
     ext_result = ext_engine.run_projection()
     plan_end_age = cfg["personal"]["end_age"]
@@ -484,6 +487,9 @@ def settings():
                     params[p["key"]] = float(val)
                 except (ValueError, TypeError):
                     params[p["key"]] = p["default"]
+            # ARVA: always keep target_end_age in sync with plan end age
+            if sid in ("arva", "arva_guardrails"):
+                params["target_end_age"] = cfg["personal"].get("end_age", 90)
             cfg["drawdown_strategy_params"] = params
             # Save CPI (shared across all strategies)
             try:
@@ -592,6 +598,9 @@ def compare():
         ext_cfg = _copy.deepcopy(cfg)
         plan_end_age = cfg["personal"]["end_age"]
         ext_cfg["personal"]["end_age"] = min(120, max(plan_end_age, 120))
+        # Preserve ARVA target_end_age so it still plans to deplete by original plan end
+        if ext_cfg.get("drawdown_strategy") in ("arva", "arva_guardrails"):
+            ext_cfg.setdefault("drawdown_strategy_params", {})["target_end_age"] = plan_end_age
         engine = RetirementEngine(ext_cfg)
         ext_result = engine.run_projection()
         # Cap extended projection at 120
@@ -655,6 +664,9 @@ def compare():
         ext_cfg = _copy.deepcopy(cfg)
         plan_end_age = cfg["personal"]["end_age"]
         ext_cfg["personal"]["end_age"] = min(120, max(plan_end_age, 120))
+        # Preserve ARVA target_end_age so it still plans to deplete by original plan end
+        if ext_cfg.get("drawdown_strategy") in ("arva", "arva_guardrails"):
+            ext_cfg.setdefault("drawdown_strategy_params", {})["target_end_age"] = plan_end_age
         ext_result = RetirementEngine(ext_cfg).run_projection()
         # Cap extended projection at 120
         ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= 120]
@@ -777,6 +789,9 @@ def whatif_save():
     plan_end_age = cfg["personal"]["end_age"]
     ext_cfg = _copy.deepcopy(cfg)
     ext_cfg["personal"]["end_age"] = min(120, max(plan_end_age, 120))
+    # Preserve ARVA target_end_age so it still plans to deplete by original plan end
+    if ext_cfg.get("drawdown_strategy") in ("arva", "arva_guardrails"):
+        ext_cfg.setdefault("drawdown_strategy_params", {})["target_end_age"] = plan_end_age
     ext_result = RetirementEngine(ext_cfg).run_projection()
     # Cap extended projection at 120
     ext_result["years"] = [y for y in ext_result["years"] if y["age"] <= 120]
