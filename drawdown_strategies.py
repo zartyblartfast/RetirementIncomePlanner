@@ -5,15 +5,19 @@ The drawdown ORDER (which pots fund the withdrawal) is handled separately
 by the engine's priority-based allocation.
 
 Strategy functions signature:
-    compute(params, state, portfolio_value, cpi_rate) -> (target_dict, new_state)
+    compute(params, state, portfolio_value, cpi_rate,
+            current_age, plan_end_age) -> (target_dict, new_state)
 
     params:          dict of strategy-specific parameters
     state:           dict carrying year-over-year state (None on first call)
     portfolio_value: total investable capital (DC pots + tax-free accounts)
     cpi_rate:        annual CPI rate from config
+    current_age:     int, the age at the start of this projection year
+    plan_end_age:    int, the user's chosen plan end age (NEVER the
+                     extended projection horizon)
 
     Returns:
-        target_dict: {"mode": "net"|"gross", "annual_amount": float}
+        target_dict: {"mode": "net"|"pot_net"|"gross", "annual_amount": float}
         new_state:   dict to pass into next year's call
 """
 
@@ -81,8 +85,6 @@ STRATEGIES = {
             {"key": "assumed_real_return_pct", "label": "Assumed Real Return (%)", "type": "number",
              "step": 0.5, "default": 3.0,
              "tooltip": "The real (after-inflation) return ARVA assumes when calculating withdrawals. Higher = larger withdrawals but more risk of depletion if actual returns are lower."},
-            {"key": "target_end_age", "label": "Target End Age", "type": "number",
-             "step": 1, "default": 90, "sandbox_hidden": True},
         ],
     },
     "arva_guardrails": {
@@ -92,8 +94,6 @@ STRATEGIES = {
             {"key": "assumed_real_return_pct", "label": "Assumed Real Return (%)", "type": "number",
              "step": 0.5, "default": 3.0,
              "tooltip": "The real (after-inflation) return ARVA assumes when calculating withdrawals. Higher = larger withdrawals but more risk of depletion if actual returns are lower."},
-            {"key": "target_end_age", "label": "Target End Age", "type": "number",
-             "step": 1, "default": 90, "sandbox_hidden": True},
             {"key": "max_annual_increase_pct", "label": "Max Annual Increase (%)", "type": "number",
              "step": 1.0, "default": 10.0,
              "tooltip": "Ceiling: the maximum percentage ARVA income can rise year-to-year. Prevents over-spending after a single strong year."},
@@ -117,7 +117,8 @@ def get_strategy_display_name(strategy_id):
 #  Strategy compute functions
 # ------------------------------------------------------------------ #
 
-def _compute_fixed_target(params, state, portfolio_value, cpi_rate):
+def _compute_fixed_target(params, state, portfolio_value, cpi_rate,
+                          current_age, plan_end_age):
     """Fixed Target: return the CPI-adjusted net income target."""
     if state is None:
         state = {"current_target": params.get("net_annual", 30000)}
@@ -127,7 +128,8 @@ def _compute_fixed_target(params, state, portfolio_value, cpi_rate):
     return {"mode": "net", "annual_amount": state["current_target"]}, state
 
 
-def _compute_fixed_percentage(params, state, portfolio_value, cpi_rate):
+def _compute_fixed_percentage(params, state, portfolio_value, cpi_rate,
+                              current_age, plan_end_age):
     """Fixed Percentage: gross withdrawal = portfolio × rate."""
     rate = params.get("withdrawal_rate", 4.0) / 100.0
     gross = portfolio_value * rate
@@ -136,7 +138,8 @@ def _compute_fixed_percentage(params, state, portfolio_value, cpi_rate):
     return {"mode": "gross", "annual_amount": gross}, state
 
 
-def _compute_vanguard_dynamic(params, state, portfolio_value, cpi_rate):
+def _compute_vanguard_dynamic(params, state, portfolio_value, cpi_rate,
+                              current_age, plan_end_age):
     """Vanguard Dynamic Spending: CPI-adjust prior target, clamp by limits."""
     max_up = params.get("max_increase_pct", 5.0) / 100.0
     max_down = params.get("max_decrease_pct", 2.5) / 100.0
@@ -174,7 +177,8 @@ def _pmt(pv, r, n):
     return pv * r / (1 - (1 + r) ** (-n))
 
 
-def _compute_guyton_klinger(params, state, portfolio_value, cpi_rate):
+def _compute_guyton_klinger(params, state, portfolio_value, cpi_rate,
+                            current_age, plan_end_age):
     """Guyton-Klinger Guardrails: adjust income when rate drifts outside rails."""
     upper = params.get("upper_guardrail_pct", 5.5) / 100.0
     lower = params.get("lower_guardrail_pct", 3.5) / 100.0
@@ -210,16 +214,16 @@ def _compute_guyton_klinger(params, state, portfolio_value, cpi_rate):
     return {"mode": "net", "annual_amount": current_target}, state
 
 
-def _compute_arva(params, state, portfolio_value, cpi_rate, current_age=None):
+def _compute_arva(params, state, portfolio_value, cpi_rate,
+                  current_age, plan_end_age):
     """ARVA: recalculate withdrawal each year using annuity formula targeting depletion."""
     r = params.get("assumed_real_return_pct", 3.0) / 100.0
-    target_end_age = params.get("target_end_age", 90)
 
     if state is None:
         state = {}
 
-    # +1 so ARVA plans income THROUGH end_age (inclusive)
-    remaining_years = max(1, target_end_age - (current_age or target_end_age - 1) + 1)
+    # +1 so ARVA plans income THROUGH plan_end_age (inclusive)
+    remaining_years = max(1, plan_end_age - current_age + 1)
     # Use monthly PMT to match the engine's monthly execution model
     remaining_months = remaining_years * 12
     monthly_r = (1 + r) ** (1.0 / 12) - 1
@@ -230,15 +234,15 @@ def _compute_arva(params, state, portfolio_value, cpi_rate, current_age=None):
     return {"mode": "pot_net", "annual_amount": withdrawal}, state
 
 
-def _compute_arva_guardrails(params, state, portfolio_value, cpi_rate, current_age=None):
+def _compute_arva_guardrails(params, state, portfolio_value, cpi_rate,
+                             current_age, plan_end_age):
     """ARVA + Guardrails: ARVA with capped year-to-year spending changes."""
     r = params.get("assumed_real_return_pct", 3.0) / 100.0
-    target_end_age = params.get("target_end_age", 90)
     max_up = params.get("max_annual_increase_pct", 10.0) / 100.0
     max_down = params.get("max_annual_decrease_pct", 10.0) / 100.0
 
-    # +1 so ARVA plans income THROUGH end_age (inclusive)
-    remaining_years = max(1, target_end_age - (current_age or target_end_age - 1) + 1)
+    # +1 so ARVA plans income THROUGH plan_end_age (inclusive)
+    remaining_years = max(1, plan_end_age - current_age + 1)
     # Use monthly PMT to match the engine's monthly execution model
     remaining_months = remaining_years * 12
     monthly_r = (1 + r) ** (1.0 / 12) - 1
@@ -270,17 +274,16 @@ _COMPUTE_MAP = {
 
 
 def compute_annual_target(strategy_id, params, state, portfolio_value, cpi_rate,
-                          current_age=None):
+                          current_age, plan_end_age):
     """Dispatch to the correct strategy compute function.
+
+    All strategies receive the same arguments.  plan_end_age is the user's
+    chosen plan end age and must NEVER be the extended projection horizon.
 
     Returns (target_dict, new_state).
     """
     fn = _COMPUTE_MAP.get(strategy_id, _compute_fixed_target)
-    # Pass current_age for strategies that use it (ARVA)
-    try:
-        return fn(params, state, portfolio_value, cpi_rate, current_age=current_age)
-    except TypeError:
-        return fn(params, state, portfolio_value, cpi_rate)
+    return fn(params, state, portfolio_value, cpi_rate, current_age, plan_end_age)
 
 
 # ------------------------------------------------------------------ #
@@ -314,8 +317,6 @@ def normalize_config(cfg):
         elif sid in ("arva", "arva_guardrails"):
             entry = STRATEGIES.get(sid, {})
             params = {p["key"]: p["default"] for p in entry.get("params", [])}
-            # Seed target_end_age from config's end_age when available
-            params["target_end_age"] = cfg.get("personal", {}).get("end_age", 90)
             cfg["drawdown_strategy_params"] = params
         else:
             # Build defaults from registry

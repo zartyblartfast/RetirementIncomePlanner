@@ -1,0 +1,546 @@
+{
+  "name": "arva",
+  "config": {
+    "personal": {
+      "date_of_birth": "1960-01",
+      "retirement_date": "2028-01",
+      "retirement_age": 68,
+      "end_age": 78,
+      "currency": "GBP"
+    },
+    "target_income": {
+      "net_annual": 20000,
+      "cpi_rate": 0.02
+    },
+    "guaranteed_income": [
+      {
+        "name": "State Pension",
+        "gross_annual": 11500,
+        "indexation_rate": 0.02,
+        "taxable": true,
+        "start_date": "2028-01"
+      }
+    ],
+    "dc_pots": [
+      {
+        "name": "Employer",
+        "starting_balance": 80000,
+        "growth_rate": 0.04,
+        "fee_pct": 0.005,
+        "allocation": {
+          "mode": "manual",
+          "manual_override": true
+        },
+        "values_as_of": "2028-01"
+      }
+    ],
+    "tax_free_accounts": [
+      {
+        "name": "ISA",
+        "starting_balance": 50000,
+        "growth_rate": 0.04,
+        "allocation": {
+          "mode": "manual",
+          "manual_override": true
+        },
+        "values_as_of": "2028-01"
+      }
+    ],
+    "withdrawal_priority": [
+      "Employer",
+      "ISA"
+    ],
+    "tax": {
+      "regime": "Isle of Man",
+      "personal_allowance": 14500,
+      "bands": [
+        {
+          "name": "Lower rate",
+          "width": 6500,
+          "rate": 0.1
+        },
+        {
+          "name": "Higher rate",
+          "width": null,
+          "rate": 0.2
+        }
+      ],
+      "tax_cap_enabled": false,
+      "tax_cap_amount": 200000
+    },
+    "drawdown_strategy": "arva",
+    "drawdown_strategy_params": {
+      "assumed_real_return_pct": 3.0
+    }
+  },
+  "summary": {
+    "sustainable": true,
+    "first_shortfall_age": null,
+    "remaining_capital": 206.79,
+    "end_age": 78
+  },
+  "years": [
+    {
+      "age": 68,
+      "target_net": 25360.5,
+      "net_income_achieved": 25360.5,
+      "total_capital": 119815.73,
+      "shortfall": false
+    },
+    {
+      "age": 69,
+      "target_net": 25586.55,
+      "net_income_achieved": 25586.54,
+      "total_capital": 109238.7,
+      "shortfall": false
+    },
+    {
+      "age": 70,
+      "target_net": 25805.25,
+      "net_income_achieved": 25805.23,
+      "total_capital": 98268.87,
+      "shortfall": false
+    },
+    {
+      "age": 71,
+      "target_net": 26014.04,
+      "net_income_achieved": 26014.02,
+      "total_capital": 86909.34,
+      "shortfall": false
+    },
+    {
+      "age": 72,
+      "target_net": 26209.26,
+      "net_income_achieved": 26209.22,
+      "total_capital": 75167.83,
+      "shortfall": false
+    },
+    {
+      "age": 73,
+      "target_net": 26385.51,
+      "net_income_achieved": 26398.98,
+      "total_capital": 63076.41,
+      "shortfall": false
+    },
+    {
+      "age": 74,
+      "target_net": 26538.06,
+      "net_income_achieved": 26538.06,
+      "total_capital": 51884.53,
+      "shortfall": false
+    },
+    {
+      "age": 75,
+      "target_net": 26979.9,
+      "net_income_achieved": 26979.9,
+      "total_capital": 40061.21,
+      "shortfall": false
+    },
+    {
+      "age": 76,
+      "target_net": 27445.85,
+      "net_income_achieved": 27445.85,
+      "total_capital": 27561.98,
+      "shortfall": false
+    },
+    {
+      "age": 77,
+      "target_net": 27953.41,
+      "net_income_achieved": 27953.41,
+      "total_capital": 14322.85,
+      "shortfall": false
+    },
+    {
+      "age": 78,
+      "target_net": 28571.93,
+      "net_income_achieved": 28571.93,
+      "total_capital": 206.79,
+      "shortfall": false
+    }
+  ],
+  "ext_summary": {
+    "sustainable": true,
+    "first_shortfall_age": null,
+    "remaining_capital": 6.78,
+    "end_age": 78
+  },
+  "ext_years": [
+    {
+      "age": 68,
+      "target_net": 25360.5,
+      "net_income_achieved": 25360.5,
+      "total_capital": 119815.73,
+      "shortfall": false
+    },
+    {
+      "age": 69,
+      "target_net": 25586.55,
+      "net_income_achieved": 25586.54,
+      "total_capital": 109238.7,
+      "shortfall": false
+    },
+    {
+      "age": 70,
+      "target_net": 25805.25,
+      "net_income_achieved": 25805.23,
+      "total_capital": 98268.87,
+      "shortfall": false
+    },
+    {
+      "age": 71,
+      "target_net": 26014.04,
+      "net_income_achieved": 26014.02,
+      "total_capital": 86909.34,
+      "shortfall": false
+    },
+    {
+      "age": 72,
+      "target_net": 26209.26,
+      "net_income_achieved": 26209.22,
+      "total_capital": 75167.83,
+      "shortfall": false
+    },
+    {
+      "age": 73,
+      "target_net": 26385.51,
+      "net_income_achieved": 26398.98,
+      "total_capital": 63076.41,
+      "shortfall": false
+    },
+    {
+      "age": 74,
+      "target_net": 26538.06,
+      "net_income_achieved": 26538.06,
+      "total_capital": 51884.53,
+      "shortfall": false
+    },
+    {
+      "age": 75,
+      "target_net": 26979.9,
+      "net_income_achieved": 26979.9,
+      "total_capital": 40061.21,
+      "shortfall": false
+    },
+    {
+      "age": 76,
+      "target_net": 27445.85,
+      "net_income_achieved": 27445.85,
+      "total_capital": 27561.98,
+      "shortfall": false
+    },
+    {
+      "age": 77,
+      "target_net": 27953.41,
+      "net_income_achieved": 27953.41,
+      "total_capital": 14322.85,
+      "shortfall": false
+    },
+    {
+      "age": 78,
+      "target_net": 28571.93,
+      "net_income_achieved": 28571.93,
+      "total_capital": 206.79,
+      "shortfall": false
+    },
+    {
+      "age": 79,
+      "target_net": 14508.93,
+      "net_income_achieved": 14515.88,
+      "total_capital": 126.19,
+      "shortfall": false
+    },
+    {
+      "age": 80,
+      "target_net": 14704.52,
+      "net_income_achieved": 14733.15,
+      "total_capital": 93.14,
+      "shortfall": false
+    },
+    {
+      "age": 81,
+      "target_net": 14933.46,
+      "net_income_achieved": 14982.09,
+      "total_capital": 75.2,
+      "shortfall": false
+    },
+    {
+      "age": 82,
+      "target_net": 15183.02,
+      "net_income_achieved": 15245.52,
+      "total_capital": 63.55,
+      "shortfall": false
+    },
+    {
+      "age": 83,
+      "target_net": 15444.31,
+      "net_income_achieved": 15517.35,
+      "total_capital": 55.34,
+      "shortfall": false
+    },
+    {
+      "age": 84,
+      "target_net": 15714.57,
+      "net_income_achieved": 15796.3,
+      "total_capital": 49.08,
+      "shortfall": false
+    },
+    {
+      "age": 85,
+      "target_net": 15992.37,
+      "net_income_achieved": 16081.35,
+      "total_capital": 44.34,
+      "shortfall": false
+    },
+    {
+      "age": 86,
+      "target_net": 16277.4,
+      "net_income_achieved": 16372.84,
+      "total_capital": 40.44,
+      "shortfall": false
+    },
+    {
+      "age": 87,
+      "target_net": 16569.09,
+      "net_income_achieved": 16670.49,
+      "total_capital": 37.11,
+      "shortfall": false
+    },
+    {
+      "age": 88,
+      "target_net": 16867.27,
+      "net_income_achieved": 16974.2,
+      "total_capital": 34.28,
+      "shortfall": false
+    },
+    {
+      "age": 89,
+      "target_net": 17171.98,
+      "net_income_achieved": 17284.07,
+      "total_capital": 31.88,
+      "shortfall": false
+    },
+    {
+      "age": 90,
+      "target_net": 17483.28,
+      "net_income_achieved": 17600.23,
+      "total_capital": 29.84,
+      "shortfall": false
+    },
+    {
+      "age": 91,
+      "target_net": 17801.23,
+      "net_income_achieved": 17922.79,
+      "total_capital": 28.12,
+      "shortfall": false
+    },
+    {
+      "age": 92,
+      "target_net": 18125.91,
+      "net_income_achieved": 18251.85,
+      "total_capital": 26.69,
+      "shortfall": false
+    },
+    {
+      "age": 93,
+      "target_net": 18457.39,
+      "net_income_achieved": 18587.63,
+      "total_capital": 25.41,
+      "shortfall": false
+    },
+    {
+      "age": 94,
+      "target_net": 18795.7,
+      "net_income_achieved": 18930.23,
+      "total_capital": 24.2,
+      "shortfall": false
+    },
+    {
+      "age": 95,
+      "target_net": 19140.86,
+      "net_income_achieved": 19279.68,
+      "total_capital": 23.04,
+      "shortfall": false
+    },
+    {
+      "age": 96,
+      "target_net": 19493.01,
+      "net_income_achieved": 19636.14,
+      "total_capital": 21.94,
+      "shortfall": false
+    },
+    {
+      "age": 97,
+      "target_net": 19852.29,
+      "net_income_achieved": 19999.74,
+      "total_capital": 20.89,
+      "shortfall": false
+    },
+    {
+      "age": 98,
+      "target_net": 20218.82,
+      "net_income_achieved": 20368.51,
+      "total_capital": 19.89,
+      "shortfall": false
+    },
+    {
+      "age": 99,
+      "target_net": 20568.04,
+      "net_income_achieved": 20704.76,
+      "total_capital": 18.94,
+      "shortfall": false
+    },
+    {
+      "age": 100,
+      "target_net": 20907.03,
+      "net_income_achieved": 21047.74,
+      "total_capital": 18.04,
+      "shortfall": false
+    },
+    {
+      "age": 101,
+      "target_net": 21252.86,
+      "net_income_achieved": 21397.59,
+      "total_capital": 17.18,
+      "shortfall": false
+    },
+    {
+      "age": 102,
+      "target_net": 21605.68,
+      "net_income_achieved": 21754.44,
+      "total_capital": 16.36,
+      "shortfall": false
+    },
+    {
+      "age": 103,
+      "target_net": 21965.6,
+      "net_income_achieved": 22118.42,
+      "total_capital": 15.58,
+      "shortfall": false
+    },
+    {
+      "age": 104,
+      "target_net": 22332.79,
+      "net_income_achieved": 22489.7,
+      "total_capital": 14.83,
+      "shortfall": false
+    },
+    {
+      "age": 105,
+      "target_net": 22707.37,
+      "net_income_achieved": 22868.4,
+      "total_capital": 14.12,
+      "shortfall": false
+    },
+    {
+      "age": 106,
+      "target_net": 23089.5,
+      "net_income_achieved": 23254.69,
+      "total_capital": 13.45,
+      "shortfall": false
+    },
+    {
+      "age": 107,
+      "target_net": 23479.32,
+      "net_income_achieved": 23648.7,
+      "total_capital": 12.81,
+      "shortfall": false
+    },
+    {
+      "age": 108,
+      "target_net": 23876.98,
+      "net_income_achieved": 24050.59,
+      "total_capital": 12.19,
+      "shortfall": false
+    },
+    {
+      "age": 109,
+      "target_net": 24282.64,
+      "net_income_achieved": 24460.53,
+      "total_capital": 11.61,
+      "shortfall": false
+    },
+    {
+      "age": 110,
+      "target_net": 24696.45,
+      "net_income_achieved": 24878.68,
+      "total_capital": 11.06,
+      "shortfall": false
+    },
+    {
+      "age": 111,
+      "target_net": 25118.57,
+      "net_income_achieved": 25305.18,
+      "total_capital": 10.53,
+      "shortfall": false
+    },
+    {
+      "age": 112,
+      "target_net": 25549.19,
+      "net_income_achieved": 25740.22,
+      "total_capital": 10.03,
+      "shortfall": false
+    },
+    {
+      "age": 113,
+      "target_net": 25988.45,
+      "net_income_achieved": 26183.96,
+      "total_capital": 9.55,
+      "shortfall": false
+    },
+    {
+      "age": 114,
+      "target_net": 26436.52,
+      "net_income_achieved": 26636.59,
+      "total_capital": 9.09,
+      "shortfall": false
+    },
+    {
+      "age": 115,
+      "target_net": 26893.6,
+      "net_income_achieved": 27098.27,
+      "total_capital": 8.66,
+      "shortfall": false
+    },
+    {
+      "age": 116,
+      "target_net": 27359.84,
+      "net_income_achieved": 27569.18,
+      "total_capital": 8.24,
+      "shortfall": false
+    },
+    {
+      "age": 117,
+      "target_net": 27835.44,
+      "net_income_achieved": 28049.51,
+      "total_capital": 7.85,
+      "shortfall": false
+    },
+    {
+      "age": 118,
+      "target_net": 28320.59,
+      "net_income_achieved": 28539.45,
+      "total_capital": 7.47,
+      "shortfall": false
+    },
+    {
+      "age": 119,
+      "target_net": 28815.45,
+      "net_income_achieved": 29039.2,
+      "total_capital": 7.12,
+      "shortfall": false
+    },
+    {
+      "age": 120,
+      "target_net": 29320.26,
+      "net_income_achieved": 29548.94,
+      "total_capital": 6.78,
+      "shortfall": false
+    }
+  ],
+  "parity_check": {
+    "plan_end_age": 78,
+    "normal_year_count": 11,
+    "ext_years_within_plan_count": 11,
+    "years_match": true
+  }
+}

@@ -8,6 +8,7 @@ import json
 import math
 import os
 from drawdown_strategies import normalize_config as _normalize_config, compute_annual_target as _compute_annual_target
+from config_helpers import validate_config as _validate_config, validate_strategy_output as _validate_strategy_output
 
 
 # ------------------------------------------------------------------ #
@@ -420,6 +421,15 @@ class RetirementEngine:
     # ------------------------------------------------------------------ #
     def run_projection(self, include_monthly: bool = False, initial_strategy_state: dict = None) -> dict:
         cfg = self.cfg
+
+        # Validate config before running
+        config_errors = _validate_config(cfg)
+        if config_errors:
+            import logging
+            _log = logging.getLogger(__name__)
+            for err in config_errors:
+                _log.warning("Config validation: %s", err)
+
         end_age = cfg["personal"]["end_age"]
         cpi = cfg["target_income"]["cpi_rate"]
 
@@ -507,11 +517,12 @@ class RetirementEngine:
 
         # End absolute month — cover full 12-month year for each age
         # anchor_age to end_age inclusive = (end_age - anchor_age + 1) years
-        config_end_age = end_age
+        config_end_age = end_age  # user's plan end — NEVER mutated
+        projection_end_age = cfg.get("projection_end_age", end_age)
         if include_monthly:
             # Extend projection for chart: show depletion + 2 years, cap 120
-            end_age = min(120, max(end_age, 120))
-        end_abs = anchor_abs + (end_age - anchor_age + 1) * 12 - 1
+            projection_end_age = min(120, max(projection_end_age, 120))
+        end_abs = anchor_abs + (projection_end_age - anchor_age + 1) * 12 - 1
 
         # ------------------------------------------------------------ #
         #  Build guaranteed income — index to anchor, compute start/end
@@ -760,7 +771,15 @@ class RetirementEngine:
                 else:
                     target_dict, strategy_state = _compute_annual_target(
                         strategy_id, strategy_params, strategy_state,
-                        portfolio_value, cpi, current_age=year_age)
+                        portfolio_value, cpi,
+                        current_age=year_age, plan_end_age=config_end_age)
+                    # Validate strategy output
+                    strat_errors = _validate_strategy_output(target_dict, strategy_id)
+                    if strat_errors:
+                        import logging
+                        _slog = logging.getLogger(__name__)
+                        for serr in strat_errors:
+                            _slog.warning("Strategy output (age %d): %s", year_age, serr)
                     strategy_mode = target_dict["mode"]
                     strategy_amount = target_dict["annual_amount"]
 

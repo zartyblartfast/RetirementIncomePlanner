@@ -1514,10 +1514,7 @@ function getSandboxPayload() {
         panel.querySelectorAll('.sb-sp').forEach(inp => {
             params[inp.dataset.key] = parseFloat(inp.value);
         });
-        // For ARVA strategies, sync target_end_age from sandbox End Age
-        if (strategy === 'arva' || strategy === 'arva_guardrails') {
-            params.target_end_age = endAge;
-        }
+        // target_end_age removed: engine derives it from personal.end_age
     }
     return {
         drawdown_strategy: strategy,
