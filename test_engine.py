@@ -728,7 +728,6 @@ class TestARVA_ZeroReturn(unittest.TestCase):
             drawdown_strategy="arva",
             drawdown_strategy_params={
                 "assumed_real_return_pct": 0.0,
-                "target_end_age": 78,
             },
         )
         self.result = RetirementEngine(self.cfg).run_projection()
@@ -768,7 +767,6 @@ class TestARVA_PositiveReturn(unittest.TestCase):
             drawdown_strategy="arva",
             drawdown_strategy_params={
                 "assumed_real_return_pct": 5.0,
-                "target_end_age": 78,
             },
         )
         self.result = RetirementEngine(self.cfg).run_projection()
@@ -811,7 +809,6 @@ class TestARVA_DecliningYearsIncreasesWithdrawal(unittest.TestCase):
             drawdown_strategy="arva",
             drawdown_strategy_params={
                 "assumed_real_return_pct": 0.0,
-                "target_end_age": 73,
             },
         )
         self.result = RetirementEngine(self.cfg).run_projection()
@@ -850,7 +847,6 @@ class TestARVA_Guardrails_CapsIncrease(unittest.TestCase):
             drawdown_strategy="arva_guardrails",
             drawdown_strategy_params={
                 "assumed_real_return_pct": 0.0,
-                "target_end_age": 78,
                 "max_annual_increase_pct": 10.0,
                 "max_annual_decrease_pct": 10.0,
             },
@@ -895,7 +891,6 @@ class TestARVA_Guardrails_CapsDecrease(unittest.TestCase):
             drawdown_strategy="arva_guardrails",
             drawdown_strategy_params={
                 "assumed_real_return_pct": 0.0,
-                "target_end_age": 78,
                 "max_annual_increase_pct": 10.0,
                 "max_annual_decrease_pct": 10.0,
             },
@@ -965,6 +960,13 @@ class TestInitialStrategyState_ARVAGuardrails(unittest.TestCase):
 
     def setUp(self):
         self.cfg = make_config(
+            personal={
+                "date_of_birth": "1960-01",
+                "retirement_date": "2028-01",
+                "retirement_age": 68,
+                "end_age": 92,
+                "currency": "GBP",
+            },
             target_income={"net_annual": 12000, "cpi_rate": 0.0},
             tax_free_accounts=[{
                 "name": "ISA",
@@ -978,7 +980,6 @@ class TestInitialStrategyState_ARVAGuardrails(unittest.TestCase):
         self.cfg["drawdown_strategy"] = "arva_guardrails"
         self.cfg["drawdown_strategy_params"] = {
             "assumed_real_return_pct": 0.0,
-            "target_end_age": 92,
             "max_annual_increase_pct": 10.0,
             "max_annual_decrease_pct": 10.0,
         }

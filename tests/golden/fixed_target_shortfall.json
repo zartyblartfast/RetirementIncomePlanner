@@ -1,0 +1,525 @@
+{
+  "name": "fixed_target_shortfall",
+  "config": {
+    "personal": {
+      "date_of_birth": "1960-01",
+      "retirement_date": "2028-01",
+      "retirement_age": 68,
+      "end_age": 78,
+      "currency": "GBP"
+    },
+    "target_income": {
+      "net_annual": 15000,
+      "cpi_rate": 0.0
+    },
+    "guaranteed_income": [],
+    "dc_pots": [],
+    "tax_free_accounts": [
+      {
+        "name": "ISA",
+        "starting_balance": 30000,
+        "growth_rate": 0.0,
+        "allocation": {
+          "mode": "manual",
+          "manual_override": true
+        },
+        "values_as_of": "2028-01"
+      }
+    ],
+    "withdrawal_priority": [
+      "ISA"
+    ],
+    "tax": {
+      "regime": "Isle of Man",
+      "personal_allowance": 14500,
+      "bands": [
+        {
+          "name": "Lower rate",
+          "width": 6500,
+          "rate": 0.1
+        },
+        {
+          "name": "Higher rate",
+          "width": null,
+          "rate": 0.2
+        }
+      ],
+      "tax_cap_enabled": false,
+      "tax_cap_amount": 200000
+    },
+    "drawdown_strategy": "fixed_target",
+    "drawdown_strategy_params": {
+      "net_annual": 15000
+    }
+  },
+  "summary": {
+    "sustainable": false,
+    "first_shortfall_age": 70,
+    "remaining_capital": 0.0,
+    "end_age": 78
+  },
+  "years": [
+    {
+      "age": 68,
+      "target_net": 15000.0,
+      "net_income_achieved": 15000.0,
+      "total_capital": 15000.0,
+      "shortfall": false
+    },
+    {
+      "age": 69,
+      "target_net": 15000.0,
+      "net_income_achieved": 15000.0,
+      "total_capital": 0.0,
+      "shortfall": false
+    },
+    {
+      "age": 70,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 71,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 72,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 73,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 74,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 75,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 76,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 77,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 78,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    }
+  ],
+  "ext_summary": {
+    "sustainable": false,
+    "first_shortfall_age": 70,
+    "remaining_capital": 0.0,
+    "end_age": 78
+  },
+  "ext_years": [
+    {
+      "age": 68,
+      "target_net": 15000.0,
+      "net_income_achieved": 15000.0,
+      "total_capital": 15000.0,
+      "shortfall": false
+    },
+    {
+      "age": 69,
+      "target_net": 15000.0,
+      "net_income_achieved": 15000.0,
+      "total_capital": 0.0,
+      "shortfall": false
+    },
+    {
+      "age": 70,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 71,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 72,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 73,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 74,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 75,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 76,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 77,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 78,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 79,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 80,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 81,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 82,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 83,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 84,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 85,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 86,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 87,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 88,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 89,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 90,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 91,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 92,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 93,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 94,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 95,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 96,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 97,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 98,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 99,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 100,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 101,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 102,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 103,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 104,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 105,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 106,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 107,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 108,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 109,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 110,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 111,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 112,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 113,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 114,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 115,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 116,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 117,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 118,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 119,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    },
+    {
+      "age": 120,
+      "target_net": 15000.0,
+      "net_income_achieved": 0.0,
+      "total_capital": 0.0,
+      "shortfall": true
+    }
+  ],
+  "parity_check": {
+    "plan_end_age": 78,
+    "normal_year_count": 11,
+    "ext_years_within_plan_count": 11,
+    "years_match": true
+  }
+}
