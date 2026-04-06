@@ -553,8 +553,10 @@ const planEndAge = {{ plan_end_age }};
 const depletionAge = {{ depletion_age if depletion_age else 'null' }};
 const strategyDisplayName = {{ strategies.get(config.get('drawdown_strategy', 'fixed_target'), {}).get('display_name', 'Fixed Target') | tojson }};
 
-// Capital chart: trim at depletion age if capital depletes; otherwise show to 120
-const capYears = depletionAge ? extYears.filter(y => y.age <= depletionAge) : extYears;
+// Both charts share the same age axis: plan end + 2 years
+// (shows guaranteed income continuing beyond plan end)
+const chartMaxAge = planEndAge + 2;
+const capYears = extYears.filter(y => y.age <= chartMaxAge);
 const capAges = capYears.map(y => y.age);
 
 // Capital Trajectory Chart (extended to show depletion)
@@ -656,8 +658,8 @@ new Chart(document.getElementById('capitalChart'), {
 const guaranteedNames = {{ config.guaranteed_income | map(attribute='name') | list | tojson }};
 const incomeDatasets = [];
 
-// Use extended years for the income chart to show post-depletion phase
-const incomeYears = extYears;  // reuse extended data from capital chart
+// Use same age range as capital chart for consistent presentation
+const incomeYears = extYears.filter(y => y.age <= chartMaxAge);
 const incomeAges = incomeYears.map(y => y.age);
 
 // Color palettes: blues for guaranteed, greens/ambers for drawdown, red for tax
